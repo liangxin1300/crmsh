@@ -14,6 +14,9 @@ import constants
 import utillib
 from crmsh import utils as crmutils
 
+#
+# Start slave collectors
+#
 def collect_for_nodes(nodes, arg_str):
     for node in nodes.split():
         if utillib.node_needs_pwd(node):
@@ -25,6 +28,9 @@ def collect_for_nodes(nodes, arg_str):
             p.start()
             p.join()
 
+#
+# this is how we pass environment to other hosts
+#
 def dump_env():
     env_dict = {}
     env_dict["DEST"] = constants.DEST
@@ -46,6 +52,7 @@ def dump_env():
         res_str += " {}={}".format(k, v)
     return res_str
 
+# get the right part of the log
 def get_log():
     outf = os.path.join(constants.WORKDIR, constants.HALOG_F)
 
@@ -56,7 +63,7 @@ def get_log():
                                 os.path.join(constants.WORKDIR, constants.JOURNAL_F))
 
     if constants.HA_LOG and not os.path.isfile(constants.HA_LOG):
-        if not is_collector():
+        if not is_collector(): # warning if not on slave
             utillib.log_warning("%s not found; we will try to find log ourselves" % ha_log)
             constants.HA_LOG = ""
     if not constants.HA_LOG:
@@ -80,6 +87,10 @@ def get_log():
             utillib.log_warning("could not figure out the log format of %s" % constants.HA_LOG)
 
 def is_collector():
+#
+# the instance where user runs hb_report is the master
+# the others are slaves
+#
     if sys.argv[1] == "__slave":
         return True
     return False
@@ -178,6 +189,9 @@ def run():
     tmpdir = utillib.make_temp_dir()
     utillib.add_tmpfiles(tmpdir)
 
+    #
+    # get and check options; and the destination
+    #
     if not is_collector():
         parse_argument(sys.argv)
         set_dest(constants.TMP)
@@ -195,7 +209,7 @@ def run():
 
     if not is_collector():
         constants.NODES = ' '.join(utillib.get_nodes())
-        utillib.log_debug("nodes: %s"%constants.NODES)
+        utillib.log_debug("nodes: %s" % constants.NODES)
     if constants.NODES == "":
         utillib.log_fatal("could not figure out a list of nodes; is this a cluster node?")
     if constants.WE in constants.NODES.split():
@@ -204,13 +218,18 @@ def run():
     if not is_collector():
         if constants.THIS_IS_NODE != 1:
             utillib.log_warning("this is not a node and you didn't specify a list of nodes using -n")
-#
-# ssh business
-#
+
+        #
+        # ssh business
+        #
+        # find out if ssh works
         if not constants.NO_SSH:
+            # if the ssh user was supplied, consider that it
+            # works; helps reduce the number of ssh invocations
             utillib.find_ssh_user()
             if constants.SSH_USER:
                 constants.SSH_OPTS += " -o User=%s" % constants.SSH_USER
+        # assume that only root can collect data
         if ((not constants.SSH_USER) and (os.getuid() != 0)) or \
            constants.SSH_USER and constants.SSH_USER != "root":
             utillib.log_debug("ssh user other than root, use sudo")
@@ -219,6 +238,9 @@ def run():
             utillib.log_debug("local user other than root, use sudo")
             constants.LOCAL_SUDO = "sudo -u root"
 
+    #
+    # find the logs and cut out the segment for the period
+    #
     if constants.THIS_IS_NODE == 1:
         get_log()
 
@@ -229,6 +251,12 @@ def run():
         elif constants.THIS_IS_NODE == 1:
             collect_for_nodes(constants.WE, arg_str)
 
+    #
+    # endgame:
+    #     slaves tar their results to stdout, the master waits
+    #     for them, analyses results, asks the user to edit the
+    #     problem description template, and prints final notes
+    #
     if is_collector():
         utillib.collect_info()
         cmd = r"cd %s/.. && tar -h -cf - %s" % (constants.WORKDIR, constants.WE)
@@ -258,6 +286,8 @@ def run():
         utillib.finalword()
 
 def set_dest(dest):
+    # default DEST has already been set earlier (if the
+    # argument is missing)
     if dest:
         constants.DESTDIR = utillib.get_dirname(dest)
         constants.DEST = os.path.basename(dest)

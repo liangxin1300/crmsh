@@ -1,8 +1,7 @@
-
+# Copyright (C) 2017 Xin Liang <XLiang@suse.com>
+# See COPYING for license information.
 import datetime
 import socket
-
-#HA_NOARCHBIN = "/usr/share/crmsh/hb_report"
 
 ###############constants##########
 ARGOPTS_VALUE = "f:t:l:u:X:p:L:e:E:n:MSDZVsvhdQ"
@@ -137,3 +136,4 @@ SYSINFO_F = "sysinfo.txt"
 SYSSTATS_F = "sysstats.txt"
 TIME_F = "time.txt"
 ###############goods end##############
+# vim:ts=4:sw=4:et:

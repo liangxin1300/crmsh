@@ -32,7 +32,7 @@ def _mkdir(directory):
         try:
             os.makedirs(directory)
         except OSError as err:
-            log_fatal("Failed to create directory: %s"%(err))
+            log_fatal("Failed to create directory: %s" % (err))
 
 def add_tmpfiles(contents):
     """
@@ -51,14 +51,14 @@ def arch_logs(logf, from_time, to_time):
     files += glob.glob(logf+"*[0-z9]")
     for f in sorted(files, key=os.path.getctime):
         res = is_our_log(f, from_time, to_time)
-        if res == 0:
+        if res == 0: # noop, continue
             continue
-        elif res == 1:
+        elif res == 1: # include log and continue
             ret.append(f)
             log_debug("found log %s" % f)
-        elif res == 2:
+        elif res == 2: # don't go through older logs!
             break
-        elif res == 3:
+        elif res == 3: # include log and continue
             ret.append(f)
             log_debug("found log %s" % f)
             break
@@ -72,7 +72,7 @@ def analyze():
              constants.B_CONF, constants.SYSINFO_F, constants.CIB_F]
     for f in flist:
         out_string += "Diff %s... " % f
-        if not glob.glob("%s/*/%s"%(workdir, f)):
+        if not glob.glob("%s/*/%s" % (workdir, f)):
             out_string += "no %s/*/%s :/\n" % (workdir, f)
             continue
         code, tmp_string = analyze_one(workdir, f)
@@ -127,6 +127,9 @@ def check_backtraces(workdir):
                 out_string += "    %s\n" % line
     return out_string
 
+#
+# some basic analysis of the report
+#
 def check_crmvfy(workdir):
     out_string = ""
     for n in constants.NODES.split():
@@ -187,7 +190,7 @@ def check_perms():
            "%04o"%(stat_info.st_mode&07777) != "0750":
             flag = 1
             out_string += "\nwrong permissions or ownership for %s: " % check_dir
-            out_string += get_command_info("ls -ld %s"%check_dir)[1] + '\n'
+            out_string += get_command_info("ls -ld %s" % check_dir)[1] + '\n'
         if flag == 0:
             out_string += "OK\n"
 
@@ -201,8 +204,11 @@ def check_time(var, option):
                                         1:00
                                         "2007/9/5 12:30"
                                         "09-Sep-07 2:00"
-                  """%option)
+                  """ % option)
 
+#
+# check if files have same content in the cluster
+#
 def cib_diff(file1, file2):
     code = 0
     out_string = ""
@@ -214,7 +220,7 @@ def cib_diff(file1, file2):
        (os.path.isfile(os.path.join(d1, "STOPPED")) and \
         os.path.isfile(os.path.join(d2, "STOPPED"))):
         if which("crm_diff"):
-            code, tmp_string = get_command_info("crm_diff -c -n %s -o %s"%(file1, file2))
+            code, tmp_string = get_command_info("crm_diff -c -n %s -o %s" % (file1, file2))
             out_string += tmp_string
         else:
             code = 1
@@ -227,6 +233,9 @@ def cib_diff(file1, file2):
 def cluster_info():
     return get_command_info("corosync -v")[1]
 
+#
+# get all other info (config, stats, etc)
+#
 def collect_info():
     process_list = []
     process_list.append(multiprocessing.Process(target=sys_info))
@@ -310,13 +319,16 @@ def compatibility_pcmk():
         constants.CORES_DIRS += " /var/lib/corosync"
     constants.B_CONF = os.path.basename(constants.CONF)
 
+#
+# remove duplicates if files are same, make links instead
+#
 def consolidate(workdir, f):
     for n in constants.NODES.split():
         if os.path.isfile(os.path.join(workdir, f)):
             os.remove(os.path.join(workdir, n, f))
         else:
             shutil.move(os.path.join(workdir, n, f), workdir)
-        os.symlink("../%s"%f, os.path.join(workdir, n, f))
+        os.symlink("../%s" % f, os.path.join(workdir, n, f))
 
 def corosync_blackbox():
     fdata_list = []
@@ -364,6 +376,9 @@ def diff_check(file1, file2):
     else:
         return (0, txt_diff(file1, file2))
 
+#
+# get some system info
+#
 def distro():
     ret = ""
     if which("lsb_release"):
@@ -377,6 +392,7 @@ def dlm_dump():
     #TODO
     pass
 
+# tmp files business
 def drop_tempfiles():
     with open(constants.TMPFLIST, 'r') as f:
         for line in f.read().split('\n'):
@@ -391,10 +407,10 @@ def dump_log(logf, from_line, to_line):
         return
     return filter_lines(logf, from_line, to_line)
 
+#
+# find log/set of logs which are interesting for us
+#
 def dump_logset(logf, from_time, to_time, outf):
-    """
-    find log/set of logs which are interesting for us
-    """
     if os.stat(logf).st_size == 0:
         return
     logf_set = arch_logs(logf, from_time, to_time)
@@ -405,6 +421,10 @@ def dump_logset(logf, from_time, to_time, outf):
     newest = logf_set[0]
     mid_logfiles = logf_set[1:-1]
     out_string = ""
+
+    # the first logfile: from $from_time to $to_time (or end)
+    # logfiles in the middle: all
+    # the last logfile: from beginning to $to_time (or end)
     if num_logs == 1:
         out_string += print_logseg(newest, from_time, to_time)
     else:
@@ -435,7 +455,7 @@ def events(destdir):
         for n in constants.NODES.split():
             if os.path.isdir(os.path.join(destdir, n)):
                 events_node_f = os.path.join(destdir, n, "events.txt")
-                out_string = '\n'.join(grep(" %s "%n, infile=events_f))
+                out_string = '\n'.join(grep(" %s " % n, infile=events_f))
                 crmutils.str2file(out_string, events_node_f)
     else:
         for n in constants.NODES.split():
@@ -554,6 +574,10 @@ def find_getstampproc_raw(line):
         return func
     return func
 
+#
+# first try syslog files, if none found then use the
+# logfile/debugfile settings
+#
 def find_log():
     if constants.EXTRA_LOGS:
         for l in constants.EXTRA_LOGS.split():
@@ -620,6 +644,7 @@ def findln_by_time(logf, tm):
                 break
             log_debug("cannot extract time: %s:%d; will try the next one" % (logf, mid))
             trycnt -= 1
+            # shift the whole first-last segment
             prevmid = mid
             while prevmid == mid:
                 first -= 1
@@ -688,7 +713,7 @@ def get_conf_var(option, default=None):
     ret = default
     with open(constants.CONF, 'r') as f:
         for line in f.read().split('\n'):
-            if re.match("^\s*%s\s*:"%option, line):
+            if re.match("^\s*%s\s*:" % option, line):
                 ret = line.split(':')[1].lstrip()
     return ret
 
@@ -750,6 +775,9 @@ def get_log_vars():
     log_debug("log settings: facility=%s logfile=%s debugfile=%s" % \
              (constants.HA_LOGFACILITY, constants.HA_LOGFILE, constants.HA_DEBUGFILE))
 
+#
+# find nodes for this cluster
+#
 def get_nodes():
     nodes = []
     # 1. set by user?
@@ -939,12 +967,12 @@ def grep_row(pattern, indata, flag):
         if re.search(pattern, line, reflag):
             if not INVERT:
                 if SHOWNUM:
-                    res.append("%d:%s"%(count, line))
+                    res.append("%d:%s" % (count, line))
                 else:
                     res.append(line)
         elif INVERT:
             if SHOWNUM:
-                res.append("%d:%s"%(count, line))
+                res.append("%d:%s" % (count, line))
             else:
                 res.append(line)
     return res
@@ -1026,9 +1054,12 @@ def make_temp_dir():
     _mkdir(dir_path)          
     return dir_path
 
+#
+# description template, editing, and other notes
+#
 def mktemplate(argv):
     workdir = constants.WORKDIR
-    out_string = constants.EMAIL_TMPLATE.format("%s"%date(), ' '.join(argv[1:]))
+    out_string = constants.EMAIL_TMPLATE.format("%s" % date(), ' '.join(argv[1:]))
     sysinfo_f = os.path.join(workdir, constants.SYSINFO_F)
     if os.path.isfile(sysinfo_f):
         out_string += "Common saystem info found:\n"
@@ -1088,7 +1119,7 @@ def pkg_ver_pkginfo(packages):
 def pkg_ver_rpm(packages):
     res = ""
     for pack in packages.split():
-        code, out = get_command_info("rpm -qi %s"%pack)
+        code, out = get_command_info("rpm -qi %s" % pack)
         if code != 0:
             continue
         for line in out.split('\n'):
@@ -1120,6 +1151,9 @@ def pkg_versions(packages):
     if pkg_mgr == "pkginfo":
         return pkg_ver_pkginfo(packages)
 
+#
+# print part of the log
+#
 def print_log(logf):
     cat = find_decompressor(logf)
     cmd = "%s %s" % (cat, logf)
@@ -1173,6 +1207,9 @@ def random_string(num):
         tmp = random.sample(s, num)
     return ''.join(tmp)
 
+#
+# replace sensitive info with '****'
+#
 def sanitize():
     workdir = constants.WORKDIR
     conf = os.path.join(workdir, constants.B_CONF)
@@ -1293,7 +1330,7 @@ def sub_string(in_string,
     res_string = ""
     pattern_string = re.sub(" ", "|", pattern)
     for line in in_string.split('\n')[:-1]:
-        if re.search('name="%s"'%pattern_string, line):
+        if re.search('name="%s"' % pattern_string, line):
             res_string += re.sub(sub_pattern, repl, line) + '\n'
         else:
             res_string += line + '\n'
@@ -1303,10 +1340,13 @@ def sub_string(in_string,
 def sub_string_test(in_string, pattern=constants.SANITIZE):
     pattern_string = re.sub(" ", "|", pattern)
     for line in in_string.split('\n'):
-        if re.search('name="%s"'%pattern_string, line):
+        if re.search('name="%s"' % pattern_string, line):
             return True
     return False
 
+#
+# some basic system info and stats
+#
 def sys_info():
     out_string = "#####Cluster info:\n"
     out_string += cluster_info()
@@ -1392,7 +1432,7 @@ def ts_to_dt(timestamp):
     return dt
 
 def txt_diff(file1, file2):
-    return get_command_info("diff -bBu %s %s"%(file1, file2))[1]
+    return get_command_info("diff -bBu %s %s" % (file1, file2))[1]
 
 def verify_deb(packages):
     pass
@@ -1432,3 +1472,4 @@ def which(prog):
         return True
     else:
         return False
+# vim:ts=4:sw=4:et:
