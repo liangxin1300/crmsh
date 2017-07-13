@@ -193,17 +193,16 @@ class Context(object):
         if line != self._rl_line:
             try:
                 self._rl_line = line
-                completions = self.complete(line)
+                completions = filter(lambda x: not x.startswith("_"), self.complete(line))
 
                 if text and not re.search(r'\.\./.*', text):
-                    self._rl_words = [w for w in completions if matching(w) and not w.startswith("_")]
+                    self._rl_words = [w for w in completions if matching(w)]
                 else:
                     if re.search(r'\.\./.+', text):
                         self._rl_words = ['../'+w for w in completions 
-                                          if matching(w, starts_text=text.split('/')[1]) 
-                                          and not w.startswith("_")]
+                                          if matching(w, starts_text=text.split('/')[1])]
                     else:
-                        self._rl_words = [w for w in completions if not w.startswith("_")]
+                        self._rl_words = [w for w in completions]
 
             except Exception:  # , msg:
                 # logging.exception(msg)
