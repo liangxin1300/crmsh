@@ -176,6 +176,7 @@ class Context(object):
 
     def disable_completion(self):
         import readline
+        readline.set_history_length(0)
         for v in ('tab: complete',
                   'set skip-completed-text on'):
             readline.parse_and_bind(v)
