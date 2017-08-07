@@ -176,16 +176,10 @@ class Context(object):
 
     def disable_completion(self):
         import readline
-        readline.set_history_length(100)
         for v in ('tab: complete',
-                  # 'set bell-style visible',
-                  # 'set menu-complete-display-prefix on',
-                  # 'set show-all-if-ambiguous on',
-                  # 'set show-all-if-unmodified on',
                   'set skip-completed-text on'):
             readline.parse_and_bind(v)
         readline.set_completer(self.disable_completer)
-        readline.set_completer_delims(' \t\n,')
 
     def disable_completer(self, text, state):
         # complete nothing
