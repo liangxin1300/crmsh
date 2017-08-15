@@ -1627,9 +1627,22 @@ def list_cluster_nodes():
 
     try:
         rc, outp = stdout2list(['crm_node', '-l'], stderr_on=False, shell=False)
-        if rc != 0:
-            raise ValueError("Error listing cluster nodes: crm_node (rc=%d)" % (rc))
-        return [x for x in [getname(line.split()) for line in outp] if x and x != '(null)']
+        if rc == 0:
+            return [x for x in [getname(line.split()) for line in outp] if x and x != '(null)']
+        else:
+            from . import xmlutil
+            CIB_DIR = config.path.crm_config
+            os.environ['CIB_file'] = "%s/%s" % (CIB_DIR, "cib.xml")
+            cib = xmlutil.cibdump2elem()
+            for node in cib.xpath('/cib/configuration/nodes/node'):
+                name = node.get('uname') or node.get('id')
+                if node.get('type') == 'remote':
+                    srv = cib.xpath("//primitive[@id='%s']/instance_attributes/nvpair[@name='server']" % (name))
+                    if srv:
+                        continue
+                print name
+            return
+            raise ValueError("Error listing cluster nodes: (rc=%d)" % (rc))
     except OSError, msg:
         raise ValueError("Error listing cluster nodes: %s" % (msg))
 
