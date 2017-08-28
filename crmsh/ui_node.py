@@ -11,6 +11,7 @@ from . import xmlutil
 from .msg import common_err, syntax_err, no_prog_err, common_info, common_warn
 from .cliformat import cli_nvpairs, nvpairs2list
 from . import term
+from .bootstrap import service_is_active
 
 
 def _oneline(s):
@@ -107,6 +108,9 @@ class NodeMgmt(command.UI):
     }
 
     def requires(self):
+        if not service_is_active("pacemaker.service"):
+            common_err("cluster service is not running!")
+            return False
         for p in ('cibadmin', 'crm_attribute'):
             if not utils.is_program(p):
                 no_prog_err(p)

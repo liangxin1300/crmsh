@@ -30,6 +30,9 @@ class CibShadow(command.UI):
     extcmd_stdout = "</dev/null crm_shadow -b"
 
     def requires(self):
+        if not service_is_active("pacemaker.service"):
+            common_err("cluster service is not running!")
+            return False
         if not utils.is_program('crm_shadow'):
             no_prog_err('crm_shadow')
             return False
