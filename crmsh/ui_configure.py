@@ -27,6 +27,7 @@ from . import ui_history
 from . import ui_utils
 from . import ui_assist
 from .crm_gv import gv_types
+from .bootstrap import service_is_active
 
 
 def _type_completions():
@@ -295,6 +296,9 @@ class CibConfig(command.UI):
         # immediately so that tab completion works
 
     def requires(self):
+        if not service_is_active("pacemaker.service"):
+            common_err("cluster service is not running!")
+            return False
         if not cib_factory.initialize():
             return False
         # see the configure ptest/simulate command
