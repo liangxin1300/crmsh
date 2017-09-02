@@ -10,11 +10,7 @@ For each node, this essentially does an "ssh host -l user prog [arg0] [arg1]
 directory.  Each output file in that directory will be named by the
 corresponding remote node's hostname or IP address.
 """
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
 
-from past.utils import old_div
 import os
 import glob
 
