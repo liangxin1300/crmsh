@@ -1,17 +1,6 @@
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
 # Copyright (C) 2008-2011 Dejan Muhamedagic <dmuhamedagic@suse.de>
 # See COPYING for license information.
 
-from future import standard_library
-standard_library.install_aliases()
-from builtins import input
-from builtins import map
-from builtins import str
-from builtins import range
-from builtins import object
-from past.utils import old_div
 import os
 import sys
 from tempfile import mkstemp
