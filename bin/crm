@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # crmsh, command line interface for Linux HA clusters
 # Copyright (C) 2008-2015 Dejan Muhamedagic <dmuhamedagic@suse.de>
@@ -21,15 +21,7 @@
 
 from __future__ import unicode_literals
 import sys
-from distutils import version
 
-minimum_version = '2.6'
-v_min = version.StrictVersion(minimum_version)
-v_this = version.StrictVersion(sys.version[:3])
-if v_min > v_this:
-    sys.stderr.write("abort: minimum python version support is %s\n" %
-                     minimum_version)
-    sys.exit(-1)
 
 try:
     try:
