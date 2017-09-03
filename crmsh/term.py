@@ -75,7 +75,7 @@ _ANSICOLORS = "BLACK RED GREEN YELLOW BLUE MAGENTA CYAN WHITE".split()
 
 def _tigetstr(cap_name):
     import curses
-    cap = curses.tigetstr(cap_name) or ''
+    cap = str(curses.tigetstr(cap_name)) or ''
 
     # String capabilities can include "delays" of the form "$<2>".
     # For any modern terminal, we should be able to just ignore
@@ -111,19 +111,19 @@ def _lookup_caps():
         (attrib, cap_name) = capability.split('=')
         setattr(colors, attrib, _tigetstr(cap_name) or '')
     # Colors
-    set_fg = _tigetstr('setf')
+    set_fg = bytes(_tigetstr('setf'), 'latin-1')
     if set_fg:
         for i, color in zip(list(range(len(_COLORS))), _COLORS):
             setattr(colors, color, curses.tparm(set_fg, i) or '')
-    set_fg_ansi = _tigetstr('setaf')
+    set_fg_ansi = bytes(_tigetstr('setaf'), 'latin-1')
     if set_fg_ansi:
         for i, color in zip(list(range(len(_ANSICOLORS))), _ANSICOLORS):
             setattr(colors, color, curses.tparm(set_fg_ansi, i) or '')
-    set_bg = _tigetstr('setb')
+    set_bg = bytes(_tigetstr('setb'), 'latin-1')
     if set_bg:
         for i, color in zip(list(range(len(_COLORS))), _COLORS):
             setattr(colors, 'BG_'+color, curses.tparm(set_bg, i) or '')
-    set_bg_ansi = _tigetstr('setab')
+    set_bg_ansi = bytes(_tigetstr('setab'), 'latin-1')
     if set_bg_ansi:
         for i, color in zip(list(range(len(_ANSICOLORS))), _ANSICOLORS):
             setattr(colors, 'BG_'+color, curses.tparm(set_bg_ansi, i) or '')
