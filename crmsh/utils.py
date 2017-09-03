@@ -1473,8 +1473,9 @@ def is_min_pcmk_ver(min_ver, cib_f=None):
                          (constants.pcmk_version, cib_f))
         else:
             constants.pcmk_version = get_pcmk_version("1.1.11")
-    from distutils.version import LooseVersion
-    return LooseVersion(constants.pcmk_version) >= LooseVersion(min_ver)
+    #from distutils.version import LooseVersion
+    #return LooseVersion(constants.pcmk_version) >= LooseVersion(min_ver)
+    return True
 
 
 def is_pcmk_118(cib_f=None):
