@@ -1394,7 +1394,7 @@ def get_pcmk_version(dflt):
             common_err("%s exited with %d [err: %s][out: %s]" % (cmd, rc, err, s))
         else:
             common_debug("pacemaker version: [err: %s][out: %s]" % (err, s))
-            if err.startswith("CRM Version:"):
+            if err.startswith(b"CRM Version:"):
                 version = s.split()[0]
             else:
                 version = s.split()[2]
