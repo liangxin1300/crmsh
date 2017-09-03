@@ -820,7 +820,7 @@ def get_rsc_operations(rsc_node):
 def make_sort_map(*order):
     m = {}
     for i, o in enumerate(order):
-        if isinstance(o, basestring):
+        if isinstance(o, str):
             m[o] = i
         else:
             for k in o:
