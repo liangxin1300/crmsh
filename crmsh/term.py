@@ -75,7 +75,7 @@ _ANSICOLORS = "BLACK RED GREEN YELLOW BLUE MAGENTA CYAN WHITE".split()
 
 def _tigetstr(cap_name):
     import curses
-    cap = curses.tigetstr(cap_name) or ''
+    cap = str(curses.tigetstr(cap_name)) or ''
 
     # String capabilities can include "delays" of the form "$<2>".
     # For any modern terminal, we should be able to just ignore
