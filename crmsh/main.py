@@ -216,7 +216,7 @@ def render_prompt(context):
         # seems the color prompt messes it up
         promptstr = "crm(%s/%s)%s# " % (cib_prompt(), utils.this_node(), context.prompt())
         constants.prompt = promptstr
-        if clidisplay.colors_enabled():
+        if not clidisplay.colors_enabled():
             rendered_prompt = term.render(clidisplay.prompt(promptstr))
         else:
             rendered_prompt = promptstr
