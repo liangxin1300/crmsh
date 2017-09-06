@@ -90,12 +90,12 @@ def network_all(with_mask=False):
     """
     all_networks = []
     _, outp = get_stdout("/sbin/ip -o route show")
-    for l in outp.split('\n'):
-        if re.search(r'\.0/[0-9]+ ', l):
+    for l in outp.splitlines():
+        if re.search(r'\.0/[0-9]+ ', str(l, 'utf-8')):
             if with_mask:
                 all_networks.append(l.split()[0])
             else:
-                all_networks.append(l.split('/')[0])
+                all_networks.append(str(l, 'utf-8').split('/')[0])
     return all_networks
 
 
