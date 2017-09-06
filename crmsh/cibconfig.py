@@ -2606,7 +2606,7 @@ class CibFactory(object):
         # check if crm_diff supports --no-version
         if self._crm_diff_cmd is None:
             rc, out = utils.get_stdout("crm_diff --help")
-            if "--no-version" in out:
+            if "--no-version" in str(out):
                 self._crm_diff_cmd = 'crm_diff --no-version'
             else:
                 self._crm_diff_cmd = 'crm_diff'
@@ -2647,7 +2647,7 @@ class CibFactory(object):
             cib_diff = etree.tostring(e)
         # for v1 diffs, fall back to non-patching if
         # any containers are modified, else strip the digest
-        if "<diff" in cib_diff and "digest=" in cib_diff:
+        if "<diff" in str(cib_diff) and "digest=" in str(cib_diff):
             if not self.can_patch_v1():
                 return self._replace_cib(force)
             e = etree.fromstring(cib_diff)

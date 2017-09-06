@@ -200,9 +200,9 @@ def wait_for_resource(message, resource, needle="running on"):
     status_long(message)
     while True:
         _rc, out, err = utils.get_stdout_stderr("crm_resource --locate --resource " + resource)
-        if needle in out:
+        if needle in str(out):
             break
-        if needle in err:
+        if needle in str(err):
             break
         status_progress()
         sleep(1)
@@ -217,7 +217,7 @@ def wait_for_cluster():
     status_long("Waiting for cluster")
     while True:
         rc, out, err = utils.get_stdout_stderr("crm_mon -1")
-        if "online" in out.lower():
+        if "online" in str(out).lower():
             break
         status_progress()
         sleep(5)
@@ -339,7 +339,7 @@ def check_tty():
 
 def grep_output(cmd, txt):
     _rc, outp, _err = utils.get_stdout_stderr(cmd)
-    return txt in outp
+    return txt in str(outp)
 
 
 def grep_file(fn, txt):

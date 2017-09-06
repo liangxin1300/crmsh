@@ -274,7 +274,7 @@ class RscState(object):
             return False
         test_id = self.rsc_clone(ident) or ident
         rc, outp = get_stdout(self.rsc_status % test_id, stderr_on=False)
-        return outp.find("running") > 0 and outp.find("NOT") == -1
+        return str(outp).find("running") > 0 and str(outp).find("NOT") == -1
 
     def is_group(self, ident):
         '''
