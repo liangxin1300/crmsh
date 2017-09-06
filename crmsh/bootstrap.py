@@ -1501,7 +1501,7 @@ def join_ssh_merge(_cluster_node):
         else:
             known_hosts_new.update((result[1] or "").splitlines())
     if known_hosts_new:
-        hoststxt = "\n".join(sorted(known_hosts_new))
+        hoststxt = "\n".join(utils.to_ascii(x) for x in sorted(known_hosts_new))
         tmpf = utils.str2tmp(hoststxt)
         log("parallax.copy {} : {}".format(hosts, hoststxt))
         results = parallax.copy(hosts, tmpf, "/root/.ssh/known_hosts")
