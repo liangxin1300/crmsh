@@ -84,6 +84,12 @@ def network_defaults(interface=None):
     return tuple(info)
 
 
+def to_ascii(s):
+    """Convert the bytes string to a ASCII string
+    Usefull to remove accent (diacritics)"""
+    return str(s, 'utf-8')
+
+
 def network_all(with_mask=False):
     """
     returns all networks on local node
@@ -91,11 +97,11 @@ def network_all(with_mask=False):
     all_networks = []
     _, outp = get_stdout("/sbin/ip -o route show")
     for l in outp.splitlines():
-        if re.search(r'\.0/[0-9]+ ', str(l, 'utf-8')):
+        if re.search(r'\.0/[0-9]+ ', str(l)):
             if with_mask:
                 all_networks.append(l.split()[0])
             else:
-                all_networks.append(str(l, 'utf-8').split('/')[0])
+                all_networks.append(to_ascii(l).split('/')[0])
     return all_networks
 
 
@@ -749,7 +755,7 @@ def get_dc():
     rc, s = get_stdout(add_sudo(cmd))
     if rc != 0:
         return None
-    if not s.startswith("Designated"):
+    if not to_ascii(s).startswith("Designated"):
         return None
     return s.split()[-1]
 
