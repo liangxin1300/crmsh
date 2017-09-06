@@ -555,7 +555,7 @@ def init_cluster_local():
     pass_msg = ""
     if ps not in ("P", "PS"):
         log(': Resetting password of hacluster user')
-        rc, outp, errp = utils.get_stdout_stderr("passwd hacluster", input_s="linux\nlinux\n")
+        rc, outp, errp = utils.get_stdout_stderr("passwd hacluster", input_s="linux\nlinux\n".encode('utf-8'))
         if rc != 0:
             warn("Failed to reset password of hacluster user: %s" % (outp + errp))
         else:
