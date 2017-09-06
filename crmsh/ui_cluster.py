@@ -631,7 +631,7 @@ Cluster Description
                     if not result[1]:
                         err_buf.ok("[%s]" % host)
                     else:
-                        err_buf.ok("[%s]\n%s" % (host, result[1]))
+                        err_buf.ok("[%s]\n%s" % (host, utils.to_ascii(result[1])))
 
     def do_copy(self, context, local_file, *nodes):
         '''

@@ -52,7 +52,7 @@ class CrmMonFilter(object):
     def _filter(self, line):
         line = self._RESOURCE.sub("%s%s(%s):" % (clidisplay.help_header(r'\1'),
                                                  r'\2',
-                                                 r'\3'), line)
+                                                 r'\3'), utils.to_ascii(line))
         line = self._NODES.sub(clidisplay.help_header(r'\1'), line)
         line = self._RESOURCES.sub(clidisplay.help_header(r'\1'), line)
         line, ngroups = self._GROUP.subn(r'\1: ' + clidisplay.help_header(r'\2'), line)

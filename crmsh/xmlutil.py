@@ -17,7 +17,7 @@ from .msg import common_err, common_error, common_warn, common_debug, cib_parse_
 from . import userdir
 from .utils import add_sudo, str2file, str2tmp, get_boolean
 from .utils import get_stdout, stdout2list, crm_msec, crm_time_cmp
-from .utils import olist, get_cib_in_use, get_tempdir
+from .utils import olist, get_cib_in_use, get_tempdir, to_ascii
 
 
 def xmlparse(f):
@@ -118,7 +118,7 @@ def cibdump2elem(section=None):
     if rc == 0:
         return cibtext2elem(outp)
     elif rc != constants.cib_no_section_rc:
-        common_error("running %s: %s" % (cmd, errp))
+        common_error("running %s: %s" % (cmd, to_ascii(errp)))
     return None
 
 

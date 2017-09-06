@@ -568,7 +568,7 @@ def init_cluster_local():
     if service_is_available("hawk.service"):
         start_service("hawk.service")
         status("  Hawk cluster interface is now running. To see cluster status, open:")
-        status("    https://%s:7630/" % (_context.ip_address))
+        status("    https://%s:7630/" % (utils.to_ascii(_context.ip_address)))
         status("  Log in with username 'hacluster'%s" % (pass_msg))
     else:
         warn("Hawk not installed - not configuring web management interface.")
@@ -787,7 +787,7 @@ def valid_adminIP(addr, prev_value=None):
             warn("  Address already in use: {}".format(addr))
             return False
         for net in all_:
-            if addr in utils.Network(net):
+            if addr in utils.Network(utils.to_ascii(net)):
                 return True
         warn("  Address '{}' invalid, expected one of {}".format(addr, all_))
         return False
@@ -827,7 +827,7 @@ Configure Corosync (unicast):
   to specify a network address over which to communicate (default
   is %s's network, but you can use the network address of any
   active interface).
-""" % (_context.nic))
+""" % (utils.to_ascii(_context.nic)))
 
     if os.path.exists(corosync.conf()):
         if not confirm("%s already exists - overwrite?" % (corosync.conf())):
@@ -875,7 +875,7 @@ Configure Corosync:
   to specify a network address over which to communicate (default
   is %s's network, but you can use the network address of any
   active interface).
-""" % (_context.nic))
+""" % (utils.to_ascii(_context.nic)))
 
     if os.path.exists(corosync.conf()):
         if not confirm("%s already exists - overwrite?" % (corosync.conf())):
