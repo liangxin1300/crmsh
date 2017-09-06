@@ -308,7 +308,7 @@ def partprobe():
     #  Data Center Engineer
     #  bheaton@suse.com
     _rc, out, _err = utils.get_stdout_stderr("sfdisk -l")
-    disks = re.findall(r'^Disk\s*(/.+):', out, re.M)
+    disks = re.findall(r'^Disk\s*(/.+):', str(out), re.M)
     invoke("partprobe", *disks)
 
 
@@ -974,7 +974,7 @@ def init_corosync():
     """
     def check_amazon():
         _rc, outp = utils.get_stdout("dmidecode -s system-version")
-        return re.search(r"\<.*\.amazon\>", outp) is not None
+        return re.search(r"\<.*\.amazon\>", str(outp)) is not None
 
     init_corosync_auth()
     if _context.unicast or check_amazon():
@@ -1646,7 +1646,7 @@ def join_cluster(seed_host):
 
     # Ditch no-quorum-policy=ignore
     _rc, outp = utils.get_stdout("crm configure show")
-    if re.search('no-quorum-policy=.*ignore', outp):
+    if re.search('no-quorum-policy=.*ignore', str(outp)):
         invoke("crm_attribute --attr-name no-quorum-policy --delete-attr")
 
     # if unicast, we need to reload the corosync configuration
