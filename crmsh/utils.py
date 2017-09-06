@@ -737,7 +737,7 @@ def stdout2list(cmd, stderr_on=True, shell=True):
     if not s:
         return rc, []
     else:
-        return rc, s.split('\n')
+        return rc, to_ascii(s).split('\n')
 
 
 def append_file(dest, src):
