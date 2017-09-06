@@ -1008,7 +1008,7 @@ def is_process(s):
     for pid in pids:
         try:
             cmdline = open(join('/proc', pid, 'cmdline'), 'rb').read()
-            procname = basename(cmdline.replace('\x00', ' ').split(' ')[0])
+            procname = basename(str(cmdline.replace(b'\x00', b' ')).split(' ')[0])
             if procname == s:
                 return True
         except os.error:
