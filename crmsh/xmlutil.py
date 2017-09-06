@@ -1226,7 +1226,7 @@ def xml_equals_unordered(a, b):
         return False
 
     def tagflat(x):
-        return isinstance(x.tag, basestring) and x.tag or x.text
+        return isinstance(x.tag, str) and x.tag or x.text
 
     def sortby(v):
         if v.tag == 'primitive':
