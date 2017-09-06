@@ -78,7 +78,7 @@ def crm_mon(opts=''):
         if not prog:
             raise IOError("crm_mon not available, check your installation")
         _, out = utils.get_stdout("%s --help" % (prog))
-        if "--pending" in out:
+        if "--pending" in str(out):
             _crm_mon = "%s -1 -j" % (prog)
         else:
             _crm_mon = "%s -1" % (prog)

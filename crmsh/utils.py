@@ -73,12 +73,12 @@ def network_defaults(interface=None):
         info[0] = interface
     for l in outp.splitlines():
         sp = l.split()
-        if info[0] is None and len(sp) >= 5 and sp[0] == 'default' and sp[1] == 'via':
+        if info[0] is None and len(sp) >= 5 and sp[0] == b'default' and sp[1] == b'via':
             info[0] = sp[4]
         if info[0] is not None:
-            if sp[0].find('/') >= 0 and valfor(sp, 'dev') == info[0]:
-                nw, length = sp[0].split('/')
-                info[1], info[2], info[3] = valfor(sp, 'src'), nw, length
+            if str(sp[0]).find('/') >= 0 and valfor(sp, b'dev') == info[0]:
+                nw, length = str(sp[0]).split('/')
+                info[1], info[2], info[3] = valfor(sp, b'src'), nw, length
     if info[0] is None:
         raise ValueError("Failed to determine default network interface")
     return tuple(info)
@@ -1674,7 +1674,7 @@ def service_info(name):
                                name + '.service'], shell=False)
         if rc == 0:
             info = []
-            for line in outp.split('\n'):
+            for line in str(outp).split('\n'):
                 data = line.split('=', 1)
                 if len(data) == 2:
                     info.append(data[1].strip())
