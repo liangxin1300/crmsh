@@ -1674,8 +1674,8 @@ def service_info(name):
                                name + '.service'], shell=False)
         if rc == 0:
             info = []
-            for line in str(outp).split('\n'):
-                data = line.split('=', 1)
+            for line in outp.splitlines():
+                data = to_ascii(line).split('=', 1)
                 if len(data) == 2:
                     info.append(data[1].strip())
             return '/'.join(info)
