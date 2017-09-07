@@ -404,7 +404,7 @@ def str2tmp(s, suffix=".pcmk"):
     except IOError as msg:
         common_err(msg)
         return
-    f.write(s)
+    f.write(str(s))
     if not s.endswith('\n'):
         f.write("\n")
     f.close()
