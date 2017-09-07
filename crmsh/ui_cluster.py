@@ -585,7 +585,7 @@ Cluster Description
             rc, outp = utils.get_stdout(['corosync-cfgtool', '-s'], shell=False)
             if rc == 0:
                 print("")
-                print(outp)
+                print(utils.to_ascii(outp))
             else:
                 print("Failed to get corosync status")
 
