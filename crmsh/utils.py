@@ -1113,7 +1113,7 @@ def page_string(s):
     elif not config.core.pager or not can_ask() or options.batch:
         print(term_render(s))
     else:
-        pipe_string(get_pager_cmd(), term_render(s))
+        pipe_string(get_pager_cmd(), term_render(s).encode('utf-8'))
 
 
 def page_gen(g):
