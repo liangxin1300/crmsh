@@ -2618,7 +2618,7 @@ class CibFactory(object):
             # now increase the epoch by 1
             self.bump_epoch()
         self._set_cib_attributes(self.cib_elem)
-        cib_s = etree.tostring(self.cib_orig, pretty_print=True)
+        cib_s = xml_tostring(self.cib_orig, pretty_print=True)
         tmpf = str2tmp(cib_s, suffix=".xml")
         if not tmpf or not ensure_sudo_readable(tmpf):
             return False
@@ -2654,7 +2654,7 @@ class CibFactory(object):
             for tag in e.xpath("/diff"):
                 if "digest" in tag.attrib:
                     del tag.attrib["digest"]
-            cib_diff = etree.tostring(e)
+            cib_diff = xml_tostring(e)
         common_debug("Diff: %s" % (cib_diff))
         rc = pipe_string("%s %s" % (cib_piped, cibadmin_opts),
                          cib_diff)
