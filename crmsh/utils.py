@@ -87,6 +87,8 @@ def network_defaults(interface=None):
 def to_ascii(s):
     """Convert the bytes string to a ASCII string
     Usefull to remove accent (diacritics)"""
+    if isinstance(s, str):
+        return s
     return str(s, 'utf-8')
 
 
@@ -1080,9 +1082,10 @@ def edit_file_ext(fname, template=''):
 def need_pager(s, w, h):
     from math import ceil
     cnt = 0
-    for l in s.split('\n'):
+    for l in s.splitlines():
+        data = to_ascii(l)
         # need to remove color codes
-        l = re.sub(r'\${\w+}', '', l)
+        l = re.sub(r'\${\w+}', '', data)
         cnt += int(ceil((len(l) + 0.5) / w))
         if cnt >= h:
             return True
