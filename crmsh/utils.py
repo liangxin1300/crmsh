@@ -109,15 +109,17 @@ def network_v6_all():
     _, outp = get_stdout("/sbin/ip -6 -o addr show")
     dict_ = {}
     for line in outp.splitlines():
-        if re.search(r' ::1/| [Ff][Ee]80:', str(line)):
+        data = to_ascii(line)
+        if re.search(r' ::1/| [Ff][Ee]80:', data):
             # skip local address and link-local address
             continue
-        dict_[line.split()[1]] = []
+        dict_[data.split()[1]] = []
     for line in outp.splitlines():
-        if re.search(r' ::1/| [Ff][Ee]80:', str(line)):
+        data = to_ascii(line)
+        if re.search(r' ::1/| [Ff][Ee]80:', data):
             # skip local address and link-local address
             continue
-        dict_[line.split()[1]].append(line.split()[3])
+        dict_[data.split()[1]].append(data.split()[3])
     return dict_
 
 
