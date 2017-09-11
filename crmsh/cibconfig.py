@@ -31,7 +31,7 @@ from .msg import common_error, constraint_norefobj_err, cib_parse_err, no_object
 from .msg import missing_obj_err, common_warning, update_err, unsupported_err, empty_cib_err
 from .msg import invalid_id_err, cib_ver_unsupported_err
 from .utils import ext_cmd, safe_open_w, pipe_string, safe_close_w, crm_msec
-from .utils import ask, lines2cli, olist
+from .utils import ask, lines2cli, olist, to_ascii
 from .utils import page_string, cibadmin_can_patch, str2tmp, ensure_sudo_readable
 from .utils import run_ptest, is_id_valid, edit_file, get_boolean, filter_string
 from .xmlutil import is_child_rsc, rsc_constraint, sanitize_cib, rename_id, get_interesting_nodes
@@ -610,7 +610,7 @@ class CibObjectSetRaw(CibObjectSet):
                 nvp.set('value', obscured(nvp.get('name'), nvp.get('value')))
 
         s = etree.tostring(cib_elem, pretty_print=True)
-        return '<?xml version="1.0" ?>\n' + s
+        return '<?xml version="1.0" ?>\n' + to_ascii(s)
 
     def _get_id(self, node):
         if node.tag == "fencing-topology":
