@@ -787,7 +787,7 @@ def valid_adminIP(addr, prev_value=None):
             warn("  Address already in use: {}".format(addr))
             return False
         for net in all_:
-            if addr in utils.Network(utils.to_ascii(net)):
+            if addr in utils.Network(net):
                 return True
         warn("  Address '{}' invalid, expected one of {}".format(addr, all_))
         return False
