@@ -72,13 +72,13 @@ def network_defaults(interface=None):
     if interface is not None:
         info[0] = interface
     for l in outp.splitlines():
-        sp = l.split()
-        if info[0] is None and len(sp) >= 5 and sp[0] == b'default' and sp[1] == b'via':
+        sp = to_ascii(l).split()
+        if info[0] is None and len(sp) >= 5 and sp[0] == 'default' and sp[1] == 'via':
             info[0] = sp[4]
         if info[0] is not None:
-            if str(sp[0]).find('/') >= 0 and valfor(sp, b'dev') == info[0]:
-                nw, length = str(sp[0]).split('/')
-                info[1], info[2], info[3] = valfor(sp, b'src'), nw, length
+            if str(sp[0]).find('/') >= 0 and valfor(sp, 'dev') == info[0]:
+                nw, length = sp[0].split('/')
+                info[1], info[2], info[3] = valfor(sp, 'src'), nw, length
     if info[0] is None:
         raise ValueError("Failed to determine default network interface")
     return tuple(info)
