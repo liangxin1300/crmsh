@@ -44,8 +44,8 @@ class Corosync(command.UI):
         '''
         Quick cluster health status. Corosync status...
         '''
-        print(corosync.cfgtool('-s')[1])
-        print(corosync.quorumtool('-s')[1])
+        print(utils.to_ascii(corosync.cfgtool('-s')[1]))
+        print(utils.to_ascii(corosync.quorumtool('-s')[1]))
 
     @command.skill_level('administrator')
     def do_reload(self, context):
