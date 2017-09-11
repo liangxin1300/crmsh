@@ -83,7 +83,7 @@ def sudocall(cmd):
 def cibdump2file(fname):
     _, outp, _ = sudocall(cib_dump)
     if outp is not None:
-        return str2file(outp, fname)
+        return str2file(to_ascii(outp), fname)
     return None
 
 
