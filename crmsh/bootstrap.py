@@ -337,6 +337,14 @@ def check_tty():
         error("No pseudo-tty detected! Use -t option to ssh if calling remotely.")
 
 
+def check_etc_hosts_has(node):
+    with open("/etc/hosts") as f:
+        for line in f.read().splitlines():
+            if re.search(r'(\s|^)%s(\s|$)' % node, line):
+                return True
+    return False
+
+
 def grep_output(cmd, txt):
     _rc, outp, _err = utils.get_stdout_stderr(cmd)
     return txt in outp
@@ -2028,6 +2036,8 @@ def bootstrap_join(cluster_node=None, ui_context=None, nic=None, quiet=False, ye
   password of the existing node.
 """)
             cluster_node = prompt_for_string("IP address or hostname of existing node (e.g.: 192.168.1.1)", ".+")
+            if not check_etc_hosts_has(cluster_node):
+                error("Need configure \"{}\" in /etc/hosts first if want to join it".format(cluster_node))
             _context.cluster_node = cluster_node
 
         join_ssh(cluster_node)
