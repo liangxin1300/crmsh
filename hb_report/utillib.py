@@ -804,7 +804,7 @@ def get_cib_dir():
 def get_command_info(cmd):
     code, out, err = crmutils.get_stdout_stderr(cmd)
     if out:
-        return (code, out + '\n')
+        return (code, crmutils.to_ascii(out) + '\n')
     else:
         return (code, "")
 
@@ -822,7 +822,7 @@ def get_command_info_timeout(cmd, timeout=5):
         my_timer.cancel()
 
     if stdout and proc.returncode == 0:
-        return stdout
+        return crmutils.to_ascii(stdout)
     else:
         return ""
 
