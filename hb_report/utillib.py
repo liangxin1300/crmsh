@@ -206,7 +206,7 @@ def check_perms():
             continue
         if stat_info.st_uid != pwd.getpwnam('hacluster')[2] or\
            stat_info.st_gid != pwd.getpwnam('hacluster')[3] or\
-           "%04o" % (stat_info.st_mode & 07777) != "0750":
+           "%04o" % (stat_info.st_mode & 0o7777) != "0750":
             flag = 1
             out_string += "\nwrong permissions or ownership for %s: " % check_dir
             out_string += get_command_info("ls -ld %s" % check_dir)[1] + '\n'
@@ -784,12 +784,12 @@ def print_core_backtraces(flist):
             continue
         get_debuginfo(absbinpath, corefile)
         bt_opts = os.environ.get("BT_OPTS", "thread apply all bt full")
-        print "====================== start backtrace ======================"
-        print get_command_info_timeout(["ls", "-l", corefile])
-        print get_command_info_timeout(["gdb", "-batch", "-n", "-quiet",
+        print("====================== start backtrace ======================")
+        print(get_command_info_timeout(["ls", "-l", corefile]))
+        print(get_command_info_timeout(["gdb", "-batch", "-n", "-quiet",
                                         "-ex", bt_opts, "-ex", "quit",
-                                        absbinpath, corefile])
-        print "======================= end backtrace ======================="
+                                        absbinpath, corefile]))
+        print("======================= end backtrace =======================")
 
 
 def get_cib_dir():
