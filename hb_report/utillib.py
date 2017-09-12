@@ -1368,7 +1368,7 @@ def ra_build_info():
 def random_string(num):
     tmp = []
     if crmutils.is_int(num) and num > 0:
-        s = string.letters + string.digits
+        s = string.ascii_letters + string.digits
         tmp = random.sample(s, num)
     return ''.join(tmp)
 
