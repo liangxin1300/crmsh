@@ -1707,7 +1707,7 @@ def remove_get_hostname(seed_host):
     _rc, outp, _errp = utils.get_stdout_stderr("ssh root@{} \"hostname\"".format(seed_host))
     if outp:
         _context.connect_name = seed_host
-        _context.cluster_node = outp.strip()
+        _context.cluster_node = utils.to_ascii(outp).strip()
         _context.host_status = 1
     elif re.match(r'^[\[0-9].*', seed_host):
         # IP address
@@ -1739,7 +1739,7 @@ def remove_get_hostname(seed_host):
         _rc, outp, _errp = utils.get_stdout_stderr("ssh root@{} \"hostname\"".format(nodename))
         if outp:
             ipaddr = nodename
-            nodename = outp.strip()
+            nodename = utils.to_ascii(outp).strip()
             if nodename != seed_host:
                 warn("Specified IP address {ipaddr} is node {nodename}, not configured in cluster.".format(ipaddr=ipaddr, nodename=nodename))
                 warn("Trying to remove node {}".format(seed_host))
