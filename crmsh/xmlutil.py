@@ -91,7 +91,7 @@ def cibdump2tmp():
     try:
         _, outp, _ = sudocall(cib_dump)
         if outp is not None:
-            return str2tmp(outp)
+            return str2tmp(to_ascii(outp))
     except IOError as msg:
         common_err(msg)
     return None
