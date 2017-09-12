@@ -206,7 +206,7 @@ def check_perms():
             continue
         if stat_info.st_uid != pwd.getpwnam('hacluster')[2] or\
            stat_info.st_gid != pwd.getpwnam('hacluster')[3] or\
-           "%04o" % (stat_info.st_mode & 07777) != "0750":
+           "%04o" % (stat_info.st_mode & 0o7777) != "0750":
             flag = 1
             out_string += "\nwrong permissions or ownership for %s: " % check_dir
             out_string += get_command_info("ls -ld %s" % check_dir)[1] + '\n'
@@ -688,7 +688,7 @@ def findln_by_time(logf, tm):
     first = 1
     last = sum(1 for l in open(logf, 'r'))
     while first <= last:
-        mid = (last+first)/2
+        mid = (last+first)//2
         trycnt = 10
         while trycnt > 0:
             res = line_time(logf, mid)
@@ -707,7 +707,7 @@ def findln_by_time(logf, tm):
                 if last < first:
                     last = first
                 prevmid = mid
-                mid = (last+first)/2
+                mid = (last+first)//2
                 if first == last:
                     break
         if not tmid:
@@ -784,12 +784,12 @@ def print_core_backtraces(flist):
             continue
         get_debuginfo(absbinpath, corefile)
         bt_opts = os.environ.get("BT_OPTS", "thread apply all bt full")
-        print "====================== start backtrace ======================"
-        print get_command_info_timeout(["ls", "-l", corefile])
-        print get_command_info_timeout(["gdb", "-batch", "-n", "-quiet",
+        print("====================== start backtrace ======================")
+        print(get_command_info_timeout(["ls", "-l", corefile]))
+        print(get_command_info_timeout(["gdb", "-batch", "-n", "-quiet",
                                         "-ex", bt_opts, "-ex", "quit",
-                                        absbinpath, corefile])
-        print "======================= end backtrace ======================="
+                                        absbinpath, corefile]))
+        print("======================= end backtrace =======================")
 
 
 def get_cib_dir():
@@ -1483,13 +1483,13 @@ def start_slave_collector(node, arg_str):
             cmd += " {}".format(str(item))
         code, out, err = crmutils.get_stdout_stderr(cmd)
         if code != 0:
-            log_warning(err)
+            log_warning(crmutils.to_ascii(err))
             for ip in get_peer_ip():
                 log_info("Trying connect by %s" % ip)
                 cmd = cmd.replace(node, ip, 1)
                 code, out, err = crmutils.get_stdout_stderr(cmd)
                 if code != 0:
-                    log_warning(err)
+                    log_warning(crmutils.to_ascii(err))
                 break
 
         cmd = r"(cd {} && tar xf -)".format(constants.WORKDIR)
@@ -1516,7 +1516,7 @@ def sub_string(in_string,
 
 def sub_string_test(in_string, pattern=constants.SANITIZE):
     pattern_string = re.sub(" ", "|", pattern)
-    for line in in_string.split('\n'):
+    for line in crmutils.to_ascii(in_string).split('\n'):
         if re.search('name="%s"' % pattern_string, line):
             return True
     return False
