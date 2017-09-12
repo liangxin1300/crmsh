@@ -1796,7 +1796,7 @@ def remote_diff_this(local_path, nodes, this_node):
         _, _, _, path = result
         _, s = get_stdout("diff -U 0 -d -b --label %s --label %s %s %s" %
                           (host, this_node, path, local_path))
-        page_string(s)
+        page_string(to_ascii(s))
 
 
 def remote_diff(local_path, nodes):
@@ -1813,7 +1813,7 @@ def remote_diff(local_path, nodes):
     h2, r2 = by_host[1]
     _, s = get_stdout("diff -U 0 -d -b --label %s --label %s %s %s" %
                       (h1, h2, r1[3], r2[3]))
-    page_string(s)
+    page_string(to_ascii(s))
 
 
 def remote_checksum(local_path, nodes, this_node):
