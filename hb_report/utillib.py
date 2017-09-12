@@ -54,7 +54,7 @@ def arch_logs(logf, from_time, to_time):
     """
     ret = []
     files = [logf]
-    files += glob.glob(logf+"*[0-9z]")
+    #files += glob.glob(logf+"*[0-9z]")
     for f in sorted(files, key=os.path.getctime):
         res = is_our_log(f, from_time, to_time)
         if res == 0: # noop, continue
@@ -206,7 +206,7 @@ def check_perms():
             continue
         if stat_info.st_uid != pwd.getpwnam('hacluster')[2] or\
            stat_info.st_gid != pwd.getpwnam('hacluster')[3] or\
-           "%04o" % (stat_info.st_mode & 07777) != "0750":
+           "%04o" % (stat_info.st_mode & 0o7777) != "0750":
             flag = 1
             out_string += "\nwrong permissions or ownership for %s: " % check_dir
             out_string += get_command_info("ls -ld %s" % check_dir)[1] + '\n'
@@ -565,10 +565,10 @@ def find_first_ts(data):
 def filter_lines(logf, from_line, to_line=None):
     out_string = ""
     if not to_line:
-        to_line = sum(1 for l in open(logf, 'r'))
+        to_line = sum(1 for l in open(logf, 'r', encoding='utf-8'))
 
     count = 1
-    with open(logf, 'r') as f:
+    with open(logf, 'r', encoding='utf-8') as f:
         for line in f.readlines():
             if count >= from_line and count <= to_line:
                 out_string += line
@@ -592,7 +592,7 @@ def finalword():
 def find_getstampproc(log_file):
     func = None
     loop_cout = 10
-    with open(log_file, 'r') as f:
+    with open(log_file, 'r', encoding='utf-8') as f:
         for line in f.readlines():
             if loop_cout == 0:
                 break
@@ -686,9 +686,9 @@ def find_ssh_user():
 def findln_by_time(logf, tm):
     tmid = None
     first = 1
-    last = sum(1 for l in open(logf, 'r'))
+    last = sum(1 for l in open(logf, 'r', encoding='utf-8'))
     while first <= last:
-        mid = (last+first)/2
+        mid = (last+first)//2
         trycnt = 10
         while trycnt > 0:
             res = line_time(logf, mid)
@@ -707,7 +707,7 @@ def findln_by_time(logf, tm):
                 if last < first:
                     last = first
                 prevmid = mid
-                mid = (last+first)/2
+                mid = (last+first)//2
                 if first == last:
                     break
         if not tmid:
@@ -784,12 +784,12 @@ def print_core_backtraces(flist):
             continue
         get_debuginfo(absbinpath, corefile)
         bt_opts = os.environ.get("BT_OPTS", "thread apply all bt full")
-        print "====================== start backtrace ======================"
-        print get_command_info_timeout(["ls", "-l", corefile])
-        print get_command_info_timeout(["gdb", "-batch", "-n", "-quiet",
+        print("====================== start backtrace ======================")
+        print(get_command_info_timeout(["ls", "-l", corefile]))
+        print(get_command_info_timeout(["gdb", "-batch", "-n", "-quiet",
                                         "-ex", bt_opts, "-ex", "quit",
-                                        absbinpath, corefile])
-        print "======================= end backtrace ======================="
+                                        absbinpath, corefile]))
+        print("======================= end backtrace =======================")
 
 
 def get_cib_dir():
@@ -822,7 +822,7 @@ def get_command_info_timeout(cmd, timeout=5):
         my_timer.cancel()
 
     if stdout and proc.returncode == 0:
-        return stdout
+        return crmutils.to_ascii(stdout)
     else:
         return ""
 
@@ -1074,7 +1074,7 @@ def grep(pattern, infile=None, incmd=None, flag=None):
 
 def grep_file(pattern, infile, flag):
     res = []
-    with open(infile, 'r') as fd:
+    with open(infile, 'r', encoding='utf-8', errors="replace") as fd:
         res = grep_row(pattern, fd.read(), flag)
         if res:
             if flag and "l" in flag:
@@ -1140,7 +1140,7 @@ def is_our_log(logf, from_time, to_time):
     """
     check if the log contains a piece of our segment
     """
-    with open(logf, 'r') as fd:
+    with open(logf, 'r', encoding='utf-8', errors="replace") as fd:
         data = fd.read()
         first_time = find_first_ts(head(10, data))
         last_time = find_first_ts(tail(10, data))
@@ -1160,7 +1160,7 @@ def is_our_log(logf, from_time, to_time):
 
 def line_time(logf, line_num):
     ts = None
-    with open(logf, 'r') as fd:
+    with open(logf, 'r', encoding='utf-8') as fd:
         line_res = head(line_num, fd.read())
         if line_res:
             ts = get_ts(line_res[-1])
@@ -1368,7 +1368,7 @@ def ra_build_info():
 def random_string(num):
     tmp = []
     if crmutils.is_int(num) and num > 0:
-        s = string.letters + string.digits
+        s = string.ascii_letters + string.digits
         tmp = random.sample(s, num)
     return ''.join(tmp)
 
@@ -1472,8 +1472,9 @@ def start_slave_collector(node, arg_str):
         for item in arg_str.split():
             cmd += " {}".format(str(item))
         _, out = crmutils.get_stdout(cmd)
+
         cmd = r"(cd {} && tar xf -)".format(constants.WORKDIR)
-        crmutils.get_stdout(cmd, input_s=out)
+        crmutils.get_stdout(cmd, input_s=eval(out))
 
     else:
         cmd = r'ssh {} {} "{} hb_report __slave"'.\
@@ -1493,7 +1494,7 @@ def start_slave_collector(node, arg_str):
                 break
 
         cmd = r"(cd {} && tar xf -)".format(constants.WORKDIR)
-        crmutils.get_stdout(cmd, input_s=out)
+        crmutils.get_stdout(cmd, input_s=out.encode('utf-8'))
 
 
 def str_to_bool(v):
@@ -1516,7 +1517,7 @@ def sub_string(in_string,
 
 def sub_string_test(in_string, pattern=constants.SANITIZE):
     pattern_string = re.sub(" ", "|", pattern)
-    for line in in_string.split('\n'):
+    for line in crmutils.to_ascii(in_string).split('\n'):
         if re.search('name="%s"' % pattern_string, line):
             return True
     return False
