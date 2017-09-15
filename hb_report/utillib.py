@@ -54,7 +54,7 @@ def arch_logs(logf, from_time, to_time):
     """
     ret = []
     files = [logf]
-    files += glob.glob(logf+"*[0-9z]")
+    #files += glob.glob(logf+"*[0-9z]")
     for f in sorted(files, key=os.path.getctime):
         res = is_our_log(f, from_time, to_time)
         if res == 0: # noop, continue
@@ -565,10 +565,10 @@ def find_first_ts(data):
 def filter_lines(logf, from_line, to_line=None):
     out_string = ""
     if not to_line:
-        to_line = sum(1 for l in open(logf, 'r'))
+        to_line = sum(1 for l in open(logf, 'r', encoding='utf-8'))
 
     count = 1
-    with open(logf, 'r') as f:
+    with open(logf, 'r', encoding='utf-8') as f:
         for line in f.readlines():
             if count >= from_line and count <= to_line:
                 out_string += line
@@ -592,7 +592,7 @@ def finalword():
 def find_getstampproc(log_file):
     func = None
     loop_cout = 10
-    with open(log_file, 'r') as f:
+    with open(log_file, 'r', encoding='utf-8') as f:
         for line in f.readlines():
             if loop_cout == 0:
                 break
@@ -686,7 +686,7 @@ def find_ssh_user():
 def findln_by_time(logf, tm):
     tmid = None
     first = 1
-    last = sum(1 for l in open(logf, 'r'))
+    last = sum(1 for l in open(logf, 'r', encoding='utf-8'))
     while first <= last:
         mid = (last+first)//2
         trycnt = 10
@@ -1074,7 +1074,7 @@ def grep(pattern, infile=None, incmd=None, flag=None):
 
 def grep_file(pattern, infile, flag):
     res = []
-    with open(infile, 'r') as fd:
+    with open(infile, 'r', encoding='utf-8', errors="replace") as fd:
         res = grep_row(pattern, fd.read(), flag)
         if res:
             if flag and "l" in flag:
@@ -1140,7 +1140,7 @@ def is_our_log(logf, from_time, to_time):
     """
     check if the log contains a piece of our segment
     """
-    with open(logf, 'r') as fd:
+    with open(logf, 'r', encoding='utf-8', errors="replace") as fd:
         data = fd.read()
         first_time = find_first_ts(head(10, data))
         last_time = find_first_ts(tail(10, data))
@@ -1160,7 +1160,7 @@ def is_our_log(logf, from_time, to_time):
 
 def line_time(logf, line_num):
     ts = None
-    with open(logf, 'r') as fd:
+    with open(logf, 'r', encoding='utf-8') as fd:
         line_res = head(line_num, fd.read())
         if line_res:
             ts = get_ts(line_res[-1])
@@ -1472,8 +1472,10 @@ def start_slave_collector(node, arg_str):
         for item in arg_str.split():
             cmd += " {}".format(str(item))
         _, out = crmutils.get_stdout(cmd)
+        data = eval(crmutils.to_ascii(out))
+
         cmd = r"(cd {} && tar xf -)".format(constants.WORKDIR)
-        crmutils.get_stdout(cmd, input_s=out)
+        crmutils.get_stdout(cmd, input_s=data)
 
     else:
         cmd = r'ssh {} {} "{} hb_report __slave"'.\
@@ -1491,9 +1493,10 @@ def start_slave_collector(node, arg_str):
                 if code != 0:
                     log_warning(crmutils.to_ascii(err))
                 break
+        data = eval(crmutils.to_ascii(out))
 
         cmd = r"(cd {} && tar xf -)".format(constants.WORKDIR)
-        crmutils.get_stdout(cmd, input_s=out)
+        crmutils.get_stdout(cmd, input_s=data)
 
 
 def str_to_bool(v):
