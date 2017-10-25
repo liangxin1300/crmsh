@@ -695,6 +695,13 @@ class CibConfig(command.UI):
         return self.__conf_object(context.get_command_name(), *args)
 
     @command.skill_level('administrator')
+    def do_bundle(self, context, *args):
+        """usage: bundle <bundle id> <container type> [<container option>...]
+        network [<network option>...]
+        storage [<storage option>...]
+        primitive <resource id> {[<class>:[<provider>:]]<type>|@<template>}"""
+
+    @command.skill_level('administrator')
     @command.completers_repeating(compl.null, _group_completer)
     def do_group(self, context, *args):
         """usage: group <name> <rsc> [<rsc>...]
