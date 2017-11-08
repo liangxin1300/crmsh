@@ -742,7 +742,6 @@ class CibConfig(command.UI):
     @command.completers_repeating(compl.attr_id, _group_completer)
     def do_group(self, context, *args):
         """usage: group <name> <rsc> [<rsc>...]
-        [params <param>=<value> [<param>=<value>...]]
         [meta <attribute>=<value> [<attribute>=<value>...]]"""
         return self.__conf_object(context.get_command_name(), *args)
 
