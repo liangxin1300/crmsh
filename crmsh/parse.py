@@ -29,6 +29,8 @@ _IDSPEC_RE = re.compile(r'(\$id-ref|\$id)=(.*)$', re.IGNORECASE)
 _ID_RE = re.compile(r'\$id=(.*)$', re.IGNORECASE)
 _ID_NEW_RE = re.compile(r'([\w-]+):$', re.IGNORECASE)
 _SCORE_RE = re.compile(r"([^:]+):$")
+_SCORE_RE2 = re.compile(r"score=(.+)$")
+_RSC_PATTERN_RE = re.compile(r"rsc-pattern=/?([^/]+)/?$")
 _ROLE_RE = re.compile(r"\$?role=(.+)$", re.IGNORECASE)
 _BOOLOP_RE = re.compile(r'(%s)$' % ('|'.join(constants.boolean_ops)), re.IGNORECASE)
 _UNARYOP_RE = re.compile(r'(%s)$' % ('|'.join(constants.unary_ops)), re.IGNORECASE)
@@ -39,10 +41,17 @@ _UNAME_RE = re.compile(r'([^:]+)(:(normal|member|ping|remote))?$', re.IGNORECASE
 _TEMPLATE_RE = re.compile(r'@(.+)$')
 _RA_TYPE_RE = re.compile(r'[a-z0-9_:-]+$', re.IGNORECASE)
 _TAG_RE = re.compile(r"([a-zA-Z_][^\s:]*):?$")
-_ROLE2_RE = re.compile(r"role=(.+)$", re.IGNORECASE)
+_ROLE2_RE = re.compile(r"(with_role|role)=(.+)$", re.IGNORECASE)
 _TARGET_RE = re.compile(r'([^:]+):$')
 _TARGET_ATTR_RE = re.compile(r'attr:([\w-]+)=([\w-]+)$', re.IGNORECASE)
 _TARGET_PATTERN_RE = re.compile(r'pattern:(.+)$', re.IGNORECASE)
+_ATTR_RE2 = re.compile(r'attribute=(.+)$')
+_OP_RE = re.compile(r'operation=(.+)$')
+_DATE_OP_RE = re.compile(r'operation="?(in_range|gt|lt|date_spec)"?$')
+_VALUE_RE = re.compile(r'value=(.+)$')
+_LOC_ON_RE = re.compile(r'on$')
+_COL_WITH = re.compile(r'with$')
+_OPTIONS_RE = re.compile(r'options$')
 TERMINATORS = ('params', 'meta', 'utilization', 'operations', 'op', 'op_params', 'op_meta', 'rule', 'attributes')
 
 
@@ -246,9 +255,12 @@ class BaseParser(object):
         self._currtok = len(self._cmd)
         return ret
 
-    def match_any(self):
+    def match_any(self, msg=None):
         if not self.has_tokens():
-            self.err("Unexpected end of line")
+            if msg:
+                self.err(msg + ", ")
+            else:
+                self.err("Unexpected end of line, ")
         tok = self.current_token()
         self._currtok += 1
         self._lastmatch = tok
@@ -394,7 +406,7 @@ class BaseParser(object):
 
     def match_until(self, end_token):
         tokens = []
-        while self.current_token() is not None and self.current_token() != end_token:
+        while self.current_token() is not None and not re.match(end_token, self.current_token()):
             tokens.append(self.match_any())
         return tokens
 
@@ -449,7 +461,7 @@ class BaseParser(object):
         from .cibconfig import cib_factory
 
         rules = []
-        while self.try_match('rule'):
+        while self.try_match('(rule|lifetime)$'):
             rule = xmlutil.new('rule')
             rules.append(rule)
             idref = False
@@ -459,127 +471,20 @@ class BaseParser(object):
                     idval = cib_factory.resolve_id_ref('rule', idval)
                     idref = True
                 rule.set(idtyp, idval)
-            if self.try_match(_ROLE_RE):
-                rule.set('role', self.matched(1))
             if idref:
                 continue
-            if self.try_match(_SCORE_RE):
-                rule.set(*self.validate_score(self.matched(1)))
-            else:
-                rule.set('score', 'INFINITY')
-            boolop, exprs = self.match_rule_expression()
-            if boolop and not keyword_cmp(boolop, 'and'):
-                rule.set('boolean-op', boolop)
-            for expr in exprs:
-                rule.append(expr)
+
+            while self.try_match(_ATTR_RE):
+                if self.matched(1) == "score":
+                    rule.set(*self.validate_score(self.matched(2)))
+                else:
+                    rule.set(self.matched(1), self.matched(2))
+
+            while self.try_match(r"expression|date_expression$"):
+                expression = xmlutil.child(rule, self.matched(0))
+                while self.try_match(_ATTR_RE):
+                    expression.set(self.matched(1), self.matched(2))
         return rules
-
-    def match_rule_expression(self):
-        """
-        expression :: <simple_exp> [bool_op <simple_exp> ...]
-        bool_op :: or | and
-        simple_exp :: <attribute> [type:]<binary_op> <value>
-                      | <unary_op> <attribute>
-                      | date <date_expr>
-        type :: string | version | number
-        binary_op :: lt | gt | lte | gte | eq | ne
-        unary_op :: defined | not_defined
-
-        date_expr :: lt <end>
-                     | gt <start>
-                     | in_range start=<start> end=<end>
-                     | in_range start=<start> <duration>
-                     | date_spec <date_spec>
-        duration|date_spec ::
-                     hours=<value>
-                     | monthdays=<value>
-                     | weekdays=<value>
-                     | yearsdays=<value>
-                     | months=<value>
-                     | weeks=<value>
-                     | years=<value>
-                     | weekyears=<value>
-                     | moon=<value>
-        """
-        boolop = None
-        exprs = [self._match_simple_exp()]
-        while self.try_match(_BOOLOP_RE):
-            if boolop and self.matched(1) != boolop:
-                self.err("Mixing bool ops not allowed: %s != %s" % (boolop, self.matched(1)))
-            else:
-                boolop = self.matched(1)
-            exprs.append(self._match_simple_exp())
-        return boolop, exprs
-
-    def _match_simple_exp(self):
-        if self.try_match('date'):
-            return self.match_date()
-        elif self.try_match(_UNARYOP_RE):
-            unary_op = self.matched(1)
-            attr = self.match_identifier()
-            return xmlutil.new('expression', operation=unary_op, attribute=attr)
-        else:
-            attr = self.match_identifier()
-            if not self._BINOP_RE:
-                self._BINOP_RE = re.compile(r'((%s):)?(%s)$' % (
-                    '|'.join(validator.expression_types()),
-                    '|'.join(constants.binary_ops)), re.IGNORECASE)
-            self.match(self._BINOP_RE)
-            optype = self.matched(2)
-            binop = self.matched(3)
-            node = xmlutil.new('expression', operation=binop, attribute=attr)
-            xmlutil.maybe_set(node, 'type', optype)
-            val = self.match_any()
-            if not self._VALUE_SOURCE_RE:
-                self._VALUE_SOURCE_RE = re.compile(r"^(?P<val_src>[^\s{}]+)({(?P<val>\S+)})?$")
-            val_src_match = re.match(self._VALUE_SOURCE_RE, val)
-            if val_src_match.group('val') is None:
-                node.set('value', val)
-            else:
-                node.set('value', val_src_match.group('val'))
-                node.set('value-source', val_src_match.group('val_src'))
-            return node
-
-    def match_date(self):
-        """
-        returns for example:
-        <date_expression id="" operation="op">
-        <date_spec hours="9-16"/>
-        </date_expression>
-        """
-        node = xmlutil.new('date_expression')
-
-        date_ops = validator.date_ops()
-        # spec -> date_spec
-        if 'date_spec' in date_ops:
-            date_ops.append('spec')
-        # in -> in_range
-        if 'in_range' in date_ops:
-            date_ops.append('in')
-        self.match('(%s)$' % ('|'.join(date_ops)))
-        op = self.matched(1)
-        opmap = {'in': 'in_range', 'spec': 'date_spec'}
-        node.set('operation', opmap.get(op, op))
-        if op in olist(constants.simple_date_ops):
-            # lt|gt <value>
-            val = self.match_any()
-            if keyword_cmp(op, 'lt'):
-                node.set('end', val)
-            else:
-                node.set('start', val)
-            return node
-        elif op in ('in_range', 'in'):
-            # date in start=<start> end=<end>
-            # date in start=<start> <duration>
-            valid_keys = list(constants.in_range_attrs) + constants.date_spec_names
-            vals = self.match_nvpairs_bykey(valid_keys, minpairs=2)
-            return xmlutil.set_date_expression(node, 'duration', vals)
-        elif op in ('date_spec', 'spec'):
-            valid_keys = constants.date_spec_names
-            vals = self.match_nvpairs_bykey(valid_keys, minpairs=1)
-            return xmlutil.set_date_expression(node, 'date_spec', vals)
-        else:
-            self.err("Unknown date operation '%s', please upgrade crmsh" % (op))
 
     def validate_score(self, score, noattr=False):
         if not noattr and score in olist(constants.score_types):
@@ -942,47 +847,35 @@ class ConstraintParser(BaseParser):
 
     def parse_location(self):
         """
-        location <id> <rsc> [[$]<attribute>=<value>] <score>: <node>
-        location <id> <rsc> [[$]<attribute>=<value>] <rule> [<rule> ...]
-        rsc :: /<rsc-pattern>/
-            | { <rsc-set> }
-            | <rsc>
-        attribute :: role | resource-discovery
+        location <id> <rsc> on <node> score=<score> [lifetime] [options]
+        location <id> <rsc> <rule> [lifetime] [options]
+
+        rsc :: /<rsc-pattern>/ | { <resource_set> } | <rsc>
+        lifetime :: lifetime [option...] date_expression <operation_expr>
+        rule :: rule [option...] expression <attribute_expr>
         """
         out = xmlutil.new('rsc_location', id=self.match_identifier())
-        if self.try_match('^/(.+)/$'):
+
+        if self.try_match(_RSC_PATTERN_RE):
             out.set('rsc-pattern', self.matched(1))
-        elif self.try_match('{'):
-            tokens = self.match_until('}')
-            self.match('}')
-            if not tokens:
-                self.err("Empty resource set")
-            parser = ResourceSet('role', tokens, self)
-            for rscset in parser.parse():
-                out.append(rscset)
+        elif self.try_match('resource_set'):
+            self.try_match_rscset2(out, self.match_until("on|rule"))
         else:
             out.set('rsc', self.match_resource())
 
-        while self.try_match(_ATTR_RE):
-            out.set(self.matched(1), self.matched(2))
-
-        if self.try_match(_ROLE_RE) or self.try_match(_ROLE2_RE):
-            out.set('role', self.matched(1))
-
-        score = False
-        if self.try_match(_SCORE_RE):
-            score = True
-            out.set(*self.validate_score(self.matched(1)))
-            out.set('node', self.match_identifier())
-            # backwards compatibility: role used to be read here
-            if 'role' not in out:
-                if self.try_match(_ROLE_RE) or self.try_match(_ROLE2_RE):
-                    out.set('role', self.matched(1))
-        if not score:
+        if self.try_match(_LOC_ON_RE):
+            token = self.match_any("expected <node> after \"on\"")
+            if token:
+                out.set('node', token)
+            if self.match(_SCORE_RE2, errmsg="expected <score> after node,"):
+                out.set(*self.validate_score(self.matched(1)))
+        else:
             rules = self.match_rules()
-            out.extend(rules)
             if not rules:
-                self.err("expected <score>: <node> or <rule> [<rule> ...]")
+                self.err("expected \"on <node> <score>\" or <rule>, ")
+            out.extend(rules)
+        self.try_match_optional(out)
+
         return out
 
     def parse_colocation(self):
@@ -991,11 +884,19 @@ class ConstraintParser(BaseParser):
           [node-attribute=<node_attr>]
         """
         out = xmlutil.new('rsc_colocation', id=self.match_identifier())
-        self.match(_SCORE_RE, errmsg="Expected <score>:")
-        out.set(*self.validate_score(self.matched(1)))
-        if self.try_match_tail('node-attribute=(.+)$'):
-            out.set('node-attribute', self.matched(1).lower())
-        self.try_match_rscset(out, 'role')
+
+        if self.try_match('resource_set'):
+            self.try_match_rscset2(out, self.match_until("lifetime|options"))
+        else:
+            out.set('rsc', self.match_resource())
+            if self.try_match(_ROLE2_RE):
+                out.set('rsc-role', self.matched(2))
+            if self.match(_COL_WITH, errmsg="expected 'with',"):
+                out.set('with-rsc', self.match_resource())
+                if self.try_match(_ROLE2_RE):
+                    out.set('with-rsc-role', self.matched(2))
+        self.try_match_optional(out)
+
         return out
 
     parse_collocation = parse_colocation
@@ -1008,14 +909,20 @@ class ConstraintParser(BaseParser):
         kind :: Mandatory | Optional | Serialize
         '''
         out = xmlutil.new('rsc_order', id=self.match_identifier())
-        if self.try_match('(%s):$' % ('|'.join(validator.rsc_order_kinds()))):
-            out.set('kind', validator.canonize(
-                self.matched(1), validator.rsc_order_kinds()))
-        elif self.try_match(_SCORE_RE):
-            out.set(*self.validate_score(self.matched(1), noattr=True))
-        if self.try_match_tail('symmetrical=(true|false|yes|no|on|off)$'):
-            out.set('symmetrical', canonical_boolean(self.matched(1)))
-        self.try_match_rscset(out, 'action')
+
+        if self.try_match('resource_set'):
+            self.try_match_rscset2(out, self.match_until("lifetime|options"))
+        else:
+            if self.match(r'first$', errmsg="Expected 'first',"):
+                out.set('first', self.match_resource())
+            if self.try_match(r'first-action=(.+)$'):
+                out.set('first-action', self.matched(1))
+            if self.match(r'then$', errmsg="Expected 'then',"):
+                out.set('then', self.match_resource())
+            if self.try_match(r'then-action=(.+)$'):
+                out.set('then-action', self.matched(1))
+        self.try_match_optional(out)
+
         return out
 
     def parse_rsc_ticket(self):
@@ -1032,6 +939,42 @@ class ConstraintParser(BaseParser):
             out.set('loss-policy', self.matched(1))
         self.try_match_rscset(out, 'role', simple_count=1)
         return out
+
+    def try_match_optional(self, out):
+        #lifetime = self.match_rules()
+        #if lifetime:
+        #    out.extend(lifetime)
+
+        if self.try_match(_OPTIONS_RE):
+            while self.try_match(_ATTR_RE):
+                if self.matched(1) == "score":
+                    out.set(*self.validate_score(self.matched(2)))
+                else:
+                    out.set(self.matched(1), self.matched(2))
+
+    def try_match_rscset2(self, out, tokens):
+        if not tokens or tokens[-1] == "resource_set":
+            self.err("Empty resource set")
+ 
+        rscset_arrays = []
+        temp = []
+
+        for token in tokens:
+            if token != "resource_set":
+                temp.append(token)
+            elif temp:
+                rscset_arrays.append(temp)
+                temp = []
+        rscset_arrays.append(temp)
+
+        for rscset in rscset_arrays:
+            rscset_xml = xmlutil.child(out, 'resource_set')
+            for token in rscset:
+                if re.match(_RESOURCE_RE, token):
+                    xmlutil.child(rscset_xml, 'resource_ref', id=token)
+                m = re.match(_NVPAIR_RE, token)
+                if m:
+                    rscset_xml.set(m.group(1), m.group(2))
 
     def try_match_rscset(self, out, suffix_type, simple_count=2):
         simple, resources = self.match_resource_set(suffix_type, simple_count=simple_count)

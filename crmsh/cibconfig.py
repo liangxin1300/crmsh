@@ -47,7 +47,7 @@ from .xmlutil import is_simpleconstraint, is_template, rmnode, is_defaults, is_l
 from .xmlutil import get_rsc_operations, delete_rscref, xml_equals, lookup_node, RscState
 from .xmlutil import cibtext2elem, is_related, check_id_ref, xml_tostring
 from .cliformat import get_score, nvpairs2list, abs_pos_score, cli_acl_roleref, nvpair_format
-from .cliformat import cli_nvpair, cli_acl_rule, rsc_set_constraint, get_kind, head_id_format
+from .cliformat import cli_nvpair, cli_acl_rule, rsc_set_constraint, rsc_set_constraint2, get_kind, head_id_format
 from .cliformat import simple_rsc_constraint, cli_rule, cli_format
 from .cliformat import cli_acl_role, cli_acl_permission, cli_path
 
@@ -686,7 +686,7 @@ def fix_node_ids(node, oldnode):
         'alerts': 'alert',
         }
 
-    idless = set(['operations', 'fencing-topology', 'network', 'docker', 'rkt', 'storage'])
+    idless = set(['operations', 'fencing-topology', 'network', 'docker', 'rkt', 'storage', 'duration', 'date_spec'])
     isref = set(['resource_ref', 'obj_ref', 'crmsh-ref'])
 
     def needs_id(node):
@@ -822,8 +822,25 @@ def parse_cli_to_xml(cli, oldnode=None):
     input: CLI text
     output: XML, obj_type, obj_id
     """
+    def adjust_for_one_location_situation(cli):
+        if isinstance(cli, list):
+            return cli
+        # location id=loc1 resource_set r1 r2 r3 on node1 score=100
+        _array = cli.split()
+        if _array[0] == "location" and \
+           _array[2] == "on" and \
+           "resource_set" in _array:
+            if "options" in _array:
+                _num = _array.index("options")
+                return ' '.join(_array[:2] + _array[5:_num] + _array[2:5] + _array[_num:])
+            else:
+                return ' '.join(_array[:2] + _array[5:] + _array[2:5])
+        else:
+            return cli
+
     node = None
     comments = []
+    cli = adjust_for_one_location_situation(cli)
     if isinstance(cli, str):
         for s in lines2cli(cli):
             node = parse.parse(s, comments=comments)
@@ -938,8 +955,13 @@ class CibObject(object):
                     comments.append(c.text)
                     continue
                 s = self._repr_cli_child(c, format_mode)
-                if s:
+                if isinstance(s, list):
+                    l.extend(s)
+                if isinstance(s, str):
                     l.append(s)
+            s = self._repr_optional(format_mode)
+            if s and s != "":
+                l.append(s)
             return self._cli_format_and_comment(l, comments, format_mode=format_mode)
 
     def _attr_set_str(self, node):
@@ -994,6 +1016,9 @@ class CibObject(object):
     def _repr_cli_child(self, c, format_mode):
         if c.tag in self.set_names:
             return self._attr_set_str(c)
+
+    def _repr_optional(self, format_mode):
+        pass
 
     def _get_oldnode(self):
         '''
@@ -1415,6 +1440,9 @@ class CibPrimitive(CibObject):
                 l.append(op_obj.repr_cli(format_mode > 0))
             return cli_format(l, break_lines=(format_mode > 0))
 
+    def _repr_optional(self, format_mode):
+        pass
+
     def _append_op(self, op_node):
         try:
             ops_node = self.node.findall("operations")[0]
@@ -1663,6 +1691,9 @@ class CibBundle(CibObject):
     def _repr_cli_child(self, c, format_mode):
         return self._attr_set_str(c)
 
+    def _repr_optional(self, format_mode):
+        pass
+
 
 def _check_if_constraint_ref_is_child(obj):
     """
@@ -1686,44 +1717,128 @@ def _check_if_constraint_ref_is_child(obj):
     return rc
 
 
+class CibConstraints(CibObject):
+    '''
+    Location/Order/Colocation constraint.
+    '''
+    def _repr_cli_head(self, format_mode):
+        cons_type = self.obj_type
+        ident = clidisplay.ident(self.obj_id)
+        result = "%s %s" % (clidisplay.keyword(cons_type), ident)
+
+        if cons_type == "location":
+            pattern = self.node.get("rsc-pattern")
+            if pattern:
+                rsc = nvpair_format("rsc-pattern", pattern)
+            else:
+                rsc = clidisplay.rscref(self.node.get("rsc"))
+            if rsc:
+                result += " %s" % rsc
+            if self.node.find("rule") is None:
+                pref_node = self.node.get("node")
+                score = clidisplay.score(get_score(self.node))
+                result += " %s %s score=%s" % (clidisplay.keyword("on"), pref_node, score)
+
+        if self.node.find("resource_set") is not None:
+            return result
+
+        if cons_type == "order":
+            first = clidisplay.rscref(self.node.get("first"))
+            result += " %s %s" % (clidisplay.keyword("first"), first)
+            first_action = self.node.get("first-action")
+            if first_action:
+                result += " %s" % nvpair_format("first-action", first_action)
+            then = clidisplay.rscref(self.node.get("then"))
+            result += " %s %s" % (clidisplay.keyword("then"), then)
+            then_action = self.node.get("then-action")
+            if then_action:
+                result += " %s" % nvpair_format("then-action", then_action)
+
+        if cons_type == "colocation":
+            rsc = clidisplay.rscref(self.node.get("rsc"))
+            result += " %s" % rsc
+            rsc_role = self.node.get("rsc-role")
+            if rsc_role:
+                result += " %s" % nvpair_format("role", rsc_role)
+            _with = clidisplay.rscref(self.node.get("with-rsc"))
+            result += " %s %s" % (clidisplay.keyword("with"), _with)
+            with_role = self.node.get("with-rsc-role")
+            if with_role:
+                result += " %s" % nvpair_format("with_role", with_role)
+        return result
+
+    def _repr_cli_child(self, c, format_mode):
+        if c.tag == "resource_set":
+            rscset = rsc_set_constraint2(c, self.obj_type)
+            return "%s %s" % (clidisplay.keyword("resource_set"), ' '.join(rscset))
+        if c.tag == "rule":
+            keyword = "rule"
+            if c.find("date_expression") is not None:
+                keyword = "lifetime"
+            return cli_rule(c, keyword)
+
+    def _repr_optional(self, format_mode):
+        _options = ""
+        known_attrs = []
+        cons_type = self.obj_type
+        if cons_type == "location":
+            known_attrs = ["role", "resource-discovery"]
+        if cons_type == "order":
+            known_attrs = ["kind", "require-all", "score", "symmetrical"]
+        if cons_type == "colocation":
+            known_attrs = ["score", "node-attribute"]
+        for attr in known_attrs:
+            if attr == "score":
+                val = get_score(self.node)
+            else:
+                val = self.node.get(attr)
+            if val is not None:
+                _options += " %s" % nvpair_format(attr, val)
+        if _options != "":
+            _options = clidisplay.keyword("options") + _options
+        return _options
+
+
 class CibLocation(CibObject):
     '''
     Location constraint.
     '''
 
     def _repr_cli_head(self, format_mode):
-        rsc = None
-        if "rsc" in list(self.node.keys()):
-            rsc = self.node.get("rsc")
-        elif "rsc-pattern" in list(self.node.keys()):
-            rsc = '/%s/' % (self.node.get("rsc-pattern"))
-        if rsc is not None:
-            rsc = clidisplay.rscref(rsc)
-        elif self.node.find("resource_set") is not None:
-            rsc = '{ %s }' % (' '.join(rsc_set_constraint(self.node, self.obj_type)))
-        else:
-            common_err("%s: unknown rsc_location format" % self.obj_id)
-            return None
         s = clidisplay.keyword(self.obj_type)
         ident = clidisplay.ident(self.obj_id)
-        s = "%s %s %s" % (s, ident, rsc)
+        s = "%s %s" % (s, ident)
 
-        known_attrs = ['role', 'resource-discovery']
-        for attr in known_attrs:
-            val = self.node.get(attr)
-            if val is not None:
-                s += " %s=%s" % (attr, val)
-
+        rsc = clidisplay.rscref(self.node.get("rsc"))
+        if rsc:
+            s += " %s" % rsc
         pref_node = self.node.get("node")
         score = clidisplay.score(get_score(self.node))
         if pref_node is not None:
-            s = "%s %s: %s" % (s, score, pref_node)
+            s = "%s on %s score=%s" % (s, pref_node, score)
         return s
 
     def _repr_cli_child(self, c, format_mode):
+        if c.tag == "resource_set":
+            rscset = rsc_set_constraint2(self.node, self.obj_type)
+            if rscset is not None:
+                return "%s %s" % (clidisplay.keyword("resource_set"), ' '.join(rscset))
         if c.tag == "rule":
-            return "%s %s" % \
-                (clidisplay.keyword("rule"), cli_rule(c))
+            keyword = "rule"
+            if c.find("date_expression") is not None:
+                keyword = "lifetime"
+            return cli_rule(c, keyword)
+
+    def _repr_optional(self, format_mode):
+        _options = ""
+        known_attrs = ['kind', 'require-all', 'score', 'symmetrical']
+        for attr in known_attrs:
+            val = self.node.get(attr)
+            if val is not None:
+                _options += " %s" % nvpair_format(attr, val)
+        if _options != "":
+            _options = clidisplay.keyword("options") + _options
+        return _options
 
     def check_sanity(self):
         '''
@@ -1763,7 +1878,12 @@ class CibLocation(CibObject):
 
     def referenced_resources(self):
         ret = self.node.xpath('.//resource_set/resource_ref/@id')
-        return ret or [self.node.get("rsc")]
+        if ret:
+            return ret
+        rsc = self.node.get("rsc")
+        if rsc:
+            return [rsc]
+        return []
 
     def repr_gv(self, gv_obj, from_grp=False):
         '''
@@ -1836,7 +1956,7 @@ class CibSimpleConstraint(CibObject):
         ident = clidisplay.ident(self.obj_id)
         score = get_score(self.node) or get_kind(self.node)
         if self.node.find("resource_set") is not None:
-            col = rsc_set_constraint(self.node, self.obj_type)
+            col = rsc_set_constraint2(self.node, self.obj_type)
         else:
             col = simple_rsc_constraint(self.node, self.obj_type)
         if not col:
@@ -1846,13 +1966,15 @@ class CibSimpleConstraint(CibObject):
             if symm:
                 col.append("symmetrical=%s" % symm)
         elif self.obj_type == "colocation":
+            col.insert(1, "with")
             node_attr = self.node.get("node-attribute")
             if node_attr:
                 col.append("node-attribute=%s" % node_attr)
         s = "%s %s " % (s, ident)
+        _score = ""
         if score != '':
-            s += "%s: " % (clidisplay.score(score))
-        return s + ' '.join(col)
+            _score = "score=%s " % (clidisplay.score(score))
+        return s + _score + ' '.join(col)
 
     def _mk_optional_set(self, gv_obj, n):
         '''
@@ -1958,6 +2080,9 @@ class CibProperty(CibObject):
         else:
             return ''
 
+    def _repr_optional(self, format_mode):
+        pass
+
     def check_sanity(self):
         '''
         Match properties with PE metadata.
@@ -2049,6 +2174,9 @@ class CibFencingOrder(CibObject):
     def _repr_cli_child(self, c, format_mode):
         pass  # no children here
 
+    def _repr_optional(self, format_mode):
+        pass
+
     def check_sanity(self):
         '''
         Targets are nodes and resource are stonith resources.
@@ -2098,6 +2226,9 @@ class CibAcl(CibObject):
             return cli_acl_role(c)
         elif c.tag == "acl_permission":
             return cli_acl_permission(c)
+
+    def _repr_optional(self, format_mode):
+        pass
 
 
 class CibTag(CibObject):
@@ -2161,6 +2292,9 @@ class CibAlert(CibObject):
                 r.append('}')
             return ' '.join(r)
 
+    def _repr_optional(self, format_mode):
+        pass
+
     def _is_complex(self):
         '''
         True if this alert is ambiguous wrt meta attributes in recipient tags
@@ -2200,9 +2334,9 @@ cib_object_map = {
     "master": ("ms", CibContainer, "resources"),
     "template": ("rsc_template", CibPrimitive, "resources"),
     "bundle": ("bundle", CibBundle, "resources"),
-    "rsc_location": ("location", CibLocation, "constraints"),
-    "rsc_colocation": ("colocation", CibSimpleConstraint, "constraints"),
-    "rsc_order": ("order", CibSimpleConstraint, "constraints"),
+    "rsc_location": ("location", CibConstraints, "constraints"),
+    "rsc_colocation": ("colocation", CibConstraints, "constraints"),
+    "rsc_order": ("order", CibConstraints, "constraints"),
     "rsc_ticket": ("rsc_ticket", CibRscTicket, "constraints"),
     "cluster_property_set": ("property", CibProperty, "crm_config", "cib-bootstrap-options"),
     "rsc_defaults": ("rsc_defaults", CibProperty, "rsc_defaults", "rsc-options"),
@@ -2956,6 +3090,14 @@ class CibFactory(object):
         "List of possible child ids (for clone/master completion)."
         return [x.obj_id for x in self.cib_objects
                 if x.obj_type in constants.children_tags and not x.parent]
+
+    def rscset_id_list(self):
+        rscset_list = []
+        for x in self.cib_objects:
+            if x.node.find("resource_set") is not None:
+                for item in x.node.iterchildren():
+                    rscset_list.append(item.get("id"))
+        return rscset_list
 
     #
     # a few helper functions
