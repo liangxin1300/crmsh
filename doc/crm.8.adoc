@@ -3109,10 +3109,10 @@ For more details on how to configure resource sets, see
 Usage:
 ...............
 colocation <id> <score>: <rsc>[:<role>] <with-rsc>[:<role>]
-  [node-attribute=<node_attr>]
+  [node-attribute=<node_attr>] [<lifetime>]
 
 colocation <id> <score>: <resource_sets>
-  [node-attribute=<node_attr>]
+  [node-attribute=<node_attr>] [<lifetime>]
 
 resource_sets :: <resource_set> [<resource_set> ...]
 
@@ -3478,7 +3478,7 @@ For more information on rule expressions, see
 
 Usage:
 ...............
-location <id> <rsc> [<attributes>] {<node_pref>|<rules>}
+location <id> <rsc> [<attributes>] {<node_pref>|<rules>} [<lifetime>]
 
 rsc :: /<rsc-pattern>/
         | { resource_sets }
@@ -3684,9 +3684,9 @@ For more details on how to configure resource sets, see
 
 Usage:
 ...............
-order <id> [{kind|<score>}:] first then [symmetrical=<bool>]
+order <id> [<lifetime>] [{kind|<score>}:] first then [symmetrical=<bool>]
 
-order <id> [{kind|<score>}:] resource_sets [symmetrical=<bool>]
+order <id> [<lifetime>] [{kind|<score>}:] resource_sets [symmetrical=<bool>]
 
 kind :: Mandatory | Optional | Serialize
 
