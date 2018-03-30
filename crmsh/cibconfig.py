@@ -52,6 +52,12 @@ from .cliformat import simple_rsc_constraint, cli_rule, cli_format
 from .cliformat import cli_acl_role, cli_acl_permission, cli_path
 
 
+def adjust_show(_src_list):
+    if _src_list and len(_src_list) <= 2:
+        return [' '.join(_src_list)]
+    return [x.strip() for x in _src_list]
+
+
 def show_unrecognized_elems(cib_elem):
     try:
         conf = cib_elem.findall("configuration")[0]
@@ -971,7 +977,6 @@ class CibObject(object):
 
         also show rule expressions if found
         '''
-
         # has_nvpairs = len(node.xpath('.//nvpair')) > 0
         idref = node.get('id-ref')
 
@@ -980,8 +985,10 @@ class CibObject(object):
         # empty set
         # if not (has_nvpairs or idref is not None):
         #    return ''
-
-        ret = "%s " % (clidisplay.keyword(self.set_names[node.tag]))
+        results = []
+        ret = ""
+        if self.set_names[node.tag] != "op_params":
+            ret = "%s " % (clidisplay.keyword(self.set_names[node.tag]))
         node_id = node.get("id")
         if node_id is not None and cib_factory.is_id_refd(node.tag, node_id):
             ret += "%s " % (nvpair_format("$id", node_id))
@@ -999,23 +1006,64 @@ class CibObject(object):
                 for item in c.keys():
                     ret += "%s " % nvpair_format(item, c.get(item))
 
-        score = node.get("score")
-        if score:
-            ret += "%s: " % (clidisplay.score(score))
-
-        for c in node.iterchildren():
-            if c.tag == "rule":
-                ret += "%s %s " % (clidisplay.keyword("rule"), cli_rule(c))
         for c in node.iterchildren():
             if c.tag == "nvpair":
                 ret += "%s " % (cli_nvpair(c))
-        if ret[-1] == ' ':
-            ret = ret[:-1]
-        return ret
+        if ret:
+            results.append(ret)
+        ret = ""
+
+        score = node.get("score")
+        if score:
+            ret += "%s score=%s " % (clidisplay.keyword("extra"), clidisplay.score(score))
+        if ret:
+            results.append(ret)
+        ret = ""
+
+        for c in node.iterchildren():
+            if c.tag == "rule":
+                if score is None:
+                    results.append("%s " % clidisplay.keyword("extra"))
+                results.extend(cli_rule(c, "rule"))
+        return results
+
+
+    def _attr_set_str2(self, node):
+        results = []
+        _keyword = "    %s " % clidisplay.keyword("extra")
+        _score = ""
+        score = node.get("score")
+        if score:
+            _score = "score=%s " % clidisplay.score(score)
+
+        _tmp_string = ""
+        if self.set_names[node.tag] not in ["op_params", "op_meta"]:
+            _tmp_string = "%s " % (clidisplay.keyword(self.set_names[node.tag]))
+        _tmp_rule_list = []
+        for c in node.iterchildren():
+            if c.tag == "nvpair":
+                _tmp_string += "%s " % cli_nvpair(c)
+            if c.tag == "rule":
+                _tmp_rule_list.extend(cli_rule(c, "rule"))
+        if node.tag == "meta_attributes" and \
+           self.set_names[node.tag] != "meta":
+            _tmp_string += "op_type=meta"
+
+        if self.node.tag == "op":
+            results.append(_keyword + _score + _tmp_string)
+            results.extend(adjust_show(_tmp_rule_list))
+        else:
+            if _tmp_string:
+                results.append(_tmp_string)
+            if _score or _tmp_rule_list:
+                results.append(_keyword + _score)
+                results.extend(adjust_show(_tmp_rule_list))
+        return results
+
 
     def _repr_cli_child(self, c, format_mode):
         if c.tag in self.set_names:
-            return self._attr_set_str(c)
+            return self._attr_set_str2(c)
 
     def _repr_optional(self, format_mode):
         pass
@@ -1422,7 +1470,7 @@ class CibPrimitive(CibObject):
 
     def _repr_cli_child(self, c, format_mode):
         if c.tag in self.set_names:
-            return self._attr_set_str(c)
+            return self._attr_set_str2(c)
         elif c.tag == "operations":
             l = []
             s = ''
@@ -1775,7 +1823,7 @@ class CibConstraints(CibObject):
             keyword = "rule"
             if c.find("date_expression") is not None:
                 keyword = "lifetime"
-            return cli_rule(c, keyword)
+            return adjust_show(cli_rule(c, keyword, False))
 
     def _repr_optional(self, format_mode):
         _options = ""

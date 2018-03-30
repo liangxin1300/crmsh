@@ -120,6 +120,8 @@ op_cli_names = ("monitor",
                 "demote",
                 "notify",
                 "reload")
+op_attr_names = ("interval", "start-delay", "interval-origin", "timeout", "enabled",
+                "record-pending", "role", "on-fail")
 ra_operations = tuple(["probe"] + list(op_cli_names))
 
 subpfx_list = {

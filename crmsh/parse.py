@@ -427,11 +427,26 @@ class BaseParser(object):
                 return r
             else:
                 xmlid = self.matched(2)
+
         score = None
-        if self.try_match(_SCORE_RE):
-            score = self.matched(1)
+        values = []
+        rules = []
+
+        values = self.match_nvpairs(minpairs=0, terminator=["extra", "meta", "op", "rule"])
+        for value in values[:]:
+            if value.get('name') == "score":
+                score = value.get('value')
+                values.remove(value)
+            if value.get('name') == "op_type":
+                if value.get('value') == "meta":
+                    tag = "meta_attributes"
+                values.remove(value)
         rules = self.match_rules()
-        values = self.match_nvpairs(minpairs=0, terminator=terminator)
+
+        if name != "extra" and self.try_match(r'extra$'):
+            if self.try_match(_SCORE_RE2):
+                score = self.matched(1)
+            rules = self.match_rules()
         if (allow_empty, xmlid, score, len(rules), len(values)) == (False, None, None, 0, 0):
             return None
         return xmlutil.attributes(tag, rules, values, xmlid=xmlid, score=score)
@@ -479,6 +494,8 @@ class BaseParser(object):
                     rule.set(*self.validate_score(self.matched(2)))
                 else:
                     rule.set(self.matched(1), self.matched(2))
+            if rule.get('score') is None and not rule.get('score-attribute'):
+                rule.set("score", "INFINITY")
 
             while self.try_match(r"expression|date_expression$"):
                 expression = xmlutil.child(rule, self.matched(0))
@@ -702,7 +719,7 @@ class ResourceParser(BaseParser):
         """
         self.match('op')
         op_type = self.match_identifier()
-        all_attrs = self.match_nvpairs(minpairs=0)
+        all_attrs = self.match_nvpairs(minpairs=0, terminator=["extra", "op"])
         node = xmlutil.new('op', name=op_type)
         if not any(nvp.get('name') == 'interval' for nvp in all_attrs):
             all_attrs.append(xmlutil.nvpair('interval', '0'))
@@ -716,9 +733,8 @@ class ResourceParser(BaseParser):
                 nvpairs_missed += 1
         for i in range(nvpairs_missed):
             self.rewind()
-        for attr_list in self.match_attr_lists({'op_params': 'instance_attributes',
-                                                'op_meta': 'meta_attributes'},
-                                               implicit_initial='op_params'):
+        for attr_list in self.match_attr_lists({'extra': 'instance_attributes'},
+                                               implicit_initial='extra'):
             node.append(attr_list)
         out.append(node)
 

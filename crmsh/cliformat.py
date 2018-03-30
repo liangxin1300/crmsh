@@ -139,8 +139,6 @@ def get_score(node):
 
 def cli_rule_score(node):
     score = node.get("score")
-    if score == "INFINITY":
-        return None
     return get_score(node)
 
 
@@ -154,12 +152,15 @@ def cli_exprs(node):
     return exp
 
 
-def cli_rule(node, keyword=None):
+def cli_rule(node, keyword=None, indent=True):
     from .cibconfig import cib_factory
     s = []
     head_s = ""
     if keyword:
-        head_s += clidisplay.keyword(keyword)
+        if indent:
+            head_s += "    %s" % clidisplay.keyword(keyword)
+        else:
+            head_s += clidisplay.keyword(keyword)
     node_id = node.get("id")
     if node_id and cib_factory.is_id_refd(node.tag, node_id):
         head_s += " id=%s" % node_id

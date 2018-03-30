@@ -215,10 +215,25 @@ class CompletionHelp(object):
             return False
 
 
-def _prim_params_completer(agent, args):
+def _prim_params_completer(agent, args, keywords=None):
+    import re
+
     completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    if token == "property":
+        return utils.filter_keys(agent.params(completion=True), args)
     if completing == 'params':
         return ['params']
+
+    this_params = args[utils.rindex(args, "params"):]
+    if 'rule' in this_params:
+        rules_options = rules_completer(this_params[this_params.index("rule"):])
+        if "endable_" in rules_options:
+            rules_options.remove("endable_")
+            return rules_options + keywords
+        else:
+            return rules_options
+
     if completing.endswith('='):
         if len(completing) > 1 and options.interactive:
             topic = completing[:-1]
@@ -226,10 +241,19 @@ def _prim_params_completer(agent, args):
         return []
     elif '=' in completing:
         return []
-    return utils.filter_keys(agent.params(completion=True), args)
+
+    if token == "extra":
+        return ["rule", "score="]
+    if re.match(r"score=(.+)$", token) and args[-3] == "extra":
+        return keywords + ["rule"]
+
+    _options = utils.filter_keys(agent.params(completion=True), this_params) + ["extra"]
+    if len(this_params) > 2 and keywords:
+        _options += keywords
+    return _options
 
 
-def _prim_meta_completer(agent, args):
+def _prim_meta_completer(agent, args, keywords):
     completing = args[-1]
     if completing == 'meta':
         return ['meta']
@@ -238,47 +262,66 @@ def _prim_meta_completer(agent, args):
     return utils.filter_keys(constants.rsc_meta_attributes, args)
 
 
-def _prim_op_completer(agent, args):
-    actions = agent.actions()
-    completing = args[-1]
-    if completing == 'op':
-        return ['op']
-    if args[-2] == 'op':
-        # append action items which in agent default actions
-        # monitor_Master will be mapped to "monitor role=Master"
-        # monitor_Slave will be mapped to "monitor role=Slave"
-        op_list = list(constants.op_cli_names)
-        if "monitor_Master" in actions:
-            op_list.append("monitor_Master")
-        if "monitor_Slave" in actions:
-            op_list.append("monitor_Slave")
-        # remove action items which not in default actions
-        for item in ["monitor", "demote", "promote", "notify"]:
-            if item not in actions:
-                op_list.remove(item)
-        # remove action items which already used
-        for item in op_list:
-            if item in args[:-2]:
-                op_list.remove(item)
-        return op_list
-    if args[-3] == 'op':
-        res = []
-        # list all of default items
-        if actions and actions[args[-2]]:
-            for k, v in list(actions[args[-2]].items()):
-                res += ["%s=%s" % (k, v)]
-            return res
-    args.pop()
-    # make sure all of default items can be completed
-    if args[-2] in actions:
-        res = []
-        for k, v in actions[args[-2]].items():
-            if args[-1].startswith(k+'='):
-                continue
-            res += ["%s=%s" % (k, v)]
-        return res
+def _prim_op_completer(agent, args, keywords=None):
+    if keywords is None:
+        return []
 
-    return []
+    import re
+
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    op_list = list(constants.op_cli_names)
+    op_attr_list = list(constants.op_attr_names)
+    this_op = args[utils.rindex(args, "op"):]
+
+    actions = agent.actions()
+    if "monitor_Master" in actions:
+        op_list.append("monitor_Master")
+    if "monitor_Slave" in actions:
+        op_list.append("monitor_Slave")
+    for item in ["monitor", "demote", "promote", "notify"]:
+        if item not in actions:
+            op_list.remove(item)
+
+    if completing.endswith('='):
+        return []
+    if completing in op_list + ["op", "extra"]:
+        return [completing]
+    if token == "extra":
+        return ["rule", "score=", "op_type="]
+
+    last_keyw = last_keyword(this_op, op_list+["extra"])
+    if last_keyw == "extra":
+        section = this_op[utils.rindex(this_op, "extra"):]
+        if "rule" in section:
+            rules_options = rules_completer(section[utils.rindex(section, "rule"):])
+            if "endable_" in rules_options:
+                rules_options.remove("endable_")
+                return rules_options + keywords + ["extra"]
+            else:
+                return rules_options
+        if len(section) > 2:
+            return keywords + ["rule", "extra"] + utils.filter_keys(["score", "op_type"], section)
+        return keywords + ["rule"] + utils.filter_keys(["score", "op_type"], section)
+
+    _options = []
+    if last_keyw in op_list:
+        res = []
+        section = this_op[this_op.index(last_keyw):]
+        if last_keyw in actions:
+            for k, v in list(actions[last_keyw].items()):
+                res += ["%s=%s" % (k, v)]
+                op_attr_list.remove(k)
+
+            _options += utils.filter_keys(res, section, sign="")
+            _options += utils.filter_keys(op_attr_list, section)
+
+        if len(section) > 2:
+            return _options + keywords + ["extra"]
+        else:
+            return _options
+
+    return op_list
 
 
 def last_keyword(words, keyw):
@@ -325,7 +368,7 @@ def primitive_complete_complex(args):
     if last_keyw is None:
         return []
 
-    return completers_set[last_keyw](agent, args) + keywords
+    return completers_set[last_keyw](agent, args, keywords)
 
 
 def container_helptxt(params, helptxt, topic):
