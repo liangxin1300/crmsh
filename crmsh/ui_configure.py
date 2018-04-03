@@ -332,6 +332,21 @@ def last_keyword(words, keyw):
     return None
 
 
+def _nvpair_completer(args):
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    op_attr_list = list(constants.op_attr_names) + ["score"]
+
+    if 'rule' in args[:-1]:
+        rule_options = rules_completer(args)
+        if "endable_" in rule_options:
+            rule_options.remove("endable_")
+        return rule_options
+    if completing.endswith("="):
+        return []
+    return utils.filter_keys(op_attr_list, args) + ["rule"]
+
+
 def _property_completer(args):
     '''context-sensitive completer'''
     agent = ra.get_properties_meta()
@@ -1507,7 +1522,7 @@ class CibConfig(command.UI):
         return self.__conf_object(context.get_command_name(), *args)
 
     @command.skill_level('administrator')
-    @command.completers_repeating(op_attr_list)
+    @command.completers_repeating(_nvpair_completer)
     def do_op_defaults(self, context, *args):
         "usage: op_defaults [$id=<set_id>] <option>=<value>"
         return self.__conf_object(context.get_command_name(), *args)

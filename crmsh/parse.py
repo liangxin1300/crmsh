@@ -1103,10 +1103,10 @@ def property_parser(self, cmd):
         if idkey == 'id-ref':
             idval = cib_factory.resolve_id_ref(attrs.tag, idval)
         attrs.set(idkey, idval)
-    for rule in self.match_rules():
-        attrs.append(rule)
     for nvp in self.match_nvpairs(minpairs=0):
         attrs.append(nvp)
+    for rule in self.match_rules():
+        attrs.append(rule)
     return root
 
 

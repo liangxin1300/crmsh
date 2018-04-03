@@ -2121,8 +2121,7 @@ class CibProperty(CibObject):
 
     def _repr_cli_child(self, c, format_mode):
         if c.tag == "rule":
-            return ' '.join((clidisplay.keyword("rule"),
-                             cli_rule(c)))
+            return adjust_show(cli_rule(c, "rule", False))
         elif c.tag == "nvpair":
             return cli_nvpair(c)
         else:
