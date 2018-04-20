@@ -58,6 +58,21 @@ _rsc_template_list = compl.call(cib_factory.rsc_template_list)
 _container_type = compl.choice(constants.container_type)
 
 
+def _all_id_completer(args):
+    return _id_completer(args, cib_factory.id_list())
+
+
+def _rsc_id_completer(args):
+    return _id_completer(args, cib_factory.rsc_id_list())
+
+
+def _id_completer(args, id_list):
+    completing = args[-1]
+    if completing in id_list:
+        return [completing]
+    return [s for s in id_list if s not in args]
+
+
 def _group_completer(args):
     '''
     completer for group resource
@@ -775,7 +790,7 @@ class CibConfig(command.UI):
         return len(to_stop)
 
     @command.skill_level('administrator')
-    @command.completers_repeating(_id_list)
+    @command.completers_repeating(_all_id_completer)
     @command.alias('rm')
     def do_delete(self, context, *args):
         "usage: delete [-f|--force] <id> [<id>...]"
@@ -1101,7 +1116,7 @@ class CibConfig(command.UI):
         return self.__conf_object(context.get_command_name(), *args)
 
     @command.skill_level('expert')
-    @command.completers_repeating(_rsc_id_list)
+    @command.completers_repeating(_rsc_id_completer)
     def do_rsctest(self, context, *args):
         "usage: rsctest <rsc_id> [<rsc_id> ...] [<node_id> ...]"
         rc = True
