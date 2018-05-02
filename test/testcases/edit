@@ -31,11 +31,6 @@ primitive d3 ocf:heartbeat:Dummy
 group g2 d1 d2
 filter "sed '/g2/s/d1/p1/;/g1/s/p1/d1/'"
 filter "sed '/g1/s/d1/p1/;/g2/s/p1/d1/'"
-filter "sed '$alocation loc-d1 d1 rule $id=r1 -inf: not_defined webserver rule $id=r2 webserver: defined webserver'"
-filter "sed 's/not_defined webserver/& or mem number:lte 0/'" loc-d1
-filter "sed 's/ or mem number:lte 0//'" loc-d1
-filter "sed 's/not_defined webserver/& rule -inf: not_defined a2/'" loc-d1
-filter "sed 's/not_defined webserver/& or mem number:lte 0/'" loc-d1
 modgroup g1 add d3
 modgroup g1 remove p1
 modgroup g1 add p1 after p2
@@ -47,7 +42,6 @@ modgroup g1 remove c1
 modgroup g1 remove nosuch
 modgroup g1 add c1
 modgroup g1 add nosuch
-filter "sed 's/^/# this is a comment\\n/'" loc-d1
 rsc_defaults $id="rsc_options" failure-timeout=10m
 filter "sed 's/2m/60s/'" op-options
 show op-options
