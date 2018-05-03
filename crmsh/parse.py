@@ -432,7 +432,11 @@ class BaseParser(object):
         values = []
         rules = []
 
-        values = self.match_nvpairs(minpairs=0, terminator=["extra", "meta", "op", "rule"])
+        if terminator:
+            terminator += ["extra", "meta", "op", "rule"]
+        else:
+            terminator = ["extra", "meta", "op", "rule"]
+        values = self.match_nvpairs(minpairs=0, terminator=terminator)
         for value in values[:]:
             if value.get('name') == "score":
                 score = value.get('value')
