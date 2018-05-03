@@ -24,20 +24,20 @@
 .INP: primitive s6 ocf:pacemaker:Stateful 	operations $id-ref=d1
 .INP: ms m5 s5
 .INP: ms m6 s6
-.INP: primitive d7 Dummy 	params rule inf: #uname eq node1 fake=1 	params rule inf: #uname eq node2 fake=2         op start interval=0 timeout=60s         op_params 2: rule #uname eq node1 op_param=dummy         op_params 1: op_param=smart         op_meta 2: rule #ra-version version:gt 1.0 start-delay=120m         op_meta 1: start-delay=60m
-.INP: location l1 g1 100: node1
-.INP: location l2 c 	rule $id=l2-rule1 100: #uname eq node1
-.INP: location l3 m5 	rule inf: #uname eq node1 and pingd gt 0
-.INP: location l4 m5 	rule -inf: not_defined pingd or pingd lte 0
-.INP: location l5 m5 	rule -inf: not_defined pingd or pingd lte 0 	rule inf: #uname eq node1 and pingd gt 0 	rule inf: date lt "2009-05-26" and 		date in start="2009-05-26" end="2009-07-26" and 		date in start="2009-05-26" years="2009" and 		date spec years="2009" hours="09-17"
+.INP: primitive d7 Dummy         params fake=1 extra rule score=inf         expression attribute=#uname operation=eq value=node1         params fake=2 extra rule score=inf         expression attribute=#uname operation=eq value=node2       op start interval=0 timeout=60s         extra score=2 op_param=dummy         rule expression attribute=#uname operation=eq value=node1         extra score=1 op_param=smart         extra op_type=meta score=2 start-delay=120m         rule expression attribute=#ra-version operation=gt value=1.0 type=version         extra op_type=meta score=1 start-delay=60m
+.INP: location l1 g1 on node1 score=100
+.INP: location l2 c 	rule $id=l2-rule1 score=100 expression attribute=#uname operation=eq value=node1
+.INP: location l3 m5         rule score=inf boolean-op=and         expression attribute=#uname operation=eq value=node1         expression attribute=pingd operation=gt value=0
+.INP: location l4 m5         rule score=-inf boolean-op=or         expression attribute=pingd operation=not_defined         expression attribute=pingd operation=lte value=0
+.INP: location l5 m5         rule score=-inf boolean-op=or         expression attribute=pingd operation=not_defined         expression attribute=pingd operation=lte value=0         rule score=0 boolean-op=and         expression attribute=#uname operation=eq value=node1         expression attribute=pingd operation=gt value=0
 .INP: location l6 m5 	rule $id-ref=l2-rule1
 .INP: location l7 m5 	rule $id-ref=l2
-.INP: collocation c1 inf: m6 m5
-.INP: collocation c2 inf: m5:Master d1:Started
-.INP: order o1 Mandatory: m5 m6
-.INP: order o2 Optional: d1:start m5:promote
-.INP: order o3 Serialize: m5 m6
-.INP: order o4 inf: m5 m6
+.INP: colocation c1 m6 with m5 options score=inf
+.INP: colocation c2 m5 role=Master with d1 with_role=Started options score=inf
+.INP: order o1 first m5 then m6 options kind=Mandatory
+.INP: order o2 first d1 first-action=start then m5 then-action=promote options kind=Optional
+.INP: order o3 first m5 then m6 options kind=Serialize
+.INP: order o4 first m5 then m6
 .INP: rsc_ticket ticket-A_m6 ticket-A: m6
 .INP: rsc_ticket ticket-B_m6_m5 ticket-B: m6 m5 loss-policy=fence
 .INP: rsc_ticket ticket-C_master ticket-C: m6 m5:Master loss-policy=fence
@@ -45,7 +45,7 @@
 .INP: property stonith-enabled=true
 .INP: property $id=cpset2 maintenance-mode=true
 .INP: rsc_defaults failure-timeout=10m
-.INP: op_defaults $id=opsdef2 rule 100: #uname eq node1 record-pending=true
+.INP: op_defaults $id=opsdef2 record-pending=true         rule score=100 expression attribute=#uname operation=eq value=node1
 .INP: tag t1: m5 m6
 .INP: set d2.mondelay 45
 .INP: _test
@@ -56,7 +56,6 @@
 .EXT crm_resource --show-metadata ocf:heartbeat:Delay
 .EXT crm_resource --show-metadata ocf:pacemaker:Stateful
 .EXT crm_resource --show-metadata ocf:heartbeat:Dummy
-WARNING: 51: c2: resource d1 is grouped, constraints should apply to the group
 .EXT crmd metadata
 .EXT pengine metadata
 .EXT cib metadata
@@ -69,7 +68,7 @@ primitive d1 ocf:pacemaker:Dummy \
 	operations $id=d1-ops \
 	op monitor interval=60m \
 	op monitor interval=120m \
-	op_params OCF_CHECK_LEVEL=10 \
+	    extra OCF_CHECK_LEVEL=10 \
 	op monitor interval=60s timeout=30s
 primitive d2 Delay \
 	params mondelay=45 \
@@ -79,13 +78,19 @@ primitive d2 Delay \
 primitive d3 ocf:pacemaker:Dummy
 primitive d4 ocf:pacemaker:Dummy
 primitive d7 Dummy \
-	params rule #uname eq node1 fake=1 \
-	params rule #uname eq node2 fake=2 \
+	params fake=1  \
+	    extra  \
+	    rule score=inf expression attribute="#uname" operation=eq value=node1 \
+	params fake=2  \
+	    extra  \
+	    rule score=inf expression attribute="#uname" operation=eq value=node2 \
 	op start interval=0 timeout=60s \
-	op_params 2: rule #uname eq node1 op_param=dummy \
-	op_params 1: op_param=smart \
-	op_meta 2: rule #ra-version version:gt 1.0 start-delay=120m \
-	op_meta 1: start-delay=60m
+	    extra score=2 op_param=dummy  \
+            rule score=inf expression attribute="#uname" operation=eq value=node1 \
+	    extra score=1 op_param=smart  \
+	    extra score=2 start-delay=120m op_type=meta \
+            rule score=inf expression attribute="#ra-version" operation=gt value=1.0 type=version \
+            extra score=1 start-delay=60m op_type=meta
 primitive s5 ocf:pacemaker:Stateful \
 	operations  $id-ref=d1-ops
 primitive s6 ocf:pacemaker:Stateful \
@@ -104,27 +109,39 @@ ms m6 s6
 clone c d3 \
 	meta clone-max=1
 tag t1 m5 m6
-colocation c1 inf: m6 m5
-colocation c2 inf: m5:Master d1:Started
-location l1 g1 100: node1
+colocation c1 m6 with m5 \
+	options score=inf
+colocation c2 m5 role=Master with d1 with_role=Started \
+	options score=inf
+location l1 g1 on node1 score=100
 location l2 c \
-	rule $id=l2-rule1 100: #uname eq node1
+        rule id=l2-rule1 score=100 expression attribute="#uname" operation=eq value=node1
 location l3 m5 \
-	rule #uname eq node1 and pingd gt 0
+	rule boolean-op=and score=inf \
+	expression attribute="#uname" operation=eq value=node1 \
+	expression attribute=pingd operation=gt value=0
 location l4 m5 \
-	rule -inf: not_defined pingd or pingd lte 0
+        rule boolean-op=or score=-inf \
+	expression attribute=pingd operation=not_defined \
+	expression attribute=pingd operation=lte value=0
 location l5 m5 \
-	rule -inf: not_defined pingd or pingd lte 0 \
-	rule #uname eq node1 and pingd gt 0 \
-	rule date lt 2009-05-26 and date in start=2009-05-26 end=2009-07-26 and date in start=2009-05-26 years=2009 and date spec years=2009 hours=09-17
+        rule boolean-op=or score=-inf \
+	expression attribute=pingd operation=not_defined \
+	expression attribute=pingd operation=lte value=0 \
+	rule boolean-op=and score=0 \
+	expression attribute="#uname" operation=eq value=node1 \
+	expression attribute=pingd operation=gt value=0
 location l6 m5 \
 	rule $id-ref=l2-rule1
 location l7 m5 \
 	rule $id-ref=l2-rule1
-order o1 Mandatory: m5 m6
-order o2 Optional: d1:start m5:promote
-order o3 Serialize: m5 m6
-order o4 inf: m5 m6
+order o1 first m5 then m6 \
+	options kind=Mandatory
+order o2 first d1 first-action=start then m5 then-action=promote \
+	options kind=Optional
+order o3 first m5 then m6 \
+	options kind=Serialize
+order o4 first m5 then m6
 fencing_topology st st2
 rsc_ticket ticket-A_m6 ticket-A: m6
 rsc_ticket ticket-B_m6_m5 ticket-B: m6 m5 loss-policy=fence
@@ -136,7 +153,6 @@ property cpset2: \
 rsc_defaults rsc-options: \
 	failure-timeout=10m
 op_defaults opsdef2: \
-	rule 100: #uname eq node1 \
-	record-pending=true
+	record-pending=true \
+	rule score=100 expression attribute="#uname" operation=eq value=node1
 .INP: commit
-WARNING: 53: c2: resource d1 is grouped, constraints should apply to the group

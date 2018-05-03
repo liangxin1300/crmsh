@@ -89,20 +89,11 @@ def date_exp2cli(node):
     kwmap = {'in_range': 'in', 'date_spec': 'spec'}
     l = []
     operation = node.get("operation")
-    l.append(clidisplay.keyword("date"))
-    l.append(clidisplay.keyword(kwmap.get(operation, operation)))
-    if operation in utils.olist(constants.simple_date_ops):
-        value = node.get(utils.keyword_cmp(operation, 'lt') and "end" or "start")
-        l.append(clidisplay.attr_value(quote_wrap(value)))
-    else:
-        if operation == 'in_range':
-            for name in constants.in_range_attrs:
-                if name in node.attrib:
-                    l.append(nvpair_format(name, node.attrib[name]))
-        for c in node.iterchildren():
-            if c.tag in ("duration", "date_spec"):
-                l.extend([nvpair_format(name, c.get(name))
-                          for name in list(c.keys()) if name != 'id'])
+    l.append(clidisplay.keyword("date_expression"))
+    for key, value in node.attrib.items():
+        if key == "id":
+            continue
+        l.append("%s=%s" % (key, value))
     return ' '.join(l)
 
 
@@ -115,20 +106,12 @@ def binary_op_format(op):
 
 
 def exp2cli(node):
-    operation = node.get("operation")
-    typ = node.get("type")
-    if typ:
-        operation = "%s:%s" % (typ, operation)
-    attribute = node.get("attribute")
-    value = node.get("value")
-    if not value:
-        return "%s %s" % (binary_op_format(operation), attribute)
-    else:
-        value_source = node.get("value-source")
-        if not value_source or value_source == "literal":
-            return "%s %s %s" % (attribute, binary_op_format(operation), value)
-        else:
-            return "%s %s %s{%s}" % (attribute, binary_op_format(operation), value_source, value)
+    l = "%s " % clidisplay.keyword("expression")
+    for key, value in node.attrib.items():
+        if key == "id":
+            continue
+        l += "%s " % nvpair_format(key, value)
+    return l
 
 
 def abs_pos_score(score):
@@ -150,48 +133,56 @@ def get_score(node):
         if score.find("INFINITY") >= 0:
             score = score.replace("INFINITY", "inf")
     if not score:
-        score = ""
+        score = None
     return score
 
 
 def cli_rule_score(node):
     score = node.get("score")
-    if score == "INFINITY":
-        return None
     return get_score(node)
 
 
 def cli_exprs(node):
-    bool_op = node.get("boolean-op")
-    if not bool_op:
-        bool_op = "and"
     exp = []
     for c in node.iterchildren():
         if c.tag == "date_expression":
             exp.append(date_exp2cli(c))
         elif c.tag == "expression":
             exp.append(exp2cli(c))
-    return (" %s " % clidisplay.keyword(bool_op)).join(exp)
+    return exp
 
 
-def cli_rule(node):
+def cli_rule(node, keyword=None, indent=True):
     from .cibconfig import cib_factory
     s = []
+    head_s = ""
+    if keyword:
+        if indent:
+            head_s += "    %s" % clidisplay.keyword(keyword)
+        else:
+            head_s += clidisplay.keyword(keyword)
     node_id = node.get("id")
     if node_id and cib_factory.is_id_refd(node.tag, node_id):
-        s.append(nvpair_format('$id', node_id))
+        head_s += " id=%s" % node_id
     else:
         idref = node.get("id-ref")
         if idref:
-            return nvpair_format('$id-ref', idref)
+            return ["%s %s" % (head_s, nvpair_format('$id-ref', idref))]
+    bool_op = node.get("boolean-op")
+    if bool_op:
+        head_s += " boolean-op=%s" % bool_op
     rsc_role = node.get("role")
     if rsc_role:
-        s.append(nvpair_format('$role', rsc_role))
+        head_s += " role=%s" % rsc_role
     score = cli_rule_score(node)
     if score:
-        s.append("%s:" % (clidisplay.score(score)))
-    s.append(cli_exprs(node))
-    return ' '.join(s)
+        if "score-attribute" in list(node.keys()):
+            head_s += " score-attribute=%s" % (clidisplay.score(score))
+        else:
+            head_s += " score=%s" % (clidisplay.score(score))
+    s.append(head_s)
+    s.extend(cli_exprs(node))
+    return s
 
 
 def mkrscrole(node, n):
@@ -199,7 +190,10 @@ def mkrscrole(node, n):
     rsc_role = node.get(n + "-role")
     rsc_instance = node.get(n + "-instance")
     if rsc_role:
-        return "%s:%s" % (rsc, rsc_role)
+        if n.startswith('with'):
+            return "%s with_role=%s" % (rsc, rsc_role)
+        else:
+            return "%s role=%s" % (rsc, rsc_role)
     elif rsc_instance:
         return "%s:%s" % (rsc, rsc_instance)
     else:
@@ -260,6 +254,17 @@ def rsc_set_constraint(node, obj_type):
     if not is_location and ((is_seq_all and not is_ticket and cnt <= 2) or
                             (is_ticket and cnt <= 1)):  # a degenerate thingie
         col.insert(0, "_rsc_set_")
+    return col
+
+
+def rsc_set_constraint2(node, obj_type):
+    col = []
+    for r in node.findall("resource_ref"):
+        col.append(clidisplay.rscref(r.get("id")))
+    for item in ["sequential", "require-all", "role", "action", "score"]:
+        _res = node.get(item)
+        if _res:
+            col.append(nvpair_format(item, _res))
     return col
 
 

@@ -198,7 +198,7 @@ class CompletionHelp(object):
     def help(cls, topic, helptxt):
         if cls.lasttopic == topic and \
                 time.time() - cls.laststamp < cls.timeout:
-            return
+            return True
         if helptxt:
             import readline
             cmdline = readline.get_line_buffer()
@@ -210,12 +210,30 @@ class CompletionHelp(object):
                 print("\n%s%s" % (constants.prompt, cmdline), end=' ')
             cls.laststamp = time.time()
             cls.lasttopic = topic
+            return True
+        else:
+            return False
 
 
-def _prim_params_completer(agent, args):
+def _prim_params_completer(agent, args, keywords=None):
+    import re
+
     completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    if token == "property":
+        return utils.filter_keys(agent.params(completion=True), args)
     if completing == 'params':
         return ['params']
+
+    this_params = args[utils.rindex(args, "params"):]
+    if 'rule' in this_params:
+        rules_options = rules_completer(this_params[this_params.index("rule"):])
+        if "endable_" in rules_options:
+            rules_options.remove("endable_")
+            return rules_options + keywords
+        else:
+            return rules_options
+
     if completing.endswith('='):
         if len(completing) > 1 and options.interactive:
             topic = completing[:-1]
@@ -223,10 +241,19 @@ def _prim_params_completer(agent, args):
         return []
     elif '=' in completing:
         return []
-    return utils.filter_keys(agent.params(completion=True), args)
+
+    if token == "extra":
+        return ["rule", "score="]
+    if re.match(r"score=(.+)$", token) and args[-3] == "extra":
+        return keywords + ["rule"]
+
+    _options = utils.filter_keys(agent.params(completion=True), this_params) + ["extra"]
+    if len(this_params) > 2 and keywords:
+        _options += keywords
+    return _options
 
 
-def _prim_meta_completer(agent, args):
+def _prim_meta_completer(agent, args, keywords):
     completing = args[-1]
     if completing == 'meta':
         return ['meta']
@@ -235,55 +262,89 @@ def _prim_meta_completer(agent, args):
     return utils.filter_keys(constants.rsc_meta_attributes, args)
 
 
-def _prim_op_completer(agent, args):
-    actions = agent.actions()
-    completing = args[-1]
-    if completing == 'op':
-        return ['op']
-    if args[-2] == 'op':
-        # append action items which in agent default actions
-        # monitor_Master will be mapped to "monitor role=Master"
-        # monitor_Slave will be mapped to "monitor role=Slave"
-        op_list = list(constants.op_cli_names)
-        if "monitor_Master" in actions:
-            op_list.append("monitor_Master")
-        if "monitor_Slave" in actions:
-            op_list.append("monitor_Slave")
-        # remove action items which not in default actions
-        for item in ["monitor", "demote", "promote", "notify"]:
-            if item not in actions:
-                op_list.remove(item)
-        # remove action items which already used
-        for item in op_list:
-            if item in args[:-2]:
-                op_list.remove(item)
-        return op_list
-    if args[-3] == 'op':
-        res = []
-        # list all of default items
-        if actions and actions[args[-2]]:
-            for k, v in list(actions[args[-2]].items()):
-                res += ["%s=%s" % (k, v)]
-            return res
-    args.pop()
-    # make sure all of default items can be completed
-    if args[-2] in actions:
-        res = []
-        for k, v in actions[args[-2]].items():
-            if args[-1].startswith(k+'='):
-                continue
-            res += ["%s=%s" % (k, v)]
-        return res
+def _prim_op_completer(agent, args, keywords=None):
+    if keywords is None:
+        return []
 
-    return []
+    import re
+
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    op_list = list(constants.op_cli_names)
+    op_attr_list = list(constants.op_attr_names)
+    this_op = args[utils.rindex(args, "op"):]
+
+    actions = agent.actions()
+    if "monitor_Master" in actions:
+        op_list.append("monitor_Master")
+    if "monitor_Slave" in actions:
+        op_list.append("monitor_Slave")
+    for item in ["monitor", "demote", "promote", "notify"]:
+        if item not in actions:
+            op_list.remove(item)
+
+    if completing.endswith('='):
+        return []
+    if completing in op_list + ["op", "extra"]:
+        return [completing]
+    if token == "extra":
+        return ["rule", "score=", "op_type="]
+
+    last_keyw = last_keyword(this_op, op_list+["extra"])
+    if last_keyw == "extra":
+        section = this_op[utils.rindex(this_op, "extra"):]
+        if "rule" in section:
+            rules_options = rules_completer(section[utils.rindex(section, "rule"):])
+            if "endable_" in rules_options:
+                rules_options.remove("endable_")
+                return rules_options + keywords + ["extra"]
+            else:
+                return rules_options
+        if len(section) > 2:
+            return keywords + ["rule", "extra"] + utils.filter_keys(["score", "op_type"], section)
+        return keywords + ["rule"] + utils.filter_keys(["score", "op_type"], section)
+
+    _options = []
+    if last_keyw in op_list:
+        res = []
+        section = this_op[this_op.index(last_keyw):]
+        if last_keyw in actions:
+            for k, v in list(actions[last_keyw].items()):
+                res += ["%s=%s" % (k, v)]
+                op_attr_list.remove(k)
+
+            _options += utils.filter_keys(res, section, sign="")
+            _options += utils.filter_keys(op_attr_list, section)
+
+        if len(section) > 2:
+            return _options + keywords + ["extra"]
+        else:
+            return _options
+
+    return op_list
 
 
 def last_keyword(words, keyw):
     '''returns the last occurance of an element in keyw in words'''
     for w in reversed(words):
-        if w in keyw:
+        if w in keyw or w.split('=')[0] in keyw:
             return w
     return None
+
+
+def _nvpair_completer(args):
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    op_attr_list = list(constants.op_attr_names) + ["score"]
+
+    if 'rule' in args[:-1]:
+        rule_options = rules_completer(args)
+        if "endable_" in rule_options:
+            rule_options.remove("endable_")
+        return rule_options
+    if completing.endswith("="):
+        return []
+    return utils.filter_keys(op_attr_list, args) + ["rule"]
 
 
 def _property_completer(args):
@@ -322,7 +383,7 @@ def primitive_complete_complex(args):
     if last_keyw is None:
         return []
 
-    return completers_set[last_keyw](agent, args) + keywords
+    return completers_set[last_keyw](agent, args, keywords)
 
 
 def container_helptxt(params, helptxt, topic):
@@ -342,7 +403,7 @@ def _container_remove_exist_keywords(args, _keywords):
 def _container_network_completer(args, _help, _keywords):
     key_words = ["network", "port-mapping"]
     completing = args[-1]
-    token = args[-2]
+    token = "" if len(args) <= 1 else args[-2]
     if completing.endswith("="):
         return []
     if completing in key_words:
@@ -466,6 +527,439 @@ def container_complete_complex(args):
 
     # to complete network, storage, primitive and meta
     return completers_set[last_keyw](args, constants.container_helptxt, keywords)
+
+
+def _date_common_completer():
+    '''
+    Completers for date-common
+    '''
+    key_words = ["hours", "monthdays", "weekdays", "yearsdays", "months",
+                 "weeks", "years", "weekyears", "moon"]
+
+    return [x+'=' for x in key_words]
+
+
+def _date_expression_completer(args, repeat=False):
+    '''
+    Completers for date_expression
+
+    situations:
+      operation="in_range" end=xxx
+      operation="in_range" start=xxx end=xxx
+      operation="in_range" start=xxx duration <date-common>
+      operation="gt" start=xxx
+      operation="lt" end=xxx
+      operation="date_spec" <date-common>
+    '''
+    import re
+
+    _this_arg = args[utils.rindex(args, "date_expression"):]
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    _options = []
+
+    if completing == "date_expression":
+        return ["date_expression"]
+    if token == "date_expression":
+        return ["", "operation="]
+    if re.match(r'operation="?in_range"?', token):
+        _options = ["start=", "end="]
+    if re.search(r'operation="?in_range"?', ' '.join(_this_arg)) and \
+       re.match(r'start=(.+)$', token):
+        _options = ["end=", "duration"]
+    if re.match(r'operation="?gt"?', token):
+        _options = ["", "start="]
+    if re.match(r'operation="?lt"?', token):
+        _options = ["", "end="]
+    if re.match(r'operation="?date_spec"?', token) or token == "duration":
+        _options = _date_common_completer()
+    if not _options:
+        _options += ["endable_"]
+    if repeat and "endable_" in _options:
+        # repeat when boolean-op set by "and"|"or"
+        _options += ["", "date_expression"]
+        if args.count("date_expression") < 2:
+            return _options
+
+    return _options
+
+
+def _expression_completer(args, repeat=False):
+    '''
+    Completers for expression
+
+    attribute
+    operation lt|gt|lte|gte|eq|ne|defined|not_defined|
+    [value]
+    [type]
+    [value-source]
+    '''
+    import re
+
+    _this_arg = args[utils.rindex(args, "expression"):]
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+
+    if completing == "expression":
+        return ["expression"]
+    if token == "expression":
+        return ["", "attribute="]
+    if re.match(r'attribute=(.+)$', token):
+        return ["", "operation="]
+    if re.match(r'operation="?(lt|gt|lte|gte|eq|ne)"?', token):
+        return ["", "value="]
+    if re.match(r'operation="?(defined|not_defined)"?', token):
+        _options = []
+    if re.search(r' value=(.+) ', ' '.join(_this_arg)):
+        _options = utils.filter_keys(["type", "value-source"], _this_arg)
+    if len(_options) == 0:
+        _options += [""]
+    if repeat:
+        _options += ["expression"]
+        if args.count("expression") < 2:
+            return _options
+    return _options + ["endable_"]
+
+
+def help_completer(args, help_txt):
+    completing = args[-1]
+    res = False
+    if completing.endswith('='):
+        if len(completing) > 1 and options.interactive:
+            topic = completing[:-1]
+            res = CompletionHelp.help(topic, helptxt_filter(args, help_txt, topic))
+        return res
+    else:
+        return res
+
+
+def helptxt_filter(params, helptxt, topic):
+    if topic in helptxt.keys():
+        return helptxt[topic] + "\n"
+    for item in reversed(params):
+        if item in ["duration", "date_spec"] and "date-common" in helptxt.keys():
+            return helptxt["date-common"][topic] + "\n"
+        if item in ["date_expression", "expression"] and item in helptxt.keys():
+            return helptxt[item][topic] + "\n"
+    return None
+
+
+def bad_id(id_list):
+    key_words = ["first", "then", "lifetime", "resource_set", "on", "rule", "with", "options"]
+    for item in key_words:
+        if item in id_list:
+            print(" Id \"%s\" is a reserved word" % item)
+            return True
+    return False
+
+
+def rules_completer(args, cons_type="location"):
+    '''
+    Completers for rules
+    '''
+    import re
+
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    _BOOL_OP_ = re.compile(r'boolean-op="?(or|and)"?')
+    _SCORE_ = re.compile(r"score=(.+)$")
+    _SCORE_ATTR_ = re.compile(r"score-attribute=(.+)$")
+
+    rule_properties = ["role", "boolean-op"]
+    if cons_type == "location":
+        rule_properties += ["score", "score-attribute"]
+        if re.search(_SCORE_, ' '.join(args)):
+            rule_properties.remove("score-attribute")
+        if re.search(_SCORE_ATTR_, ' '.join(args)):
+            rule_properties.remove("score")
+
+    # help messages
+    if help_completer(args, constants.rules_helptxt):
+        return []
+
+    if completing in ["lifetime", "rule"]:
+        return [completing]
+
+    completers_set = {
+        "date_expression": _date_expression_completer,
+        "expression":      _expression_completer
+    }
+    last_keyw = last_keyword(args, list(completers_set.keys()))
+    if last_keyw:
+        repeat = False
+        if re.search(_BOOL_OP_, ' '.join(args)):
+            repeat = True
+        return completers_set[last_keyw](args, repeat)
+
+    if "lifetime" in args:
+        return utils.filter_keys(rule_properties, args) + ["date_expression"]
+    if "rule" in args:
+        return utils.filter_keys(rule_properties, args) + ["expression"]
+
+
+def location_complete_complex(args):
+    '''
+    Completer for location
+
+    Examples:
+      location loc1 r1 on node1 score=100
+      location id=loc1 r1 on node1 score=100 options role=Started
+
+      location id=loc1 rsc-pattern="r*" on node1 score=200
+      location id=loc1 rsc-pattern="/r*/" on node1 score=200
+      location id=loc1 rsc-pattern='x' \
+          rule score=100 expression attribute=#uname operation=eq value=node1
+
+      location loc1 resource_set r1 r2 r3 on node1 score=-inf
+      location id=loc1 r1 rule expression attribute=#uname operation=eq value=node1
+      location id=loc1 r1 rule expression attribute="cpu_mips" operation="lt" value=3000
+    '''
+    import re
+
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    _rsc_ids = cib_factory.top_rsc_id_list()
+    if len(_rsc_ids) < 1:
+        return
+    if bad_id(_rsc_ids):
+        return
+    _node_ids = cib_factory.node_id_list()
+    if bad_id(_node_ids):
+        return
+
+    if completing in _rsc_ids + ["options", "on"]:
+        return [completing]
+
+    # complete guide for resource_set and rule
+    _options = []
+    last_keyw = last_keyword(args, ["resource_set", "options", "rule", "on"])
+    if last_keyw == "rule":
+        _options = rules_completer(args[utils.rindex(args, "rule"):])
+        if "endable_" in _options:
+            _options += ["rule"]
+    if last_keyw == "resource_set":
+        _options = resource_set_completer(args)
+        if "endable_" in _options:
+            _options += ["on", "rule"]
+
+    if help_completer(args, constants.location_helptxt):
+        return []
+ 
+    # complete guide for location's options
+    _option_words = ["role", "resource-discovery"]
+    if last_keyw == "options":
+        if "resource_set" in args:
+            _option_words.remove("role")
+        _options = options_completer(args, _option_words)
+
+    if _options:
+        return handle_options(args, _options)
+
+    # complete guide for base
+    if len(args) == 3:
+        return _rsc_ids + ["rsc-pattern=", "resource_set"]
+    if (token in _rsc_ids or token.startswith("rsc-pattern")) and len(args) == 4:
+        return ["on", "rule"]
+    if token == "on":
+        return _node_ids
+    if token in _node_ids:
+        return ["score=", ""]
+    if re.match(r'score=(.+)$', token):
+        return ["options", ""]
+
+
+def order_complete_complex(args):
+    '''
+    Completer for order
+
+    Examples:
+        order id=ord-1 first r1 then r2 options kind=Mandatory
+        order id=ord-2 resource_set r1 r2 r3 r4 sequential=true
+        order id=ord-3 resource_set r1 r2 sequential=false resource_set r3 r4 sequential=false
+        order id=ord-4 first r2 first-action=start then r3 then-action=promote
+        order id=ord-5 first r1 then r2
+    '''
+    import re
+
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    _rsc_ids = cib_factory.top_rsc_id_list()
+    if len(_rsc_ids) <= 1:
+        return
+    if bad_id(_rsc_ids):
+        return
+
+    if completing in _rsc_ids + ["options"]:
+        return [completing]
+
+    # complete guide for resource_set
+    _options = []
+    last_keyw = last_keyword(args, ["resource_set", "options"])
+    if last_keyw == "resource_set":
+        _options = resource_set_completer(args)
+
+    # help messages
+    if help_completer(args, constants.order_helptxt):
+        return []
+
+    # complete guide for order's options
+    _option_words = ["symmetrical", "require-all", "score", "kind"]
+    if last_keyw == "options":
+        if re.search(r"options .*score=(.+)", ' '.join(args)):
+            _option_words.remove("kind")
+        if re.search(r"options .*kind=(.+)", ' '.join(args)):
+            _option_words.remove("score")
+        _options = options_completer(args, _option_words)
+
+    if _options:
+        return handle_options(args, _options)
+
+    # complete guide for base
+    if len(args) == 3:
+        return ["first", "resource_set"]
+    if token == "first" and len(args) == 4:
+        return _rsc_ids
+    if token in _rsc_ids and len(args) == 5 and "first" in args:
+        return ["then", "first-action="]
+    if token == "then" and len(args) in [6, 7]:
+        return [x for x in _rsc_ids if x not in args]
+    if re.match(r'first-action=(.+)$', token) and len(args) == 6:
+        return ["then"]
+    if token in _rsc_ids and len(args) in [7, 8] and "then" in args:
+        return ["then-action=", "options"]
+    if re.match(r'then-action=(.+)$', token) and len(args) in [8, 9]:
+        return ["", "options"]
+
+
+def colocation_complete_complex(args):
+    '''
+    Completer for colocation
+
+    Examples:
+        colocation id=col-1 r1 with r2 options score=inf
+        colocation id=col-2 resource_set r2 r3 r4 r1 sequential=true options score=inf
+        colocation id=col-3 resource_set r1 r2 r3 sequential=false \
+                            resource_set r4 sequential=true options score=inf
+        colocation id=col-4 resource_set r1 r2 sequential=true \
+                            resource_set r3 r4 sequential=false \
+                            resource_set r5 r6 sequential=true role=Master
+        colocation id=col-5 r1 role=Started with r2 options score=inf
+    '''
+    import re
+
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    _rsc_ids = cib_factory.top_rsc_id_list()
+    if len(_rsc_ids) <= 1:
+        return
+    if bad_id(_rsc_ids):
+        return
+
+    if completing in _rsc_ids + ["options"]:
+        return [completing]
+
+    # complete guide for resource_set
+    _options = []
+    last_keyw = last_keyword(args, ["resource_set", "options"])
+    #if last_keyw == "lifetime":
+    #    _options = rules_completer(args[args.index("lifetime"):], cons_type="colocation")
+    if last_keyw == "resource_set":
+        _options = resource_set_completer(args)
+
+    # help messages
+    if help_completer(args, constants.colocation_helptxt):
+        return []
+
+    # complete guide for colocation's options
+    _option_words = ["score", "node-attribute"]
+    if last_keyw == "options":
+        if "resource_set" in args:
+            _option_words.remove("node-attribute")
+        _options = options_completer(args, _option_words)
+
+    if _options:
+        return handle_options(args, _options)
+
+    # complete guide for base
+    _ROLE_ = re.compile(r'role="?(Started|Master|Slave)"?')
+    _WITH_ROLE_ = re.compile(r'with_role="?(Started|Master|Slave)"?')
+    _SCORE_ = re.compile(r"score=(.+)$")
+    if len(args) == 3:
+        return _rsc_ids + ["resource_set"]
+    if re.match(_SCORE_, token) and len(args) == 4:
+        return _rsc_ids + ["resource_set"]
+    if token in _rsc_ids and len(args) in [4, 5]:
+        return ["role=", "with"]
+    if token in _rsc_ids and len(args) in [6, 7, 8]:
+        return ["with_role=", "options"]
+    if token == "with" and len(args) in [5, 6, 7]:
+        return [x for x in _rsc_ids if x not in args]
+    if re.match(_ROLE_, token) and len(args) in [5, 6]:
+        return ["with"]
+    if re.match(_WITH_ROLE_, token):
+        return ["", "options"]
+
+
+def handle_options(args, _options, append_list=["options"]):
+    if "endable_" in _options:
+        _options.remove("endable_")
+        if "on" in _options and "rule" in _options:
+            return _options
+        for item in append_list:
+            if item not in args:
+                _options.append(item)
+    if len(_options) == 1:
+        _options += [""]
+    return _options
+
+
+def options_completer(args, option_words):
+    _options = []
+    _options = utils.filter_keys(option_words, args[args.index("options"):])
+    if len(args[args.index("options"):]) > 2:
+        _options.append("endable_")
+    return _options
+
+
+def resource_set_completer(args):
+    '''
+    '''
+    completing = args[-1]
+    token = "" if len(args) <= 1 else args[-2]
+    _rsc_ids = cib_factory.top_rsc_id_list()
+    _ref_ids = cib_factory.rscset_id_list()
+
+    _type = args[0]
+    if _type == "order":
+        set_options = ["sequential", "require-all", "action", "score"]
+    if _type == "location":
+        set_options = ["role", "score"]
+    if _type == "colocation":
+        set_options = ["sequential", "role", "score"]
+    if _type == "rsc_ticket":
+        set_options = ["role", "score"]
+
+    if help_completer(args, constants.rscset_helptxt):
+        return []
+    if completing in _rsc_ids + set_options + ["resource_set"]:
+        return [completing]
+
+    rsc_options = [x for x in _rsc_ids if x not in args]
+    _set_options = utils.filter_keys(set_options, args[utils.rindex(args, "resource_set"):])
+    _options = rsc_options + _set_options
+    if token in _ref_ids:
+        return ['endable_']
+    if len(rsc_options) == len(_rsc_ids):
+        return rsc_options + _ref_ids
+    if len(rsc_options) < len(_rsc_ids):
+        if token in _rsc_ids + ['resource_set']:
+            _options += ['resource_set']
+        else:
+            _options = _set_options + ['resource_set']
+    if len(rsc_options) == 0:
+        _options.remove("resource_set")
+
+    return _options + ['endable_']
 
 
 class CibConfig(command.UI):
@@ -971,7 +1465,7 @@ class CibConfig(command.UI):
         return self.__conf_object(context.get_command_name(), *args)
 
     @command.skill_level('administrator')
-    @command.completers(compl.attr_id, _top_rsc_id_list)
+    @command.completers_repeating(compl.attr_id, location_complete_complex)
     def do_location(self, context, *args):
         """usage: location <id> <rsc> {node_pref|rules}
 
@@ -995,16 +1489,14 @@ class CibConfig(command.UI):
 
     @command.alias('collocation')
     @command.skill_level('administrator')
-    @command.completers_repeating(compl.attr_id, compl.null, top_rsc_tmpl_id_list)
+    @command.completers_repeating(compl.attr_id, colocation_complete_complex)
     def do_colocation(self, context, *args):
         """usage: colocation <id> <score>: <rsc>[:<role>] <rsc>[:<role>] ...
         [node-attribute=<node_attr>]"""
         return self.__conf_object(context.get_command_name(), *args)
 
     @command.skill_level('administrator')
-    @command.completers_repeating(compl.attr_id,
-                                  compl.call(schema.rng_attr_values, 'rsc_order', 'kind'),
-                                  top_rsc_tmpl_id_list)
+    @command.completers_repeating(compl.attr_id, order_complete_complex)
     def do_order(self, context, *args):
         """usage: order <id> {kind|<score>}: <rsc>[:<action>] <rsc>[:<action>] ...
         [symmetrical=<bool>]"""
@@ -1030,7 +1522,7 @@ class CibConfig(command.UI):
         return self.__conf_object(context.get_command_name(), *args)
 
     @command.skill_level('administrator')
-    @command.completers_repeating(op_attr_list)
+    @command.completers_repeating(_nvpair_completer)
     def do_op_defaults(self, context, *args):
         "usage: op_defaults [$id=<set_id>] <option>=<value>"
         return self.__conf_object(context.get_command_name(), *args)

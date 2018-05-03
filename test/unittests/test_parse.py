@@ -216,60 +216,57 @@ class TestCliParser(unittest.TestCase):
         self.assertEqual(['buz'], out.xpath('.//nvpair/@name'))
 
     def test_location(self):
-        out = self._parse('location loc-1 resource inf: foo')
+        out = self._parse('location loc-1 resource on foo score=inf')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(out.get('rsc'), 'resource')
         self.assertEqual(out.get('score'), 'INFINITY')
         self.assertEqual(out.get('node'), 'foo')
 
-        out = self._parse('location loc-1 /foo.*/ inf: bar')
+        out = self._parse('location loc-1 rsc-pattern=foo.* on bar score=inf')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(out.get('rsc-pattern'), 'foo.*')
         self.assertEqual(out.get('score'), 'INFINITY')
         self.assertEqual(out.get('node'), 'bar')
         #print out
 
-        out = self._parse('location loc-1 // inf: bar')
+        out = self._parse('location loc-1 d1')
         self.assertFalse(out)
 
-        out = self._parse('location loc-1 { one ( two three ) four } inf: bar')
+        out = self._parse('location loc-1 resource_set one resource_set two three sequential=false resource_set four on bar score=inf')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(['one', 'two', 'three', 'four'], out.xpath('//resource_ref/@id'))
         self.assertEqual(out.get('score'), 'INFINITY')
         self.assertEqual(out.get('node'), 'bar')
         #print out
 
-        out = self._parse('location loc-1 thing rule role=slave -inf: #uname eq madrid')
+        out = self._parse('location loc-1 thing rule role=slave score=-inf expression attribute=#uname operation=eq value=madrid')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(out.get('rsc'), 'thing')
         self.assertEqual(out.get('score'), None)
 
-        out = self._parse('location l { a:foo b:bar }')
-        self.assertFalse(out)
-
     def test_colocation(self):
-        out = self._parse('colocation col-1 inf: foo:master ( bar wiz sequential=yes )')
+        out = self._parse('colocation col-1 resource_set foo role=Master resource_set bar wiz options score=inf')
         self.assertEqual(out.get('id'), 'col-1')
         self.assertEqual(['foo', 'bar', 'wiz'], out.xpath('//resource_ref/@id'))
         self.assertEqual([], out.xpath('//resource_set[@name="sequential"]/@value'))
 
         out = self._parse(
-            'colocation col-1 -20: foo:Master ( bar wiz ) ( zip zoo ) node-attribute="fiz"')
+            'colocation col-1 resource_set foo role=Master resource_set bar wiz sequential=false resource_set zip zoo sequential=false options score=-20 node-attribute="fiz"')
         self.assertEqual(out.get('id'), 'col-1')
         self.assertEqual(out.get('score'), '-20')
         self.assertEqual(['foo', 'bar', 'wiz', 'zip', 'zoo'], out.xpath('//resource_ref/@id'))
         self.assertEqual(['fiz'], out.xpath('//@node-attribute'))
 
-        out = self._parse('colocation col-1 0: a:master b')
+        out = self._parse('colocation col-1 a role=Master with b options score=0')
         self.assertEqual(out.get('id'), 'col-1')
 
-        out = self._parse('colocation col-1 10: ) bar wiz')
+        out = self._parse('colocation col-1 a')
         self.assertFalse(out)
 
-        out = self._parse('colocation col-1 10: ( bar wiz')
+        out = self._parse('colocation col-1 a with')
         self.assertFalse(out)
 
-        out = self._parse('colocation col-1 10: ( bar wiz ]')
+        out = self._parse('colocation col-1')
         self.assertFalse(out)
 
     def test_order(self):
