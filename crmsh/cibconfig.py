@@ -2334,7 +2334,7 @@ class CibAlert(CibObject):
                 r.append('{')
             r.append(cli_path(c.get('value')))
             for subset in c.xpath('instance_attributes|meta_attributes'):
-                r.append(self._attr_set_str(subset))
+                r.extend(self._attr_set_str(subset))
             if is_complex:
                 r.append('}')
             return ' '.join(r)
