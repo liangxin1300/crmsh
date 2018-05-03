@@ -64,6 +64,8 @@ ERROR: 29: Cannot create group:g1: Child primitive:d1 already in group:g2
 .INP: modgroup g1 add p1 after p2
 .INP: modgroup g1 remove p1
 .INP: modgroup g1 add p1 before p2
+.INP: modgroup g1 add p1
+ERROR: 1: syntax in group: child p1 listed more than once in group g1 parsing 'group g1 p1 p2 d3 p1'
 .INP: _test
 .INP: verify
 .EXT crm_resource --show-metadata stonith:null

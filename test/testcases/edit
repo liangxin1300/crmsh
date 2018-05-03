@@ -36,6 +36,7 @@ modgroup g1 remove p1
 modgroup g1 add p1 after p2
 modgroup g1 remove p1
 modgroup g1 add p1 before p2
+modgroup g1 add p1
 _test
 verify
 .
