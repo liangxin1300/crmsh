@@ -39,6 +39,7 @@ def roundtrip(cli, debug=False, expected=None, format_mode=-1, strip_color=False
         print("GOT:", s)
         print("EXP:", cli)
     assert obj.cli_use_validate()
+    s = ' '.join([x for x in s.split(' ') if x])
     if expected is not None:
         eq_(expected, s)
     else:
@@ -58,8 +59,8 @@ def teardown_func():
 
 @with_setup(setup_func, teardown_func)
 def test_rscset():
-    roundtrip('colocation foo inf: a b')
-    roundtrip('order order_2 Mandatory: [ A B ] C')
+    roundtrip('colocation foo a with b options score=inf')
+    roundtrip('order order_2 resource_set A B require-all=false sequential=false resource_set C options kind=Mandatory')
     roundtrip('rsc_template public_vm Xen')
 
 
@@ -71,12 +72,12 @@ def test_group():
 
 @with_setup(setup_func, teardown_func)
 def test_bnc863736():
-    roundtrip('order order_3 Mandatory: [ A B ] C symmetrical=true')
+    roundtrip('order order_3 resource_set A B require-all=false sequential=false resource_set C options kind=Mandatory symmetrical=true')
 
 
 @with_setup(setup_func, teardown_func)
 def test_sequential():
-    roundtrip('colocation rsc_colocation-master inf: [ vip-master vip-rep sequential=true ] [ msPostgresql:Master sequential=true ]')
+    roundtrip('colocation rsc_colocation-master resource_set vip-master vip-rep require-all=false resource_set msPostgresql require-all=false role=Master options score=inf')
 
 
 @with_setup(setup_func, teardown_func)
@@ -94,7 +95,7 @@ def test_broken_colo():
     obj = factory.create_from_node(data)
     assert_is_not_none(obj)
     data = obj.repr_cli(format_mode=-1)
-    eq_('colocation colo-2 inf: [ vip1 vip2 sequential=true ] [ apache:Master sequential=true ]', data)
+    eq_('colocation colo-2 resource_set vip1 vip2 require-all=false resource_set apache require-all=false role=Master options score=inf', data)
     assert obj.cli_use_validate()
 
 
@@ -160,6 +161,7 @@ value="Stopped"/> \
     obj = factory.create_from_node(data)
     assert_is_not_none(obj)
     data = obj.repr_cli(format_mode=-1)
+    data = ' '.join(data.split())
     print(data)
     exp = 'primitive dummy2 ocf:pacemaker:Dummy meta target-role=Stopped ' \
           'op start timeout=60 interval=0 op stop timeout=60 interval=0 ' \
@@ -228,33 +230,33 @@ def test_master():
 @with_setup(setup_func, teardown_func)
 def test_param_rules():
     roundtrip('primitive foo Dummy ' +
-              'params rule #uname eq wizbang laser=yes ' +
-              'params rule #uname eq gandalf staff=yes')
+              'params laser=yes extra rule expression attribute="#uname" operation=eq value=wizbang ' +
+              'params staff=yes extra rule expression attribute="#uname" operation=eq value=gandalf')
 
     roundtrip('primitive mySpecialRsc me:Special ' +
-              'params 3: rule #uname eq node1 interface=eth1 ' +
-              'params 2: rule #uname eq node2 interface=eth2 port=8888 ' +
-              'params 1: interface=eth0 port=9999')
+              'params interface=eth1 extra score=3 rule expression attribute="#uname" operation=eq value=node1 ' +
+              'params interface=eth2 port=8888 extra score=2 rule expression attribute="#uname" operation=eq value=node2 ' +
+              'params interface=eth0 port=9999 extra score=1')
 
 
 @with_setup(setup_func, teardown_func)
 def test_operation_rules():
     roundtrip('primitive test Dummy ' +
               'op start interval=0 '
-              'op_params 2: rule #uname eq node1 fake=fake ' +
-              'op_params 1: fake=real ' +
-              'op_meta 2: rule #ra-version version:gt 1.0 timeout=120s ' +
-              'op_meta 1: timeout=60s')
+              'extra score=2 fake=fake rule expression attribute="#uname" operation=eq value=node1 ' +
+              'extra score=1 fake=real ' +
+              'extra score=2 timeout=120s op_type=meta rule expression attribute="#ra-version" operation=gt value=1.0 type=version ' +
+              'extra score=1 timeout=60s op_type=meta')
 
 
 @with_setup(setup_func, teardown_func)
 def test_multiple_attrsets():
     roundtrip('primitive mySpecialRsc me:Special ' +
-              'params 3: interface=eth1 ' +
-              'params 2: port=8888')
+              'params interface=eth1 extra score=3 ' +
+              'params port=8888 extra score=2')
     roundtrip('primitive mySpecialRsc me:Special ' +
-              'meta 3: interface=eth1 ' +
-              'meta 2: port=8888')
+              'meta interface=eth1 extra score=3 ' +
+              'meta port=8888 extra score=2')
 
 
 @with_setup(setup_func, teardown_func)
@@ -276,9 +278,9 @@ def test_acls_oldsyntax():
 
 @with_setup(setup_func, teardown_func)
 def test_rules():
-    roundtrip('primitive p1 Dummy params ' +
-              'rule $role=Started date in start=2009-05-26 end=2010-05-26 ' +
-              'or date gt 2014-01-01 state=2')
+    roundtrip('primitive p1 Dummy params state=2 extra ' +
+              'rule role=Started date operation=in_range start=2009-05-26 end=2010-05-26 ' +
+              'or date operation=gt start=2014-01-01')
 
 
 @with_setup(setup_func, teardown_func)
@@ -298,7 +300,7 @@ def test_topology_1114_pattern():
 
 @with_setup(setup_func, teardown_func)
 def test_locrule():
-    roundtrip('location loc-testfs-with-eth1 testfs rule ethmonitor-eth1 eq 1')
+    roundtrip('location loc-testfs-with-eth1 testfs rule expression attribute=ethmonitor-eth1 operation=eq value=1')
 
 
 @with_setup(setup_func, teardown_func)
