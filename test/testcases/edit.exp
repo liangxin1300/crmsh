@@ -47,6 +47,15 @@ op_defaults op-options: \
 .INP: filter "sed '/clone/s/p2/g1/;s/p3/p2/'" c1 g1
 .INP: filter "sed '1,$d'" c1 g1
 .INP: filter "sed -e '$aclone c1 g1' -e '$agroup g1 p1 p2'"
+.INP: location l1 p3 on node1 score=100
+.INP: order o1 first p3 then c1 options score=inf
+.INP: colocation cl1 c1 with p3 options score=inf
+.INP: filter "sed '/cl1/s/p3/p2/'"
+.INP: filter "sed '/cl1/d'"
+.INP: primitive d1 ocf:heartbeat:Dummy
+.INP: primitive d2 ocf:heartbeat:Dummy
+.INP: primitive d3 ocf:heartbeat:Dummy
+.INP: group g2 d1 d2
 .INP: _test
 .INP: verify
 .EXT crm_resource --show-metadata stonith:null
@@ -55,6 +64,9 @@ op_defaults op-options: \
 .INP: show
 node node1 \
 	attributes mem=16G
+primitive d1 Dummy
+primitive d2 Dummy
+primitive d3 Dummy
 primitive p1 Dummy \
 	op monitor interval=60m \
 	op monitor interval=120m \
@@ -66,7 +78,11 @@ primitive st stonith:null \
 	meta description="some description here" requires=nothing  \
 	op monitor interval=60m
 group g1 p1 p2
+group g2 d1 d2
 clone c1 g1
+location l1 p3 on node1 score=100
+order o1 first p3 then c1 \
+	options score=inf
 op_defaults op-options: \
 	timeout=2m
 .INP: commit
