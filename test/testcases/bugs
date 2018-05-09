@@ -12,12 +12,10 @@ primitive p4 Dummy
 primitive p3 Dummy
 primitive p2 Dummy
 primitive p1 Dummy
-colocation c1 inf: p1 p2
-filter "sed 's/p1 p2/& p3/'" c1
+colocation c1 p1 with p2 options score=inf
 show c1
 delete c1
-colocation c2 inf: [ p1 p2 ] p3 p4
-filter "sed 's/\\\[/\\\(/;s/\\\]/\\\)/'" c2
+colocation c2 resource_set p1 p2 require-all=false sequential=false resource_set p3 p4 options score=inf
 show c2
 primitive p5 Dummy
 primitive p6 Dummy

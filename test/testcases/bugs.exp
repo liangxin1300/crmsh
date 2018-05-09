@@ -9,15 +9,17 @@
 .INP: primitive p3 Dummy
 .INP: primitive p2 Dummy
 .INP: primitive p1 Dummy
-.INP: colocation c1 inf: p1 p2
-.INP: filter "sed 's/p1 p2/& p3/'" c1
+.INP: colocation c1 p1 with p2 options score=inf
 .INP: show c1
-colocation c1 inf: p1 p2 p3
+colocation c1 p1 with p2 \
+	options score=inf
 .INP: delete c1
-.INP: colocation c2 inf: [ p1 p2 ] p3 p4
-.INP: filter "sed 's/\[/\(/;s/\]/\)/'" c2
+.INP: colocation c2 resource_set p1 p2 require-all=false sequential=false resource_set p3 p4 options score=inf
 .INP: show c2
-colocation c2 inf: ( p1 p2 ) p3 p4
+colocation c2 \
+	resource_set p1 p2 require-all=false sequential=false \
+	resource_set p3 p4 \
+	options score=inf
 .INP: primitive p5 Dummy
 .INP: primitive p6 Dummy
 .INP: clone cl-p5 p5
@@ -34,7 +36,10 @@ primitive p1 Dummy
 primitive p5 Dummy
 primitive p6 Dummy
 clone cl-p5 p5
-colocation c2 inf: ( p1 p2 ) p3 p4
+colocation c2 \
+	resource_set p1 p2 require-all=false sequential=false \
+	resource_set p3 p4 \
+	options score=inf
 .INP: commit
 .EXT crm_resource --show-metadata stonith:null
 .EXT stonithd metadata
@@ -54,7 +59,10 @@ primitive p1 Dummy
 primitive p6 Dummy
 primitive p5 Dummy
 clone cl-p5 p5
-colocation c2 inf: ( p1 p2 ) p3 p4
+colocation c2 \
+	resource_set p1 p2 require-all=false sequential=false \
+	resource_set p3 p4 \
+	options score=inf
 .TRY Unordered load file
 .INP: options
 .INP: sort_elements false
@@ -79,9 +87,12 @@ group g1 gr1 gr2
 group g2 gr3
 group g3 gr4
 clone cl-p5 p5
-colocation c2 inf: ( p1 p2 ) p3 p4
+colocation c2 \
+	resource_set p1 p2 require-all=false sequential=false \
+	resource_set p3 p4 \
+	options score=inf
 location loc1 g1 \
-	rule 200: #uname eq node1
+	rule score=200 expression attribute="#uname" operation=eq value=node1
 op_defaults op-options: \
 	timeout=60s
 .INP: commit
