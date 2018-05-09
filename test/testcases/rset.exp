@@ -10,30 +10,51 @@
 .INP: primitive d3 ocf:heartbeat:Dummy
 .INP: primitive d4 ocf:heartbeat:Dummy
 .INP: primitive d5 ocf:heartbeat:Dummy
-.INP: order o1 Serialize: d1 d2 ( d3 d4 )
-.INP: colocation c1 inf: d4 ( d1 d2 d3 )
-.INP: colocation c2 inf: d1 d2 d3 d4
-.INP: colocation c3 inf: ( d3 d4 ) ( d1 d2 )
+.INP: order o1 resource_set d1 d2 resource_set d3 d4 sequential=false options kind=Serialize
+.INP: colocation c1 resource_set d4 resource_set d1 d2 d3 sequential=false options score=inf
+.INP: colocation c2 resource_set d1 d2 d3 d4 options score=inf
+.INP: colocation c3 resource_set d3 d4 sequential=false resource_set d1 d2 sequential=false options score=inf
 .INP: delete d2
 INFO: 16: constraint order:o1 updated
 INFO: 16: constraint colocation:c1 updated
 INFO: 16: constraint colocation:c2 updated
 INFO: 16: constraint colocation:c3 updated
 .INP: show o1 c1 c2 c3
-colocation c1 inf: d4 ( d1 d3 )
-colocation c2 inf: d1 d3 d4
-colocation c3 inf: ( d3 d4 ) ( d1 )
-order o1 Serialize: d1 ( d3 d4 )
+colocation c1 \
+	resource_set d4 \
+	resource_set d1 d3 sequential=false \
+	options score=inf
+colocation c2 \
+	resource_set d1 d3 d4 \
+	options score=inf
+colocation c3 \
+	resource_set d3 d4 sequential=false \
+	resource_set d1 sequential=false \
+	options score=inf
+order o1 \
+	resource_set d1 \
+	resource_set d3 d4 sequential=false \
+	options kind=Serialize
 .INP: delete d4
 INFO: 18: constraint order:o1 updated
 INFO: 18: constraint colocation:c1 updated
 INFO: 18: constraint colocation:c2 updated
 INFO: 18: constraint colocation:c3 updated
 .INP: show o1 c1 c2 c3
-colocation c1 inf: ( d1 d3 )
-colocation c2 inf: d3 d1
-colocation c3 inf: d3 d1
-order o1 Serialize: d1 d3
+colocation c1 \
+	resource_set d1 d3 sequential=false \
+	options score=inf
+colocation c2 \
+	resource_set d1 d3 \
+	options score=inf
+colocation c3 \
+	resource_set d3 \
+	resource_set d1 \
+	options score=inf
+order o1 \
+	resource_set d1 \
+	resource_set d3 \
+	options kind=Serialize
 .INP: _test
 .INP: verify
 .EXT crm_resource --show-metadata stonith:ssh
@@ -48,8 +69,18 @@ primitive d5 Dummy
 primitive st stonith:ssh \
 	params hostlist=node1 \
 	op start timeout=60s interval=0
-colocation c1 inf: ( d1 d3 )
-colocation c2 inf: d3 d1
-colocation c3 inf: d3 d1
-order o1 Serialize: d1 d3
+colocation c1 \
+	resource_set d1 d3 sequential=false \
+	options score=inf
+colocation c2 \
+	resource_set d1 d3 \
+	options score=inf
+colocation c3 \
+	resource_set d3 \
+	resource_set d1 \
+	options score=inf
+order o1 \
+	resource_set d1 \
+	resource_set d3 \
+	options kind=Serialize
 .INP: commit

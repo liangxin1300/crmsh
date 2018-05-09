@@ -8,4 +8,4 @@ primitive gr1 Dummy
 primitive gr2 Dummy
 primitive gr3 Dummy
 primitive gr4 Dummy
-location loc1 g1 rule 200: #uname eq node1
+location loc1 g1 rule score=200 expression attribute=#uname operation=eq value=node1
