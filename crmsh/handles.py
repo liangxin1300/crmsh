@@ -3,7 +3,6 @@
 
 import re
 
-
 headmatcher = re.compile(r'\{\{(\#|\^)?([A-Za-z0-9\#\$:_-]+)\}\}')
 
 
