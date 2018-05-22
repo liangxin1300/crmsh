@@ -62,7 +62,7 @@ WARNING: 51: c2: resource d1 is grouped, constraints should apply to the group
 .EXT cib metadata
 .INP: show
 node node1 \
-	attributes mem=16G
+	attributes mem=16
 node node2 \
 	utilization cpu=4
 primitive d1 ocf:pacemaker:Dummy \
