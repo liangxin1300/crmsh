@@ -7,27 +7,36 @@
 .INP: # create one stonith so that verify does not complain
 .INP: primitive st stonith:ssh 	params hostlist='node1' 	meta target-role="Started" requires=nothing 	op start timeout=60s 	op monitor interval=60m timeout=60s
 .INP: primitive p0 Dummy params $p0-state:state=1
-.INP: primitive p1 Dummy params     rule role=Started date in start=2009-05-26 end=2010-05-26 or date gt 2014-01-01     state=2
+.INP: primitive p1 Dummy       params state=2 extra       rule role=Started       date operation=in_range start=2009-05-26 end=2010-05-26 or       date operation=gt start=2014-01-01
 .INP: primitive p2 Dummy params @p0-state
-.INP: property rule #uname eq node1 stonith-enabled=no
+.INP: property stonith-enabled=no rule expression attribute=#uname operation=eq value=node1
 .INP: tag tag1: p0 p1 p2
 .INP: tag tag2 p0 p1 p2
-.INP: location l1 { p0 p1 p2 } inf: node1
+.INP: location l1 resource_set p0 p1 p2 on node1 score=inf
 .INP: primitive node1 Dummy
 .INP: tag ones l1 p1
 .INP: alert notify_9 /usr/share/pacemaker/alerts/alert_snmp.sh         attributes         trap_add_hires_timestamp_oid="false"         trap_node_states="non-trap"         trap_resource_tasks="start,stop,monitor,promote,demote"         to "192.168.40.9"
 .INP: show tag:ones and type:location
-location l1 { p0 p1 p2 } inf: node1
+location l1 on node1 score=inf \
+	resource_set p0 p1 p2
 .INP: show tag:ones and p1
 primitive p1 Dummy \
-	params rule $role=Started date in start=2009-05-26 end=2010-05-26 or date gt 2014-01-01 state=2
+	params state=2 \
+	    extra \
+	    rule role=Started \
+	    date operation=in_range start=2009-05-26 end=2010-05-26 or \
+	    date operation=gt start=2014-01-01
 .INP: show
 node node1
 primitive node1 Dummy
 primitive p0 Dummy \
 	params state=1
 primitive p1 Dummy \
-	params rule $role=Started date in start=2009-05-26 end=2010-05-26 or date gt 2014-01-01 state=2
+	params state=2 \
+	    extra \
+	    rule role=Started \
+	    date operation=in_range start=2009-05-26 end=2010-05-26 or \
+	    date operation=gt start=2014-01-01
 primitive p2 Dummy \
 	params @p0-state
 primitive st stonith:ssh \
@@ -38,10 +47,11 @@ primitive st stonith:ssh \
 tag ones l1 p1
 tag tag1 p0 p1 p2
 tag tag2 p0 p1 p2
-location l1 { p0 p1 p2 } inf: node1
+location l1 on node1 score=inf \
+	resource_set p0 p1 p2
 property cib-bootstrap-options: \
-	rule #uname eq node1 \
-	stonith-enabled=no
+	stonith-enabled=no \
+	rule expression attribute="#uname" operation=eq value=node1
 alert notify_9 "/usr/share/pacemaker/alerts/alert_snmp.sh" \
 	attributes trap_add_hires_timestamp_oid=false trap_node_states=non-trap trap_resource_tasks="start,stop,monitor,promote,demote" \
 	to 192.168.40.9

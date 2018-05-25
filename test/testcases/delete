@@ -12,7 +12,7 @@ primitive st stonith:ssh \
 	op monitor interval=60m timeout=60s
 primitive d1 ocf:pacemaker:Dummy
 primitive d2 ocf:pacemaker:Dummy
-location d1-pref d1 100: node1
+location d1-pref d1 on node1 score=100
 show
 _test
 rename d1 p1
@@ -26,7 +26,7 @@ delete p1
 _test
 show
 primitive d1 ocf:pacemaker:Dummy
-location d1-pref d1 100: node1
+location d1-pref d1 on node1 score=100
 _test
 # delete primitive belonging to a group
 primitive d2 ocf:pacemaker:Dummy

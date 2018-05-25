@@ -120,7 +120,7 @@ class TestCliParser(unittest.TestCase):
         self.assertEqual(out.get('id'), 'testid')
         self.assertEqual(out.get('uname'), 'node-1')
 
-        out = self._parse('node $id=testid node-1:ping')
+        out = self._parse('node $id=testid node-1 type=ping')
         self.assertEqual(out.get('id'), 'testid')
         self.assertEqual(out.get('uname'), 'node-1')
         self.assertEqual(out.get('type'), 'ping')
@@ -216,119 +216,116 @@ class TestCliParser(unittest.TestCase):
         self.assertEqual(['buz'], out.xpath('.//nvpair/@name'))
 
     def test_location(self):
-        out = self._parse('location loc-1 resource inf: foo')
+        out = self._parse('location loc-1 resource on foo score=inf')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(out.get('rsc'), 'resource')
         self.assertEqual(out.get('score'), 'INFINITY')
         self.assertEqual(out.get('node'), 'foo')
 
-        out = self._parse('location loc-1 /foo.*/ inf: bar')
+        out = self._parse('location loc-1 rsc-pattern=foo.* on bar score=inf')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(out.get('rsc-pattern'), 'foo.*')
         self.assertEqual(out.get('score'), 'INFINITY')
         self.assertEqual(out.get('node'), 'bar')
         #print out
 
-        out = self._parse('location loc-1 // inf: bar')
+        out = self._parse('location loc-1 d1')
         self.assertFalse(out)
 
-        out = self._parse('location loc-1 { one ( two three ) four } inf: bar')
+        out = self._parse('location loc-1 resource_set one resource_set two three sequential=false resource_set four on bar score=inf')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(['one', 'two', 'three', 'four'], out.xpath('//resource_ref/@id'))
         self.assertEqual(out.get('score'), 'INFINITY')
         self.assertEqual(out.get('node'), 'bar')
         #print out
 
-        out = self._parse('location loc-1 thing rule role=slave -inf: #uname eq madrid')
+        out = self._parse('location loc-1 thing rule role=slave score=-inf expression attribute=#uname operation=eq value=madrid')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(out.get('rsc'), 'thing')
         self.assertEqual(out.get('score'), None)
 
-        out = self._parse('location l { a:foo b:bar }')
-        self.assertFalse(out)
-
     def test_colocation(self):
-        out = self._parse('colocation col-1 inf: foo:master ( bar wiz sequential=yes )')
+        out = self._parse('colocation col-1 resource_set foo role=Master resource_set bar wiz options score=inf')
         self.assertEqual(out.get('id'), 'col-1')
         self.assertEqual(['foo', 'bar', 'wiz'], out.xpath('//resource_ref/@id'))
         self.assertEqual([], out.xpath('//resource_set[@name="sequential"]/@value'))
 
         out = self._parse(
-            'colocation col-1 -20: foo:Master ( bar wiz ) ( zip zoo ) node-attribute="fiz"')
+            'colocation col-1 resource_set foo role=Master resource_set bar wiz sequential=false resource_set zip zoo sequential=false options score=-20 node-attribute="fiz"')
         self.assertEqual(out.get('id'), 'col-1')
         self.assertEqual(out.get('score'), '-20')
         self.assertEqual(['foo', 'bar', 'wiz', 'zip', 'zoo'], out.xpath('//resource_ref/@id'))
         self.assertEqual(['fiz'], out.xpath('//@node-attribute'))
 
-        out = self._parse('colocation col-1 0: a:master b')
+        out = self._parse('colocation col-1 a role=Master with b options score=0')
         self.assertEqual(out.get('id'), 'col-1')
 
-        out = self._parse('colocation col-1 10: ) bar wiz')
+        out = self._parse('colocation col-1 a')
         self.assertFalse(out)
 
-        out = self._parse('colocation col-1 10: ( bar wiz')
+        out = self._parse('colocation col-1 a with')
         self.assertFalse(out)
 
-        out = self._parse('colocation col-1 10: ( bar wiz ]')
+        out = self._parse('colocation col-1')
         self.assertFalse(out)
 
     def test_order(self):
-        out = self._parse('order o1 Mandatory: [ A B sequential=true ] C')
+        out = self._parse('order o1 resource_set A B require-all=false resource_set C options kind=Mandatory')
         print(xml_tostring(out))
         self.assertEqual(['Mandatory'], out.xpath('/rsc_order/@kind'))
         self.assertEqual(2, len(out.xpath('/rsc_order/resource_set')))
         self.assertEqual(['false'], out.xpath('/rsc_order/resource_set/@require-all'))
         self.assertEqual(['A', 'B', 'C'], out.xpath('//resource_ref/@id'))
 
-        out = self._parse('order o1 Mandatory: [ A B sequential=false ] C')
+        out = self._parse('order o1 resource_set A B require-all=false resource_set C options kind=Mandatory')
         self.assertEqual(2, len(out.xpath('/rsc_order/resource_set')))
         #self.assertTrue(['require-all', 'false'] in out.resources[0][1])
         #self.assertTrue(['sequential', 'false'] in out.resources[0][1])
         self.assertEqual(out.get('id'), 'o1')
 
-        out = self._parse('order o1 Mandatory: A B C sequential=false')
+        out = self._parse('order o1 resource_set A B C sequential=false options kind=Mandatory')
         self.assertEqual(1, len(out.xpath('/rsc_order/resource_set')))
         #self.assertTrue(['sequential', 'false'] in out.resources[0][1])
         self.assertEqual(out.get('id'), 'o1')
 
-        out = self._parse('order o1 Mandatory: A B C sequential=true')
+        out = self._parse('order o1 resource_set A B C sequential=true options kind=Mandatory')
         self.assertEqual(1, len(out.xpath('/rsc_order/resource_set')))
         #self.assertTrue(['sequential', 'true'] not in out.resources[0][1])
         self.assertEqual(out.get('id'), 'o1')
 
-        out = self._parse('order c_apache_1 Mandatory: apache:start ip_1')
+        out = self._parse('order c_apache_1 first apache first-action=start then ip_1 options kind=Mandatory')
         self.assertEqual(out.get('id'), 'c_apache_1')
 
-        out = self._parse('order c_apache_2 Mandatory: apache:start ip_1 ip_2 ip_3')
+        out = self._parse('order c_apache_2 resource_set apache action=start resource_set ip_1 ip_2 ip_3 options kind=Mandatory')
         self.assertEqual(2, len(out.xpath('/rsc_order/resource_set')))
         self.assertEqual(out.get('id'), 'c_apache_2')
 
-        out = self._parse('order o1 Serialize: A ( B C )')
+        out = self._parse('order o1 resource_set A resource_set B C sequential=false options kind=Serialize')
         self.assertEqual(2, len(out.xpath('/rsc_order/resource_set')))
         self.assertEqual(out.get('id'), 'o1')
 
-        out = self._parse('order o1 Serialize: A ( B C ) symmetrical=false')
+        out = self._parse('order o1 resource_set A resource_set B C sequential=false options kind=Serialize symmetrical=false')
         self.assertEqual(2, len(out.xpath('/rsc_order/resource_set')))
         self.assertEqual(out.get('id'), 'o1')
         self.assertEqual(['false'], out.xpath('//@symmetrical'))
 
-        out = self._parse('order o1 Serialize: A ( B C ) symmetrical=true')
+        out = self._parse('order o1 resource_set A resource_set B C sequential=false options kind=Serialize symmetrical=true')
         self.assertEqual(2, len(out.xpath('/rsc_order/resource_set')))
         self.assertEqual(out.get('id'), 'o1')
         self.assertEqual(['true'], out.xpath('//@symmetrical'))
 
-        inp = 'colocation rsc_colocation-master INFINITY: [ vip-master vip-rep sequential=true ] [ msPostgresql:Master sequential=true ]'
+        inp = 'colocation rsc_colocation-master resource_set vip-master vip-rep require-all=false resource_set msPostgresql require-all=false role=Master options score=INFINITY'
         out = self._parse(inp)
         self.assertEqual(2, len(out.xpath('/rsc_colocation/resource_set')))
         self.assertEqual(out.get('id'), 'rsc_colocation-master')
 
-        out = self._parse('order order_2 Mandatory: [ A B ] C')
+        out = self._parse('order order_2 resource_set A B require-all=false sequential=false resource_set C options kind=Mandatory')
         self.assertEqual(2, len(out.xpath('/rsc_order/resource_set')))
         self.assertEqual(out.get('id'), 'order_2')
         self.assertEqual(['Mandatory'], out.xpath('/rsc_order/@kind'))
         self.assertEqual(['false'], out.xpath('//resource_set/@sequential'))
 
-        out = self._parse('order order-1 Optional: group1:stop group2:start')
+        out = self._parse('order order-1 first group1 first-action=stop then group2 then-action=start options kind=Optional')
         self.assertEqual(out.get('id'), 'order-1')
         self.assertEqual(['Optional'], out.xpath('/rsc_order/@kind'))
         self.assertEqual(['group1'], out.xpath('/rsc_order/@first'))
@@ -337,14 +334,14 @@ class TestCliParser(unittest.TestCase):
         self.assertEqual(['start'], out.xpath('/rsc_order/@then-action'))
 
     def test_ticket(self):
-        out = self._parse('rsc_ticket ticket-A_public-ip ticket-A: public-ip')
+        out = self._parse('rsc_ticket ticket-A_public-ip ticket=ticket-A public-ip')
         self.assertEqual(out.get('id'), 'ticket-A_public-ip')
 
-        out = self._parse('rsc_ticket ticket-A_bigdb ticket-A: bigdb loss-policy=fence')
+        out = self._parse('rsc_ticket ticket-A_bigdb ticket=ticket-A bigdb options loss-policy=fence')
         self.assertEqual(out.get('id'), 'ticket-A_bigdb')
 
         out = self._parse(
-            'rsc_ticket ticket-B_storage ticket-B: drbd-a:Master drbd-b:Master')
+            'rsc_ticket ticket-B_storage ticket=ticket-B resource_set drbd-a drbd-b role=Master')
         self.assertEqual(out.get('id'), 'ticket-B_storage')
 
     def test_bundle(self):
@@ -414,16 +411,12 @@ class TestCliParser(unittest.TestCase):
         self.assertEqual(['true'], out.xpath('//nvpair[@name="stonith-enabled"]/@value'))
 
         # missing score
-        out = self._parse('property rule #uname eq node1 stonith-enabled=no')
+        out = self._parse('property stonith-enabled=no rule expression attribute=#uname operation=eq value=node1')
         self.assertEqual(['INFINITY'], out.xpath('//@score'))
 
-        out = self._parse('property rule 10: #uname eq node1 stonith-enabled=no')
+        out = self._parse('property stonith-enabled=no rule score=10 expression attribute=#uname operation=eq value=node1')
         self.assertEqual(['no'], out.xpath('//nvpair[@name="stonith-enabled"]/@value'))
         self.assertEqual(['node1'], out.xpath('//expression[@attribute="#uname"]/@value'))
-
-        out = self._parse('property rule +inf: date spec years=2014 stonith-enabled=no')
-        self.assertEqual(['no'], out.xpath('//nvpair[@name="stonith-enabled"]/@value'))
-        self.assertEqual(['2014'], out.xpath('//date_spec/@years'))
 
         out = self._parse('rsc_defaults failure-timeout=3m')
         self.assertEqual(['3m'], out.xpath('//nvpair[@name="failure-timeout"]/@value'))
@@ -557,7 +550,7 @@ class TestCliParser(unittest.TestCase):
         self.assertEqual('primitive', outp[0].tag)
         self.assertEqual('clone', outp[1].tag)
 
-        out = self._parse('LOCATION loc-1 resource INF: foo')
+        out = self._parse('LOCATION loc-1 resource on foo score=INF')
         self.assertEqual(out.get('id'), 'loc-1')
         self.assertEqual(out.get('rsc'), 'resource')
         self.assertEqual(out.get('score'), 'INFINITY')
@@ -641,33 +634,33 @@ class TestCliParser(unittest.TestCase):
             operations $id-ref=d1""",
             """ms m5 s5""",
             """ms m6 s6""",
-            """location l1 g1 100: node1""",
+            """location l1 g1 on node1 score=100""",
             """location l2 c \
-            rule $id=l2-rule1 100: #uname eq node1""",
+            rule $id=l2-rule1 score=100 expression attribute="#uname" operation=eq value=node1""",
             """location l3 m5 \
-            rule inf: #uname eq node1 and pingd gt 0""",
+            rule expression attribute="#uname" operation=eq value=node1 expression attribute=pingd operation=gt value=0""",
             """location l4 m5 \
-            rule -inf: not_defined pingd or pingd lte 0""",
+            rule score=-inf expression attribute=pingd operation=not_defined or expression attribute=pingd operation=lte value=0""",
             """location l5 m5 \
-            rule -inf: not_defined pingd or pingd lte 0 \
-            rule inf: #uname eq node1 and pingd gt 0 \
-            rule inf: date lt "2009-05-26" and \
-            date in start="2009-05-26" end="2009-07-26" and \
-            date in start="2009-05-26" years="2009" and \
-            date date_spec years="2009" hours=09-17""",
+            rule score=-inf expression attribute=pingd operation=not_defined or expression attribute=pingd operation=lte value=0 \
+            rule expression attribute=#uname operation=eq value=node1 and expression attribute=pingd operation=gt value=0 \
+            rule date operation=lt end="2009-05-26" and \
+            date operation=in_range start="2009-05-26" end="2009-07-26" and \
+            date operation=in_range start="2009-05-26" duration years="2009" and \
+            date operation=date_spec years="2009" hours=09-17""",
             """location l6 m5 \
             rule $id-ref=l2-rule1""",
             """location l7 m5 \
             rule $id-ref=l2""",
-            """collocation c1 inf: m6 m5""",
-            """collocation c2 inf: m5:Master d1:Started""",
-            """order o1 Mandatory: m5 m6""",
-            """order o2 Optional: d1:start m5:promote""",
-            """order o3 Serialize: m5 m6""",
-            """order o4 inf: m5 m6""",
-            """rsc_ticket ticket-A_m6 ticket-A: m6""",
-            """rsc_ticket ticket-B_m6_m5 ticket-B: m6 m5 loss-policy=fence""",
-            """rsc_ticket ticket-C_master ticket-C: m6 m5:Master loss-policy=fence""",
+            """collocation c1 m6 with m5 options score=inf""",
+            """collocation c2 m5 role=Master with d1 with_role=Started""",
+            """order o1 first m5 then m6 options kind=Mandatory""",
+            """order o2 first d1 first-action=start then m5 then-action=promote options kind=Optional""",
+            """order o3 first m5 then m6 options kind=Serialize""",
+            """order o4 first m5 then m6 options score=inf""",
+            """rsc_ticket ticket-A_m6 ticket=ticket-A m6""",
+            """rsc_ticket ticket-B_m6_m5 ticket=ticket-B resource_set m6 m5 options loss-policy=fence""",
+            """rsc_ticket ticket-C_master ticket=ticket-C resource_set m6 resource_set m5 role=Master options loss-policy=fence""",
             """fencing_topology st st2""",
             """property stonith-enabled=true""",
             """property $id=cpset2 maintenance-mode=true""",
@@ -694,19 +687,19 @@ class TestCliParser(unittest.TestCase):
             '<primitive id="s6" class="ocf" provider="pacemaker" type="Stateful"><operations id-ref="d1"/></primitive>',
             '<master id="m5"><crmsh-ref id="s5"/></master>',
             '<master id="m6"><crmsh-ref id="s6"/></master>',
-            '<rsc_location id="l1" rsc="g1" score="100" node="node1"/>',
+            '<rsc_location id="l1" rsc="g1" node="node1" score="100"/>',
             '<rsc_location id="l2" rsc="c"><rule id="l2-rule1" score="100"><expression attribute="#uname" operation="eq" value="node1"/></rule></rsc_location>',
             '<rsc_location id="l3" rsc="m5"><rule score="INFINITY"><expression attribute="#uname" operation="eq" value="node1"/><expression attribute="pingd" operation="gt" value="0"/></rule></rsc_location>',
             '<rsc_location id="l4" rsc="m5"><rule score="-INFINITY" boolean-op="or"><expression attribute="pingd" operation="not_defined"/><expression attribute="pingd" operation="lte" value="0"/></rule></rsc_location>',
             '<rsc_location id="l5" rsc="m5"><rule score="-INFINITY" boolean-op="or"><expression attribute="pingd" operation="not_defined"/><expression attribute="pingd" operation="lte" value="0"/></rule><rule score="INFINITY"><expression attribute="#uname" operation="eq" value="node1"/><expression attribute="pingd" operation="gt" value="0"/></rule><rule score="INFINITY"><date_expression operation="lt" end="2009-05-26"/><date_expression operation="in_range" start="2009-05-26" end="2009-07-26"/><date_expression operation="in_range" start="2009-05-26"><duration years="2009"/></date_expression><date_expression operation="date_spec"><date_spec years="2009" hours="09-17"/></date_expression></rule></rsc_location>',
             '<rsc_location id="l6" rsc="m5"><rule id-ref="l2-rule1"/></rsc_location>',
             '<rsc_location id="l7" rsc="m5"><rule id-ref="l2"/></rsc_location>',
-            '<rsc_colocation id="c1" score="INFINITY" rsc="m6" with-rsc="m5"/>',
-            '<rsc_colocation id="c2" score="INFINITY" rsc="m5" rsc-role="Master" with-rsc="d1" with-rsc-role="Started"/>',
-            '<rsc_order id="o1" kind="Mandatory" first="m5" then="m6"/>',
-            '<rsc_order id="o2" kind="Optional" first="d1" first-action="start" then="m5" then-action="promote"/>',
-            '<rsc_order id="o3" kind="Serialize" first="m5" then="m6"/>',
-            '<rsc_order id="o4" score="INFINITY" first="m5" then="m6"/>',
+            '<rsc_colocation id="c1" rsc="m6" with-rsc="m5" score="INFINITY"/>',
+            '<rsc_colocation id="c2" rsc="m5" rsc-role="Master" with-rsc="d1" with-rsc-role="Started"/>',
+            '<rsc_order id="o1" first="m5" then="m6" kind="Mandatory"/>',
+            '<rsc_order id="o2" first="d1" first-action="start" then="m5" then-action="promote" kind="Optional"/>',
+            '<rsc_order id="o3" first="m5" then="m6" kind="Serialize"/>',
+            '<rsc_order id="o4" first="m5" then="m6" score="INFINITY"/>',
             '<rsc_ticket id="ticket-A_m6" ticket="ticket-A" rsc="m6"/>',
             '<rsc_ticket id="ticket-B_m6_m5" ticket="ticket-B" loss-policy="fence"><resource_set><resource_ref id="m6"/><resource_ref id="m5"/></resource_set></rsc_ticket>',
             '<rsc_ticket id="ticket-C_master" ticket="ticket-C" loss-policy="fence"><resource_set><resource_ref id="m6"/></resource_set><resource_set role="Master"><resource_ref id="m5"/></resource_set></rsc_ticket>',

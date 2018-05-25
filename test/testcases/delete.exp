@@ -8,7 +8,7 @@
 .INP: primitive st stonith:ssh 	params hostlist='node1' 	meta target-role="Started" 	op start timeout=60s 	op monitor interval=60m timeout=60s
 .INP: primitive d1 ocf:pacemaker:Dummy
 .INP: primitive d2 ocf:pacemaker:Dummy
-.INP: location d1-pref d1 100: node1
+.INP: location d1-pref d1 on node1 score=100
 .INP: show
 node node1
 primitive d1 ocf:pacemaker:Dummy
@@ -18,7 +18,7 @@ primitive st stonith:ssh \
 	meta target-role=Started \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
-location d1-pref d1 100: node1
+location d1-pref d1 on node1 score=100
 .INP: _test
 .INP: rename d1 p1
 INFO: 13: modified location:d1-pref from d1 to p1
@@ -31,7 +31,7 @@ primitive st stonith:ssh \
 	meta target-role=Started \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
-location d1-pref p1 100: node1
+location d1-pref p1 on node1 score=100
 .INP: # delete primitive
 .INP: delete d2
 .INP: _test
@@ -43,7 +43,7 @@ primitive st stonith:ssh \
 	meta target-role=Started \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
-location d1-pref p1 100: node1
+location d1-pref p1 on node1 score=100
 .INP: # delete primitive with constraint
 .INP: delete p1
 INFO: 20: hanging location:d1-pref deleted
@@ -51,12 +51,12 @@ INFO: 20: hanging location:d1-pref deleted
 .INP: show
 node node1
 primitive st stonith:ssh \
-	params hostlist=node1 \
-	meta target-role=Started \
+	params hostlist=node1  \
+	meta target-role=Started  \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
 .INP: primitive d1 ocf:pacemaker:Dummy
-.INP: location d1-pref d1 100: node1
+.INP: location d1-pref d1 on node1 score=100
 .INP: _test
 .INP: # delete primitive belonging to a group
 .INP: primitive d2 ocf:pacemaker:Dummy
@@ -73,7 +73,7 @@ primitive st stonith:ssh \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
 group g1 d1
-location d1-pref g1 100: node1
+location d1-pref g1 on node1 score=100
 .INP: _test
 .INP: delete g1
 INFO: 33: modified location:d1-pref from g1 to d1
@@ -85,7 +85,7 @@ primitive st stonith:ssh \
 	meta target-role=Started \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
-location d1-pref d1 100: node1
+location d1-pref d1 on node1 score=100
 .INP: verify
 .EXT crm_resource --show-metadata stonith:ssh
 .EXT stonithd metadata
@@ -108,7 +108,7 @@ primitive st stonith:ssh \
 	meta target-role=Started \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
-location d1-pref d2 100: node1
+location d1-pref d2 on node1 score=100
 .INP: _test
 .INP: group g1 d2 d1
 INFO: 43: modified location:d1-pref from d2 to g1
@@ -128,7 +128,7 @@ primitive st stonith:ssh \
 	meta target-role=Started \
 	op start timeout=60s interval=0 \
 	op monitor interval=60m timeout=60s
-location d1-pref d2 100: node1
+location d1-pref d2 on node1 score=100
 .INP: _test
 .INP: group g1 d2 d1
 INFO: 50: modified location:d1-pref from d2 to g1

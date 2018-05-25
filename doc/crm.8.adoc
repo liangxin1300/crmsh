@@ -178,8 +178,8 @@ crm(live)# node standby node4
   clone conn pingd \
     meta globally-unique=false clone-max=2 clone-node-max=1
   location node_pref internal_www \
-    rule 50: #uname eq node1 \
-    rule pingd: defined pingd
+    rule score=50 expression attribute=#uname operation=eq value=node1 \
+    rule score-attribute=pingd expression attribute=pingd operation=defined
   #
   # cluster properties
   #
@@ -464,7 +464,7 @@ To complete our example, we should also define the preferred node
 to run the service:
 
 ...............
-crm(live)configure# location websvc-pref websvc 100: xen-b
+crm(live)configure# location websvc-pref websvc on xen-b score=100
 ...............
 
 If you are not happy with some resource names which are provided
@@ -481,7 +481,7 @@ primitive apache apache \
 primitive intranet-ip IPaddr \
     params ip=192.168.1.101
 group websvc apache intranet-ip
-location websvc-pref websvc 100: xen-b
+location websvc-pref websvc on xen-b score=100
 ...............
 
 To summarize, working with templates typically consists of the
@@ -520,7 +520,7 @@ primitive apache apache \
     params configfile="/etc/apache2/httpd.conf" \
     op monitor interval=120s timeout=60s
 group websvc apache intranet-ip
-location websvc-pref websvc 100: xen-b
+location websvc-pref websvc on xen-b score=100
 ...............
 
 Before typing `commit` to submit the configuration to the cib we
@@ -777,8 +777,10 @@ a different resource parameter on the node named `node1`:
 
 ..............
 primitive my_resource Special \
-  params 2: rule #uname eq node1 interface=eth1 \
-  params 1: interface=eth0
+  params interface=eth1 \
+  extra score=2 rule expression attribute=#uname operation=eq value=node1 \
+  params interface=eth0 \
+  extra score=1
 ..............
 
 This primitive resource has two lists of parameters with descending
@@ -3109,10 +3111,10 @@ For more details on how to configure resource sets, see
 Usage:
 ...............
 colocation <id> <score>: <rsc>[:<role>] <with-rsc>[:<role>]
-  [node-attribute=<node_attr>]
+  [node-attribute=<node_attr>] [<lifetime>]
 
 colocation <id> <score>: <resource_sets>
-  [node-attribute=<node_attr>]
+  [node-attribute=<node_attr>] [<lifetime>]
 
 resource_sets :: <resource_set> [<resource_set> ...]
 
@@ -3124,8 +3126,11 @@ attributes :: [require-all=(true|false)] [sequential=(true|false)]
 ...............
 Example:
 ...............
-colocation never_put_apache_with_dummy -inf: apache dummy
-colocation c1 inf: A ( B C )
+colocation never_put_apache_with_dummy apache with dummy options score=-inf
+colocation c1 \
+    resource_set A \
+    resource_set B C sequential=false \
+    options score=inf
 ...............
 
 [[cmdhelp_configure_commit,commit the changes to the CIB]]
@@ -3459,10 +3464,10 @@ which specify a score to be awarded if the rule matches.
 The resource referenced by the location constraint can be one of the
 following:
 
-* Plain resource reference: +location loc1 webserver 100: node1+
-* Resource set in curly brackets: +location loc1 { virtual-ip webserver } 100: node1+
-* Tag containing resource ids: +location loc1 tag1 100: node1+
-* Resource pattern: +location loc1 /web.*/ 100: node1+
+* Plain resource reference: +location loc1 webserver on node1 score=100+
+* Resource set: +location loc1 resource_set virtual-ip webserver on node1 score=100+
+* Tag containing resource ids: +location loc1 tag1 on node1 score=100+
+* Resource pattern: +location loc1 rsc-pattern=/web.*/ on node1 score=100+
 
 The +resource-discovery+ attribute allows probes to be selectively
 enabled or disabled per resource and node.
@@ -3478,7 +3483,7 @@ For more information on rule expressions, see
 
 Usage:
 ...............
-location <id> <rsc> [<attributes>] {<node_pref>|<rules>}
+location <id> <rsc> [<attributes>] {<node_pref>|<rules>} [<lifetime>]
 
 rsc :: /<rsc-pattern>/
         | { resource_sets }
@@ -3521,17 +3526,19 @@ duration|date_spec ::
 ...............
 Examples:
 ...............
-location conn_1 internal_www 100: node1
+location conn_1 internal_www on node1 score=100
 
 location conn_1 internal_www \
-  rule 50: #uname eq node1 \
-  rule pingd: defined pingd
+  rule score=50 expression attribute=#uname operation=eq value=node1 \
+  rule score-attribute=pingd expression attribute=pingd operation=defined
 
 location conn_2 dummy_float \
-  rule -inf: not_defined pingd or pingd number:lte 0
+  rule score=-inf \
+  expression attribute=pingd operation=not_defined or \
+  expression attribute=pingd operation=lte value=0 type=number
 
 # never probe for rsc1 on node1
-location no-probe rsc1 resource-discovery=never -inf: node1
+location no-probe rsc1 on node1 score=-inf options resource-discovery=never
 ...............
 
 [[cmdhelp_configure_modgroup,modify group]]
@@ -3684,9 +3691,9 @@ For more details on how to configure resource sets, see
 
 Usage:
 ...............
-order <id> [{kind|<score>}:] first then [symmetrical=<bool>]
+order <id> [<lifetime>] [{kind|<score>}:] first then [symmetrical=<bool>]
 
-order <id> [{kind|<score>}:] resource_sets [symmetrical=<bool>]
+order <id> [<lifetime>] [{kind|<score>}:] resource_sets [symmetrical=<bool>]
 
 kind :: Mandatory | Optional | Serialize
 
@@ -3704,10 +3711,16 @@ attributes :: [require-all=(true|false)] [sequential=(true|false)]
 ...............
 Example:
 ...............
-order o-1 Mandatory: apache:start ip_1
-order o-2 Serialize: A ( B C )
-order o-3 inf: [ A B ] C
-order o-4 first-resource then-resource
+order o-1 first apache first-action=start then ip_1 options kind=Mandatory
+order o-2 \
+    resource_set A \
+    resource_set B C sequential=false \
+    options kind=Serialize
+order o-3 \
+    resource_set A B require-all=false sequential=false \
+    resource_set C \
+    options score=inf
+order o-4 first first-resource then then-resource
 ...............
 
 [[cmdhelp_configure_primitive,define a resource]]
@@ -3791,9 +3804,12 @@ primitive r0 ocf:linbit:drbd \
 primitive xen0 @vm_scheme1 xmfile=/etc/xen/vm/xen0
 
 primitive mySpecialRsc Special \
-  params 3: rule #uname eq node1 interface=eth1 \
-  params 2: rule #uname eq node2 interface=eth2 port=8888 \
-  params 1: interface=eth0 port=9999
+  params interface=eth1 \
+  extra score=3 rule expression attribute=#uname operation=eq value=node1 \
+  params interface=eth2 port=8888 \
+  extra score=2 rule expression attribute=#uname operation=eq value=node2 \
+  params interface=eth0 port=9999 \
+  extra score=1
 
 primitive A ocf:pacemaker:Dummy \
   op start \

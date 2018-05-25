@@ -85,24 +85,25 @@ def nvpairs2list(node, add_id=False):
     return ret
 
 
-def date_exp2cli(node):
+def date_exp2cli(node, indent):
     kwmap = {'in_range': 'in', 'date_spec': 'spec'}
     l = []
     operation = node.get("operation")
-    l.append(clidisplay.keyword("date"))
-    l.append(clidisplay.keyword(kwmap.get(operation, operation)))
-    if operation in utils.olist(constants.simple_date_ops):
-        value = node.get(utils.keyword_cmp(operation, 'lt') and "end" or "start")
-        l.append(clidisplay.attr_value(quote_wrap(value)))
+    if indent:
+        _keyword = "    %s" % clidisplay.keyword("date")
     else:
-        if operation == 'in_range':
-            for name in constants.in_range_attrs:
-                if name in node.attrib:
-                    l.append(nvpair_format(name, node.attrib[name]))
-        for c in node.iterchildren():
-            if c.tag in ("duration", "date_spec"):
-                l.extend([nvpair_format(name, c.get(name))
-                          for name in list(c.keys()) if name != 'id'])
+        _keyword = "%s" % clidisplay.keyword("date")
+    l.append(_keyword)
+    for key, value in node.attrib.items():
+        if key == "id":
+            continue
+        l.append("%s" % nvpair_format(key, value))
+    for c in node.iterchildren():
+        if c.tag in ("duration", "date_spec"):
+            res = [nvpair_format(name, c.get(name)) for name in list(c.keys()) if name != 'id']
+            if c.tag == "duration":
+                res[0] = "%s " % clidisplay.keyword("duration") + res[0]
+            l.extend(res)
     return ' '.join(l)
 
 
@@ -114,21 +115,16 @@ def binary_op_format(op):
         return clidisplay.keyword(op)
 
 
-def exp2cli(node):
-    operation = node.get("operation")
-    typ = node.get("type")
-    if typ:
-        operation = "%s:%s" % (typ, operation)
-    attribute = node.get("attribute")
-    value = node.get("value")
-    if not value:
-        return "%s %s" % (binary_op_format(operation), attribute)
+def exp2cli(node, indent):
+    if indent:
+        l = "    %s " % clidisplay.keyword("expression")
     else:
-        value_source = node.get("value-source")
-        if not value_source or value_source == "literal":
-            return "%s %s %s" % (attribute, binary_op_format(operation), value)
-        else:
-            return "%s %s %s{%s}" % (attribute, binary_op_format(operation), value_source, value)
+        l = "%s " % clidisplay.keyword("expression")
+    for key, value in node.attrib.items():
+        if key == "id":
+            continue
+        l += "%s " % nvpair_format(key, value)
+    return l
 
 
 def abs_pos_score(score):
@@ -150,48 +146,62 @@ def get_score(node):
         if score.find("INFINITY") >= 0:
             score = score.replace("INFINITY", "inf")
     if not score:
-        score = ""
+        score = None
     return score
 
 
 def cli_rule_score(node):
     score = node.get("score")
-    if score == "INFINITY":
-        return None
     return get_score(node)
 
 
-def cli_exprs(node):
-    bool_op = node.get("boolean-op")
-    if not bool_op:
-        bool_op = "and"
+def cli_exprs(node, indent):
     exp = []
     for c in node.iterchildren():
         if c.tag == "date_expression":
-            exp.append(date_exp2cli(c))
+            exp.append(date_exp2cli(c, indent))
         elif c.tag == "expression":
-            exp.append(exp2cli(c))
-    return (" %s " % clidisplay.keyword(bool_op)).join(exp)
+            exp.append(exp2cli(c, indent))
+
+    suffix = ""
+    bool_op = node.get("boolean-op")
+    if bool_op and bool_op == "or":
+        suffix = " %s" % clidisplay.keyword("or")
+    elif len(exp) > 1:
+        suffix = " %s" % clidisplay.keyword("and")
+    if suffix:
+        exp[:-1] = [x.rstrip()+suffix for x in exp[:-1]]
+    return exp
 
 
-def cli_rule(node):
+def cli_rule(node, keyword=None, indent=True):
     from .cibconfig import cib_factory
     s = []
+    head_s = ""
+    if keyword:
+        if indent:
+            head_s += "    %s" % clidisplay.keyword(keyword)
+        else:
+            head_s += clidisplay.keyword(keyword)
     node_id = node.get("id")
     if node_id and cib_factory.is_id_refd(node.tag, node_id):
-        s.append(nvpair_format('$id', node_id))
+        head_s += " id=%s" % node_id
     else:
         idref = node.get("id-ref")
         if idref:
-            return nvpair_format('$id-ref', idref)
+            return ["%s %s" % (head_s, nvpair_format('$id-ref', idref))]
     rsc_role = node.get("role")
     if rsc_role:
-        s.append(nvpair_format('$role', rsc_role))
+        head_s += " role=%s" % rsc_role
     score = cli_rule_score(node)
-    if score:
-        s.append("%s:" % (clidisplay.score(score)))
-    s.append(cli_exprs(node))
-    return ' '.join(s)
+    if score and score != "inf":
+        if "score-attribute" in list(node.keys()):
+            head_s += " score-attribute=%s" % (clidisplay.score(score))
+        else:
+            head_s += " score=%s" % (clidisplay.score(score))
+    s.append(head_s)
+    s.extend(cli_exprs(node, indent))
+    return s
 
 
 def mkrscrole(node, n):
@@ -199,7 +209,10 @@ def mkrscrole(node, n):
     rsc_role = node.get(n + "-role")
     rsc_instance = node.get(n + "-instance")
     if rsc_role:
-        return "%s:%s" % (rsc, rsc_role)
+        if n.startswith('with'):
+            return "%s with_role=%s" % (rsc, rsc_role)
+        else:
+            return "%s role=%s" % (rsc, rsc_role)
     elif rsc_instance:
         return "%s:%s" % (rsc, rsc_instance)
     else:
@@ -231,35 +244,12 @@ def boolean_maybe(v):
 
 def rsc_set_constraint(node, obj_type):
     col = []
-    cnt = 0
-    for n in node.findall("resource_set"):
-        sequential = boolean_maybe(n.get("sequential"))
-        require_all = boolean_maybe(n.get("require-all"))
-        if require_all is False:
-            col.append("[")
-        elif sequential is False:
-            col.append("(")
-        role = n.get("role")
-        action = n.get("action")
-        for r in n.findall("resource_ref"):
-            rsc = clidisplay.rscref(r.get("id"))
-            q = (obj_type == "order") and action or role
-            col.append(q and "%s:%s" % (rsc, q) or rsc)
-            cnt += 1
-        if require_all is False:
-            if sequential in (None, True):
-                col.append(nvpair_format('sequential', 'true'))
-            col.append("]")
-        elif sequential is False:
-            if require_all is False:
-                col.append(nvpair_format('require-all', 'false'))
-            col.append(")")
-    is_ticket = obj_type == 'rsc_ticket'
-    is_location = obj_type == 'location'
-    is_seq_all = sequential in (None, True) and require_all in (None, True)
-    if not is_location and ((is_seq_all and not is_ticket and cnt <= 2) or
-                            (is_ticket and cnt <= 1)):  # a degenerate thingie
-        col.insert(0, "_rsc_set_")
+    for r in node.findall("resource_ref"):
+        col.append(clidisplay.rscref(r.get("id")))
+    for item in ["require-all", "sequential", "role", "action", "score"]:
+        _res = node.get(item)
+        if _res:
+            col.append(nvpair_format(item, _res))
     return col
 
 

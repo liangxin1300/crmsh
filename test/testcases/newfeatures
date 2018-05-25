@@ -11,14 +11,16 @@ primitive st stonith:ssh \
 	op start timeout=60s \
 	op monitor interval=60m timeout=60s
 primitive p0 Dummy params $p0-state:state=1
-primitive p1 Dummy params \
-    rule role=Started date in start=2009-05-26 end=2010-05-26 or date gt 2014-01-01 \
-    state=2
+primitive p1 Dummy \
+      params state=2 extra \
+      rule role=Started \
+      date operation=in_range start=2009-05-26 end=2010-05-26 or \
+      date operation=gt start=2014-01-01
 primitive p2 Dummy params @p0-state
-property rule #uname eq node1 stonith-enabled=no
+property stonith-enabled=no rule expression attribute=#uname operation=eq value=node1
 tag tag1: p0 p1 p2
 tag tag2 p0 p1 p2
-location l1 { p0 p1 p2 } inf: node1
+location l1 resource_set p0 p1 p2 on node1 score=inf
 primitive node1 Dummy
 tag ones l1 p1
 alert notify_9 /usr/share/pacemaker/alerts/alert_snmp.sh \
