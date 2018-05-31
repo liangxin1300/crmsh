@@ -42,10 +42,11 @@ INIT_STAGES = ("ssh", "ssh_remote", "csync2", "csync2_remote", "corosync", "stor
 
 
 class Context(object):
-    def __init__(self, quiet, yes_to_all, nic=None, ip_address=None, ip_network=None):
+    def __init__(self, quiet, yes_to_all, nic=None, uaddr=None, ip_address=None, ip_network=None):
         self.quiet = quiet
         self.yes_to_all = yes_to_all
         self.nic = nic
+        self.uaddr = uaddr
         self.ip_address = ip_address
         self.ip_network = ip_network
         self.cluster_name = None
@@ -1304,8 +1305,65 @@ def join_cluster(seed_host):
     # if unicast, we need to add our node to $corosync.conf()
     is_unicast = "nodelist" in open(corosync.conf()).read()
     if is_unicast:
-        corosync.add_node(utils.this_node())
+        use_ip = False
+        use_rrp = False
+        ip_arry = []
+        with open(corosync.conf()) as f:
+            for item in f.read().split('\n'):
+                if re.search(r'ring[0-1]_addr:\s*([0-9]+\.){3}[0-9]+', item):
+                    use_ip = True
+                    ip_arry.append(item.split(':')[1].strip())
+                if re.search(r'rrp_mode:\s*', item):
+                    use_rrp = True
+
+        already_use = False
+        if use_ip:
+            ringXaddr_res = []
+            ringXaddr_default = ["", ""]
+            if _context.uaddr:
+                for i, addr in enumerate(_context.uaddr.split()):
+                    ringXaddr_default[i] = addr
+
+            print("")
+            for i in 0, 1:
+                while True:
+                    ringXaddr = prompt_for_string('Address for ring{}'.format(i),
+                                                  r'([0-9]+\.){3}[0-9]+',
+                                                  ringXaddr_default[i])
+                    ip_local = utils.ip_in_local()
+                    if not ringXaddr:
+                        if not _context.uaddr:
+                            error("No value for ring{}; Use -u|--ucastaddr option".format(i))
+                        else:
+                            if use_rrp and len(_context.uaddr.split()) < 2:
+                                error("Value for -u|--ucastaddr should have two addresses")
+                            for ip in _context.uaddr.split():
+                                if ip not in ip_local:
+                                    error("Value for -u|--ucastaddr should include {}".format(ip_local))
+                            ringXaddr = _context.uaddr.split()[i]
+
+                    if ringXaddr not in ip_local:
+                        msg = "IP must be a local address (one of {})".format(ip_local)
+                        if _context.yes_to_all:
+                            error(msg)
+                        else:
+                            print("    {}".format(msg))
+                            continue
+                    if ringXaddr in ip_arry:
+                        already_use = True
+                    break
+
+                ringXaddr_res.append(ringXaddr)
+                if not use_rrp:
+                    break
+
+        if not use_ip:
+            corosync.add_node(utils.this_node())
+        else:
+            if not already_use:
+                corosync.add_node_ucast(ringXaddr_res)
         csync2_update(corosync.conf())
+        invoke("ssh root@{} corosync-cfgtool -R".format(seed_host))
 
     # if no SBD devices are configured,
     # check the existing cluster if the sbd service is enabled
@@ -1593,7 +1651,7 @@ def bootstrap_init(cluster_name="hacluster", nic=None, ocfs2_device=None,
     status("Done (log saved to %s)" % (LOG_FILE))
 
 
-def bootstrap_join(cluster_node=None, nic=None, quiet=False, yes_to_all=False, watchdog=None, stage=None):
+def bootstrap_join(cluster_node=None, nic=None, uaddr=None, quiet=False, yes_to_all=False, watchdog=None, stage=None):
     """
     -c <cluster-node>
     -i <nic>
@@ -1607,7 +1665,7 @@ def bootstrap_join(cluster_node=None, nic=None, quiet=False, yes_to_all=False, w
     cluster
     """
     global _context
-    _context = Context(quiet=quiet, yes_to_all=yes_to_all, nic=nic)
+    _context = Context(quiet=quiet, yes_to_all=yes_to_all, nic=nic, uaddr=uaddr)
     _context.cluster_node = cluster_node
     _context.watchdog = watchdog
 

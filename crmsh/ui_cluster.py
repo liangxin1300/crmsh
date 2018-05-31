@@ -236,6 +236,7 @@ If stage is not specified, each stage will be invoked in sequence.
         network_group = optparse.OptionGroup(parser, "Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_option("-c", "--cluster-node", dest="cluster_node", help="IP address or hostname of existing cluster node", metavar="HOST")
         network_group.add_option("-i", "--interface", dest="nic", help="Bind to IP address on interface IF", metavar="IF")
+        network_group.add_option("-u", "--ucastaddr", dest="uaddr", help="IP address list for unicast", metavar="UCASTADDRLIST")
         parser.add_option_group(network_group)
 
         options, args = parser.parse_args(list(args))
@@ -250,6 +251,7 @@ If stage is not specified, each stage will be invoked in sequence.
         bootstrap.bootstrap_join(
             cluster_node=options.cluster_node,
             nic=options.nic,
+            uaddr=options.uaddr,
             quiet=options.quiet,
             yes_to_all=options.yes_to_all,
             watchdog=options.watchdog,

@@ -374,6 +374,29 @@ def set_value(path, value):
     f.close()
 
 
+def add_node_ucast(IParray, node_name=None):
+
+    f = open(conf()).read()
+    p = Parser(f)
+
+    node_id = get_free_nodeid(p)
+    node_value = []
+    for i, addr in enumerate(IParray):
+        node_value += make_value('nodelist.node.ring{}_addr'.format(i), addr)
+    node_value += make_value('nodelist.node.nodeid', str(node_id))
+
+    p.add('nodelist', make_section('nodelist.node', node_value))
+
+    num_nodes = p.count('nodelist.node')
+    p.set('quorum.two_node', '1' if num_nodes == 2 else '0')
+    if p.get("quorum.device.model") == "net":
+        p.set('quorum.two_node', '0')
+
+    f = open(conf(), 'w')
+    f.write(p.to_string())
+    f.close()
+
+
 def add_node(addr, name=None):
     '''
     Add node to corosync.conf
