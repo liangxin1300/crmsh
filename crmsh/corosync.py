@@ -540,18 +540,20 @@ quorum {
 
 def create_configuration(clustername="hacluster",
                          bindnetaddr=None,
+                         ringXaddr=None,
                          mcastaddr=None,
                          mcastport=None,
                          transport=None):
-
     if transport == "udpu":
+        ring_tmpl = "        ring0_addr: {}\n".format(ringXaddr)
+
         nodelist_tmpl = """nodelist {
     node {
-        ring0_addr: %(hostname)s
+%(ringaddr)s
         nodeid: 1
     }
 }
-""" % {"hostname": utils.this_node()}
+""" % {"ringaddr": ring_tmpl}
     else:
         nodelist_tmpl = ""
 

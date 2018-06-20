@@ -692,13 +692,19 @@ Configure Corosync (unicast):
         if not confirm("%s already exists - overwrite?" % (corosync.conf())):
             return
 
+    ring0addr = prompt_for_string('Address for ring0',
+                                  r'([0-9]+\.){3}[0-9]+|[0-9a-fA-F]{1,4}:',
+                                  _context.ip_address if _context.ip_address else "")
+    if not ring0addr:
+        error("No value for ring{}".format(i))
+
     mcastport = prompt_for_string('Port', '[0-9]+', "5405")
     if not mcastport:
         error("No value for mcastport")
 
     corosync.create_configuration(
         clustername=_context.cluster_name,
-        bindnetaddr=None,
+        ringXaddr=ring0addr,
         mcastport=mcastport,
         transport="udpu")
     csync2_update(corosync.conf())
