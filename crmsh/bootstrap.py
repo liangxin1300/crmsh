@@ -649,6 +649,10 @@ def mkdirs_owned(dirs, mode=0o777, uid=-1, gid=-1):
             utils.chown(dirs, uid, gid)
 
 
+def init_api_server():
+    invoke("sh /opt/ClusterAPI/start.sh")
+
+
 def init_ssh():
     """
     Configure passwordless SSH.
@@ -1080,7 +1084,7 @@ Configure Corosync:
         nodeid=nodeid,
         two_rings=two_rings,
         qdevice=_context.qdevice)
-    csync2_update(corosync.conf())
+    #csync2_update(corosync.conf())
 
 
 def init_corosync():
@@ -1659,6 +1663,9 @@ def join_cluster(seed_host):
         else:
             corosync.set_value("totem.nodeid", nodeid)
 
+    invoke("curl -o /etc/corosync/authkey http://%s:5000/corosync/authkey" % seed_host)
+    invoke("curl -o /etc/corosync/corosync.conf http://%s:5000/corosync/corosync.conf" % seed_host)
+
     # check if use IPv6
     ipv6_flag = False
     ipv6 = corosync.get_value("totem.ip_version")
@@ -1843,7 +1850,8 @@ def join_cluster(seed_host):
         if use_qdevice:
             corosync.set_value("quorum.device.votes", device_votes)
 
-        csync2_update(corosync.conf())
+        #csync2_update(corosync.conf())
+        invoke("curl -F file=@%s http://%s:5000/corosync/corosync.conf -X POST" % (corosync.conf(), seed_host))
     update_expected_votes()
 
     # Trigger corosync config reload to ensure expected_votes is propagated
@@ -2119,14 +2127,15 @@ def bootstrap_init(cluster_name="hacluster", ui_context=None, nic=None, ocfs2_de
     else:
         if watchdog is not None:
             init_watchdog()
-        init_ssh()
-        init_csync2()
+        #init_ssh()
+        #init_csync2()
+        init_api_server()
         init_corosync()
         init_remote_auth()
         if template == 'ocfs2':
             if sbd_device is None or ocfs2_device is None:
                 init_storage()
-        init_sbd()
+        #init_sbd()
         init_cluster()
         if template == 'ocfs2':
             init_vgfs()
@@ -2178,10 +2187,11 @@ def bootstrap_join(cluster_node=None, ui_context=None, nic=None, quiet=False, ye
             cluster_node = prompt_for_string("IP address or hostname of existing node (e.g.: 192.168.1.1)", ".+")
             _context.cluster_node = cluster_node
 
-        join_ssh(cluster_node)
+        #join_ssh(cluster_node)
         join_remote_auth(cluster_node)
-        join_csync2(cluster_node)
-        join_ssh_merge(cluster_node)
+        #join_csync2(cluster_node)
+        #join_ssh_merge(cluster_node)
+        init_api_server()
         join_cluster(cluster_node)
 
     status("Done (log saved to %s)" % (LOG_FILE))
