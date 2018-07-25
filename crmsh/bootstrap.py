@@ -649,6 +649,10 @@ def mkdirs_owned(dirs, mode=0o777, uid=-1, gid=-1):
             utils.chown(dirs, uid, gid)
 
 
+def init_api_server():
+    invoke("clusterAPIServer &> /dev/null &")
+
+
 def init_ssh():
     """
     Configure passwordless SSH.
@@ -856,7 +860,7 @@ def valid_adminIP(addr, prev_value=None):
             warn("  Address already in use: {}".format(addr))
             return False
         for net in all_:
-            if utils.ip_in_network(addr, net):
+            if addr in utils.Network(net):
                 return True
         warn("  Address '{}' invalid, expected one of {}".format(addr, all_))
         return False
@@ -919,7 +923,7 @@ Configure Corosync (unicast):
         all_ = utils.network_v6_all()
         for item in all_.values():
             network_list.extend(item)
-        default_networks = [utils.get_ipv6_network(x) for x in network_list]
+        default_networks = map(utils.get_ipv6_network, network_list)
     else:
         default_networks = utils.network_all()
     if not default_networks:
@@ -1080,7 +1084,7 @@ Configure Corosync:
         nodeid=nodeid,
         two_rings=two_rings,
         qdevice=_context.qdevice)
-    csync2_update(corosync.conf())
+    #csync2_update(corosync.conf())
 
 
 def init_corosync():
@@ -1659,6 +1663,9 @@ def join_cluster(seed_host):
         else:
             corosync.set_value("totem.nodeid", nodeid)
 
+    invoke("curl -o /etc/corosync/authkey http://%s:5000/api/v1/corosync/authkey" % seed_host)
+    invoke("curl -o /etc/corosync/corosync.conf http://%s:5000/api/v1/corosync/corosync.conf" % seed_host)
+
     # check if use IPv6
     ipv6_flag = False
     ipv6 = corosync.get_value("totem.ip_version")
@@ -1682,6 +1689,7 @@ def join_cluster(seed_host):
     # mountpoints for clustered filesystems.  Unfortunately we don't have
     # that yet, so the following crawling horror takes a punt on the seed
     # node being up, then asks it for a list of mountpoints...
+    """
     if _context.cluster_node:
         _rc, outp, _ = utils.get_stdout_stderr("ssh -o StrictHostKeyChecking=no root@{} 'cibadmin -Q --xpath \"//primitive\"'".format(seed_host))
         if outp:
@@ -1694,7 +1702,7 @@ def join_cluster(seed_host):
                 invoke("mkdir -p {}".format(m))
     else:
         status("No existing IP/hostname specified - skipping mountpoint detection/creation")
-
+    """
     # Bump expected_votes in corosync.conf
     # TODO(must): this is rather fragile (see related code in ha-cluster-remove)
 
@@ -1721,7 +1729,7 @@ def join_cluster(seed_host):
                 tmp = re.findall(r' {}/[0-9]+ '.format(ringXaddr), outp, re.M)[0].strip()
                 peer_ip = corosync.get_value("nodelist.node.ring{}_addr".format(i))
                 # peer ring0_addr and local ring0_addr must be configured in the same network
-                if not utils.ip_in_network(peer_ip, tmp):
+                if peer_ip not in utils.Network(tmp):
                     print(term.render(clidisplay.error("    Peer IP {} is not in the same network: {}".format(peer_ip, tmp))))
                     continue
 
@@ -1737,8 +1745,8 @@ def join_cluster(seed_host):
 
     # if no SBD devices are configured,
     # check the existing cluster if the sbd service is enabled
-    if not configured_sbd_device() and invoke("ssh root@{} systemctl is-enabled sbd.service".format(seed_host)):
-        _context.diskless_sbd = True
+    #if not configured_sbd_device() and invoke("ssh root@{} systemctl is-enabled sbd.service".format(seed_host)):
+    #    _context.diskless_sbd = True
 
     if ipv6_flag and not is_unicast:
         # for ipv6 mcast
@@ -1843,7 +1851,8 @@ def join_cluster(seed_host):
         if use_qdevice:
             corosync.set_value("quorum.device.votes", device_votes)
 
-        csync2_update(corosync.conf())
+        #csync2_update(corosync.conf())
+        invoke("curl -F file=@%s http://%s:5000/api/v1/corosync/corosync.conf -X POST" % (corosync.conf(), seed_host))
     update_expected_votes()
 
     # Trigger corosync config reload to ensure expected_votes is propagated
@@ -2119,14 +2128,15 @@ def bootstrap_init(cluster_name="hacluster", ui_context=None, nic=None, ocfs2_de
     else:
         if watchdog is not None:
             init_watchdog()
-        init_ssh()
-        init_csync2()
+        #init_ssh()
+        #init_csync2()
+        init_api_server()
         init_corosync()
         init_remote_auth()
         if template == 'ocfs2':
             if sbd_device is None or ocfs2_device is None:
                 init_storage()
-        init_sbd()
+        #init_sbd()
         init_cluster()
         if template == 'ocfs2':
             init_vgfs()
@@ -2178,10 +2188,11 @@ def bootstrap_join(cluster_node=None, ui_context=None, nic=None, quiet=False, ye
             cluster_node = prompt_for_string("IP address or hostname of existing node (e.g.: 192.168.1.1)", ".+")
             _context.cluster_node = cluster_node
 
-        join_ssh(cluster_node)
+        #join_ssh(cluster_node)
         join_remote_auth(cluster_node)
-        join_csync2(cluster_node)
-        join_ssh_merge(cluster_node)
+        #join_csync2(cluster_node)
+        #join_ssh_merge(cluster_node)
+        init_api_server()
         join_cluster(cluster_node)
 
     status("Done (log saved to %s)" % (LOG_FILE))

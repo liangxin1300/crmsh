@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
 # crmsh, command line interface for Linux HA clusters
 # Copyright (C) 2008-2015 Dejan Muhamedagic <dmuhamedagic@suse.de>
