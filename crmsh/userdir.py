@@ -26,6 +26,7 @@ except:
 
 # TODO: move to CONFIG_HOME
 HISTORY_FILE = os.path.expanduser("~/.crm_history")
+HISTORY_FILE_NEW = os.path.expanduser("~/.crm_history_new")
 RC_FILE = os.path.expanduser("~/.crm.rc")
 CRMCONF_DIR = os.path.expanduser("~/.crmconf")
 

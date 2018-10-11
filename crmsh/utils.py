@@ -16,12 +16,58 @@ import fnmatch
 import gc
 import ipaddress
 from contextlib import contextmanager
+from prompt_toolkit.shortcuts import prompt, CompleteStyle
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.styles import Style
+from prompt_toolkit import PromptSession
+from prompt_toolkit.key_binding import KeyBindings
+
+from . import completers as compl
 from . import config
 from . import userdir
 from . import constants
 from . import options
 from . import term
 from .msg import common_warn, common_info, common_debug, common_err, err_buf
+
+
+class Input2:
+    def __init__(self, context):
+        self.context = context
+        self.history = FileHistory(userdir.HISTORY_FILE_NEW)
+        self.session = PromptSession(history=self.history)
+        self.agent_pattern = r'(lsb|service|stonith|systemd|ocf|ocf:[a-zA-Z]+)$'
+        self.bindings = KeyBindings()
+
+    def input(self, promptstr):
+        @self.bindings.add(' ')
+        def _(event):
+            b = event.app.current_buffer
+            w = b.document.get_word_before_cursor(WORD=True)
+
+            if w is not None:
+                if re.match(r'[a-zA-Z0-9]+=$', w):
+                    return
+                if re.search(self.agent_pattern, w):
+                    b.insert_text(':')
+                else:
+                    b.insert_text(' ')
+
+            #line = b.document.current_line_before_cursor
+
+        message = [
+            ('class:promptstr', promptstr),
+        ]
+        style = Style.from_dict({
+            'promptstr': '#00aa00 bold',
+        })
+
+        return self.session.prompt(message,
+                                   completer=compl.CrmshCompleter(self.context),
+                                   complete_style=CompleteStyle.MULTI_COLUMN,
+                                   style=style,
+                                   complete_while_typing=True,
+                                   key_bindings=self.bindings)
 
 
 mcast_regrex = r'2(?:2[4-9]|3\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?|0)){3}'
@@ -315,19 +361,25 @@ def get_line_buffer():
     return _LINE_BUFFER
 
 
-def multi_input(prompt=''):
+def multi_input(promptstr='', context=None):
     """
     Get input from user
     Allow multiple lines using a continuation character
     """
+
     global _LINE_BUFFER
     line = []
     _LINE_BUFFER = ''
     while True:
-        try:
-            text = input(prompt)
-        except EOFError:
-            return None
+        if config.core.completion_way == "old":
+            try:
+                text = input(promptstr)
+            except EOFError:
+                return None
+        else:
+            input_inst = Input2(context)
+            text = input_inst.input(promptstr)
+
         err_buf.incr_lineno()
         if options.regression_tests:
             print(".INP:", text)
@@ -338,8 +390,8 @@ def multi_input(prompt=''):
             stripped = stripped.rstrip('\\')
             line.append(stripped)
             _LINE_BUFFER += stripped
-            if prompt:
-                prompt = '   > '
+            if promptstr:
+                promptstr = '   > '
         else:
             line.append(stripped)
             break

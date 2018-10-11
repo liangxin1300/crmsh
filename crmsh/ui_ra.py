@@ -9,6 +9,7 @@ from . import utils
 from . import ra
 from . import constants
 from . import options
+from . import config
 
 
 def complete_class_provider_type(args):
@@ -21,11 +22,19 @@ def complete_class_provider_type(args):
     Second completion: providers of ocf or types of other classes
     Last completion:   types of ocf agents
     '''
+    if config.core.completion_way == "old":
+        return_colon = ":"
+    else:
+        return_colon = ""
+
+    if not options.interactive:
+        return_colon = ":"
+
     c = args[-1]
     classes = ra.ra_classes()
     if not c:
         # First completion:  agent classes
-        return [l+":" for l in classes]
+        return [l+return_colon for l in classes]
 
     ret = set([])
     providers = ra.ra_providers_all('ocf')
@@ -34,7 +43,7 @@ def complete_class_provider_type(args):
         for p in providers:
             if p == '.isolation':
                 continue
-            ret.add('%s:%s:' % ('ocf', p))
+            ret.add('%s:%s%s' % ('ocf', p, return_colon))
         return list(ret)
 
     if re.search(r'ocf:.+:', c):
@@ -62,7 +71,7 @@ def complete_class_provider_type(args):
         return list(ret)
 
     # First completion:  agent classes
-    return [l+":" for l in classes]
+    return [l+return_colon for l in classes]
 
 class RA(command.UI):
     '''

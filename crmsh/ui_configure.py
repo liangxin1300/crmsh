@@ -196,6 +196,8 @@ class CompletionHelp(object):
 
     @classmethod
     def help(cls, topic, helptxt, args):
+        if config.core.completion_way == "new":
+            return
         if cls.lasttopic == topic and \
                 time.time() - cls.laststamp < cls.timeout:
             return

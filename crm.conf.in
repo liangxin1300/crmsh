@@ -19,6 +19,7 @@
 ; dot = dot
 ; ignore_missing_metadata = no
 ; report_tool_options =
+; completion_way = new
 
 [path]
 ; sharedir = <detected>

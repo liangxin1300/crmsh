@@ -238,7 +238,8 @@ DEFAULTS = {
         'dotty': opt_program('', ('dotty',)),
         'dot': opt_program('', ('dot',)),
         'ignore_missing_metadata': opt_boolean('no'),
-        'report_tool_options': opt_string('')
+        'report_tool_options': opt_string(''),
+        'completion_way': opt_choice('new', ('new', 'old'))
     },
     'path': {
         'sharedir': opt_dir('%(datadir)s/crmsh'),
