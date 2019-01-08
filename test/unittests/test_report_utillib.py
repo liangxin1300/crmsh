@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/usr/share/crmsh/test")
+sys.path.append("/usr/share/crmsh/hb_report")
 
 import os
 import shutil
