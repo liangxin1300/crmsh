@@ -14,6 +14,7 @@ from hb_report.utillib import which, ts_to_dt, sub_string, random_string,\
                               findln_by_time, get_conf_var, is_conf_set,\
                               line_time, get_command_info
 import hb_report
+import constants
 import crmsh.utils
 
 
@@ -125,7 +126,7 @@ def test_arch_logs():
 
 
 def test_drop_tempfiles():
-    hb_report.constants.TMPFLIST = create_tempfile()
+    constants.TMPFLIST = create_tempfile()
     tmpdir = make_temp_dir()
     add_tmpfiles(tmpdir)
     tmpfile = create_tempfile()
@@ -133,13 +134,13 @@ def test_drop_tempfiles():
 
     ok_(os.path.isdir(tmpdir))
     ok_(os.path.isfile(tmpfile))
-    ok_(os.path.isfile(hb_report.constants.TMPFLIST))
+    ok_(os.path.isfile(constants.TMPFLIST))
 
     drop_tempfiles()
 
     ok_(not os.path.isdir(tmpdir))
     ok_(not os.path.isfile(tmpfile))
-    ok_(not os.path.isfile(hb_report.constants.TMPFLIST))
+    ok_(not os.path.isfile(constants.TMPFLIST))
 
 
 def test_filter_lines():
@@ -185,7 +186,7 @@ def test_find_files():
     ok_(not find_files("test", "testtime", to_time_1))
     ok_(not find_files("test", 0, to_time_1))
 
-    hb_report.constants.TMPFLIST = create_tempfile()
+    constants.TMPFLIST = create_tempfile()
     
     dirs = make_temp_dir()
     add_tmpfiles(dirs)
@@ -256,7 +257,7 @@ def test_get_conf_var():
     with open(temp_file, 'w') as f:
         f.write(log_file_string)
 
-    hb_report.constants.CONF = temp_file
+    constants.CONF = temp_file
     eq_(get_conf_var("debug"), "off")
     eq_(get_conf_var("test", "none"), "none")
     ok_(not is_conf_set("test"))
