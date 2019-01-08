@@ -34,9 +34,9 @@ regression_tests() {
 }
 
 preamble
-unit_tests
 configure
 make_install
+unit_tests
 regression_tests
 
 chown $oname:$ogroup /app/crmtestout/*
