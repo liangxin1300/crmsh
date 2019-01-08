@@ -21,8 +21,8 @@ regression_tests() {
 	sh /usr/share/crmsh/tests/regression.sh
 }
 
-unit_tests
 rc_unittest=$?
 configure
 make_install
+unit_tests
 regression_tests && exit $rc_unittest
