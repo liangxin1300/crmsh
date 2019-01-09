@@ -3,7 +3,7 @@
 # See COPYING for license information.
 
 import atexit
-import getopt
+import argparse
 import multiprocessing
 import os
 import re
@@ -129,6 +129,26 @@ def load_env(env_str):
 
 
 def parse_argument(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", metavar="time", dest="from_time",
+                        help="time to start from")
+    parser.add_argument("-t", metavar="time", dest="to_time",
+                        help="time to finish at(default:now)")
+    parser.add_argument("-d", dest="no_compress", action="store_true",
+                        help="don't compress, but leave result in a directory")
+    parser.add_argument("-n", metavar="node", dest="node_name", nargs="+",
+                        help="node names want to get report")
+    parser.add_argument("-u", metavar="user", dest="user",
+                        help="ssh user to access other nodes")
+    parser.add_argument("-X", metavar="ssh-option", dest="ssh_option",
+                        help="extra ssh(1) options")
+    parser.add_argument("-l", metavar="file", dest="log_file",
+                        help="log file")
+    parser.add_argument("-E", metavar="file", dest="extra_file", nargs="+",
+                        help="extra logs to collect")
+    parser.add_argument("-s", dest="sanitize", action="store_true",
+                        help="sanitize the PE and CIB files")
+    args = parser.parse_args()
     try:
         opt, arg = getopt.getopt(argv[1:], constants.ARGOPTS_VALUE)
     except getopt.GetoptError:
