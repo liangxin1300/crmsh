@@ -148,6 +148,28 @@ def parse_argument(argv):
                         help="extra logs to collect")
     parser.add_argument("-s", dest="sanitize", action="store_true",
                         help="sanitize the PE and CIB files")
+    parser.add_argument("-p", metavar="pattern", dest="sensitive_pattern", nargs="+",
+                        help="regular expression to match variables containing sensitive data")
+    parser.add_argument("-L", metavar="pattern", dest="log_pattern", nargs="+",
+                        help="regular expression to match in log files for analysis")
+    parser.add_argument("-e", metavar="editor", dest="editor",
+                        help="your favourite editor")
+    parser.add_argument("-Q", dest="speed_up", action="store_true",
+                        help="don't run resource intensive operations")
+    parser.add_argument("-M", dest="no_extra", action="store_true",
+                        help="don't collect extra logs")
+    parser.add_argument("-D", dest="no_editor", action="store_true",
+                        help="don't invoke editor to write description")
+    parser.add_argument("-Z", dest="replace", action="store_true",
+                        help="if destination directories exist, remove them instead of exiting")
+    parser.add_argument("-S", dest="single", action="store_true",
+                        help="single node operation; don't try to start report collectors on other nodes")
+    parser.add_argument("-v", dest="verbose", action="count",
+                        help="increase verbosity")
+    parser.add_argument("-V", dest="version", action="store_true",
+                        help="print version")
+    parser.add_argument("dest", nargs="?",
+                        help="report name (may include path where to store the report)")
     args = parser.parse_args()
     try:
         opt, arg = getopt.getopt(argv[1:], constants.ARGOPTS_VALUE)
