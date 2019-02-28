@@ -386,6 +386,11 @@ def add_node_ucast(IParray, node_name=None):
     f = open(conf()).read()
     p = Parser(f)
 
+    exist_iplist = p.get_all('nodelist.node.ring0_addr')
+    for ip in IParray:
+        if ip in exist_iplist:
+            return
+
     node_id = get_free_nodeid(p)
     node_value = []
     for i, addr in enumerate(IParray):
