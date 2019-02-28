@@ -1,6 +1,5 @@
 # Copyright (C) 2008-2011 Dejan Muhamedagic <dmuhamedagic@suse.de>
 # See COPYING for license information.
-
 import sys
 import os
 import atexit
