@@ -92,6 +92,21 @@ class TestCorosyncParser(unittest.TestCase):
         _valid(p)
         self.assertEqual(p.count('nodelist.node'), nid - 1)
 
+    def test_add_node_ucast(self):
+        from crmsh.corosync import add_node_ucast, get_values
+
+        os.environ["COROSYNC_MAIN_CONFIG_FILE"] = os.path.join(os.path.dirname(__file__), 'corosync.conf.2')
+
+        exist_iplist = get_values('nodelist.node.ring0_addr')
+        add_node_ucast(['10.10.10.11'])
+        now_iplist = get_values('nodelist.node.ring0_addr')
+        self.assertEqual(len(exist_iplist) + 1, len(now_iplist))
+
+        # bsc#1127095, 1127096; address 10.10.10.11 already exist
+        add_node_ucast(['10.10.10.11'])
+        now_iplist = get_values('nodelist.node.ring0_addr')
+        self.assertEqual(len(exist_iplist) + 1, len(now_iplist))
+
     def test_add_node_nodelist(self):
         from crmsh.corosync import make_section, make_value, get_free_nodeid
 
