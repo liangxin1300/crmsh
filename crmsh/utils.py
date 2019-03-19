@@ -1139,6 +1139,16 @@ def is_process(s):
     return False
 
 
+def whether_pacemaker2_daemons():
+    """
+    Returns True if all pacemaker daemons are named according to the Pacemaker 2.0+ naming standard.
+    """
+    for daemon in constants.pacemaker2_daemons:
+        if pacemaker_daemon(daemon) != daemon:
+            return False
+    return True
+
+
 def print_stacktrace():
     """
     Print the stack at the site of call
