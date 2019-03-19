@@ -140,8 +140,69 @@ _patterns_118 = {
     ),
 }
 
+_patterns_200 = {
+    "resource": (
+        (  # detail 0
+            "pacemaker-controld.*Initiating.*%%_(?:start|stop|promote|demote|migrate)_",
+            "pacemaker-execd.*operation_finished: %%_",
+            "pacemaker-execd.*executing - rsc:%% action:(?:start|stop|promote|demote|migrate)",
+            "pacemaker-execd.*finished - rsc:%% action:(?:start|stop|promote|demote|migrate)",
+
+            "pacemaker-controld.*Result of .* operation for .* on .*: .*confirmed=true",
+            "pacemaker-controld.*Result of .* operation for .* on .*: Timed Out",
+            "[(]%%[)]\[",
+        ),
+        (  # detail 1
+            "pacemaker-controld.*Initiating.*%%_(?:monitor_0|notify)",
+            "pacemaker-execd.*executing - rsc:%% action:(?:monitor_0|notify)",
+            "pacemaker-execd.*finished - rsc:%% action:(?:monitor_0|notify)",
+        ),
+    ),
+    "node": (
+        (  # detail 0
+            " %% .*Corosync.Cluster.Engine",
+            " %% .*Executive.Service.RELEASE",
+            " %% .*crm_shutdown:.Requesting.shutdown",
+            " %% .*pcmk_shutdown:.Shutdown.complete",
+            " %% .*Configuration.validated..Starting.heartbeat",
+            "schedulerd.*Scheduling Node %% for STONITH",
+            "schedulerd.*will be fenced",
+            "pacemaker-controld.*for %% failed",
+            "stonith-ng.*host '%%'",
+            "Exec.*on %% ",
+            " %% will be fenced",
+            "stonith-ng.*on %% for.*timed out",
+            "stonith-ng.*can not fence %%:",
+            "pacemaker-fenced.*Succeeded.*node %%:",
+            "fenced.*(requests|(Succeeded|Failed).to.|result=)",
+            "(?:lost|memb): %% ",
+            "pacemaker-controld.*(?:NEW|LOST|new|lost):.* %% ",
+        ),
+        (  # detail 1
+        ),
+    ),
+    "quorum": (
+        (  # detail 0
+            "pacemaker-controld.*Updating.(quorum).status",
+            r"pacemaker-controld.*quorum.(?:lost|ac?quir[^\s]*)",
+        ),
+        (  # detail 1
+        ),
+    ),
+    "events": (
+        (  # detail 0
+            "(CRIT|crit|ERROR|error|UNCLEAN|unclean):",
+        ),
+        (  # detail 1
+            "(WARN|warning):",
+        ),
+    ),
+}
+
 
 def patterns(cib_f=None):
+    if utils.whether_pacemaker2_daemons():
+        return _patterns_200
     is118 = utils.is_pcmk_118(cib_f=cib_f)
     if is118:
         return _patterns_118

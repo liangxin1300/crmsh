@@ -122,6 +122,9 @@ op_cli_names = ("monitor",
                 "notify",
                 "reload")
 ra_operations = tuple(["probe"] + list(op_cli_names))
+pacemaker2_daemons = ("pacemaker-based", "pacemaker-fenced", "pacemaker-execd",
+                    "pacemaker-attrd", "pacemaker-schedulerd", "pacemaker-controld")
+
 
 subpfx_list = {
     "instance_attributes": "instance_attributes",

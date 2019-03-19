@@ -1139,6 +1139,13 @@ def is_process(s):
     return False
 
 
+def whether_pacemaker2_daemons():
+    for daemon in constants.pacemaker2_daemons:
+        if not os.path.exists(os.path.join("/usr/lib/pacemaker", daemon)):
+            return False
+    return True
+
+
 def print_stacktrace():
     """
     Print the stack at the site of call
