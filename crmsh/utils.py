@@ -1255,7 +1255,14 @@ def page_gen(g):
     w, h = get_winsize()
     if not config.core.pager or not can_ask() or options.batch:
         for line in g:
-            sys.stdout.write(term_render(line))
+            try:
+                sys.stdout.write(term_render(line))
+            except UnicodeEncodeError:
+                import io
+                correct_stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+                correct_stdout.write(term_render(line))
+                correct_stdout.detach()
+                del correct_stdout
     else:
         pipe_string(get_pager_cmd(), term_render("".join(g)))
 
