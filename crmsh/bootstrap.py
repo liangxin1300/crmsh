@@ -909,7 +909,10 @@ def valid_port(port, prev_value=None):
 
 def add_nodelist_from_cmaptool():
     for nodeid, iplist in utils.get_nodeinfo_from_cmaptool().items():
-        corosync.add_node_ucast(iplist, nodeid)
+        try:
+            corosync.add_node_ucast(iplist, nodeid)
+        except ValueError:
+            pass
 
 
 def init_corosync_unicast():
@@ -1873,7 +1876,10 @@ def join_cluster(seed_host):
                 break
         print("")
         invoke("rm -f /var/lib/heartbeat/crm/* /var/lib/pacemaker/cib/*")
-        corosync.add_node_ucast(ringXaddr_res)
+        try:
+            corosync.add_node_ucast(ringXaddr_res)
+        except ValueError as e:
+            warn(e)
         csync2_update(corosync.conf())
         invoke("ssh -o StrictHostKeyChecking=no root@{} corosync-cfgtool -R".format(seed_host))
 

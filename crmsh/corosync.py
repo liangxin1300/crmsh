@@ -478,7 +478,7 @@ def add_node_ucast(IParray, node_id=None):
             exist_iplist += p.get_all(path)
     for ip in IParray:
         if ip in set(exist_iplist):
-            return
+            raise ValueError("IP {} was already configured".format(ip))
 
     if node_id is None:
         node_id = get_free_nodeid(p)
