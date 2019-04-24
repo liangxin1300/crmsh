@@ -115,15 +115,15 @@ EOF
 
 runtestcase() {
 	setenvironment
-	(
-	cd $rootdir
-	[ -x "$pref" ] && $pref >/dev/null 2>&1
-	)
+	#(
+	#cd $rootdir
+	#[ -x "$pref" ] && $pref >/dev/null 2>&1
+	#)
 	echo -n "$testcase" >&3
 	logmsg "BEGIN testcase $testcase"
 	(
 	cd $rootdir
-	./evaltest.sh $testargs
+	./evaltest.sh $testargs $pref
 	) < $TESTDIR/$testcase > $outf 2>&1
 
 	perl -pi -e 's/\<cib[^>]*\>/\<cib\>/g' $outf

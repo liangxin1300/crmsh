@@ -6,6 +6,7 @@
 : ${CRM:=crm}
 CRM_NO_REG="$CRM"
 CRM="$CRM -R"
+PREF="$2"
 export PYTHONUNBUFFERED=1
 
 if [ "$1" = prof ]; then
@@ -99,6 +100,7 @@ test_cnt=1
 
 crm_setup
 crm_mksample
+[ -x "$PREF" ] && $PREF >/dev/null 2>&1
 while read cmd rest; do
 	case "$cmd" in
 		"") : empty ;;
