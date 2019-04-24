@@ -121,9 +121,9 @@ runtestcase() {
 	#)
 	echo -n "$testcase" >&3
 	logmsg "BEGIN testcase $testcase"
+	logmsg "Pref $pref"
 	(
 	cd $rootdir
-	logmsg "Pref $pref"
 	./evaltest.sh $testargs $pref
 	) < $TESTDIR/$testcase > $outf 2>&1
 
