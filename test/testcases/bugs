@@ -3,6 +3,7 @@ options
 sort_elements false
 up
 configure
+show
 erase
 primitive st stonith:null \
 	params hostlist='node1' \
