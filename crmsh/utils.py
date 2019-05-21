@@ -82,6 +82,13 @@ def network_defaults(interface=None):
             # we are reading /32 route entry
             else:
                 info[1], info[2], info[3] = valfor(sp, 'src'), sp[0], 32
+
+            if info[1] is None:
+                _, outp = get_stdout("/sbin/ip addr show|grep -A2 {}:".format(info[0]))
+                regex = r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]+'
+                res = re.findall(regex, outp, re.M)
+                if res:
+                    info[1], info[2], info[3] = str(IP(res[0])), str(Network(res[0]).network()), IP(res[0]).mask
     if info[0] is None:
         raise ValueError("Failed to determine default network interface")
     return tuple(info)
