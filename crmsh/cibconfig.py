@@ -2401,6 +2401,9 @@ class CibFactory(object):
         if not self.is_cib_sane():
             return None
         return self.cib_elem
+
+    def set_changed_objs(self, objs):
+        self.changed_objs = objs
     #
     # check internal structures
     #
@@ -2699,6 +2702,24 @@ class CibFactory(object):
         elif not cib_diff:
             common_err("crm_diff apparently failed to produce the diff (rc=%d)" % rc)
             return False
+        if self.changed_objs:
+            id_white_list = []
+            id_black_list = []
+            for child in etree.fromstring(cib_diff).iterchildren():
+                if child.tag == "change":
+                    path = child.get("path")
+                    if path:
+                        res = re.findall('\[@id=\'(.*?)\'\]', path)
+                        if any(id in res for id in self.changed_objs):
+                            id_white_list += res
+                        else:
+                            id_black_list += res
+            for id in id_black_list:
+                if id not in id_white_list and \
+                   '-meta_attributes' not in id:
+                    common_err("might be a race condition here, id is {}".format(id))
+                    return False
+
         if not self._crm_diff_cmd.endswith('--no-version'):
             # skip the version information for source and target
             # if we dont have support for --no-version
@@ -2811,6 +2832,7 @@ class CibFactory(object):
         self.id_refs = {}        # dict of id-refs
         self.new_schema = False  # schema changed
         self._state = []
+        self.changed_objs = []
 
     def _push_state(self):
         '''
