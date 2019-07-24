@@ -2401,6 +2401,14 @@ class CibFactory(object):
         if not self.is_cib_sane():
             return None
         return self.cib_elem
+
+    def snapshot_cib(self):
+        '''
+        to handle bsc#1138405, this function will be called just after changes happen
+        in ui_resource.py, avoid possible race condition, make sure crm_diff have the
+        right input.
+        '''
+        self.cib_snapshot = copy.deepcopy(self.get_cib())
     #
     # check internal structures
     #
@@ -2616,6 +2624,7 @@ class CibFactory(object):
         'Commit the configuration to the CIB.'
         if not self.is_cib_sane():
             return False
+        self.snapshot_cib()
         if not replace and cibadmin_can_patch():
             rc = self._patch_cib(force)
         else:
@@ -2678,7 +2687,7 @@ class CibFactory(object):
         if not self._crm_diff_cmd.endswith('--no-version'):
             # now increase the epoch by 1
             self.bump_epoch()
-        self._set_cib_attributes(self.cib_elem)
+        self._set_cib_attributes(self.cib_snapshot)
         cib_s = xml_tostring(self.cib_orig, pretty_print=True)
         tmpf = str2tmp(cib_s, suffix=".xml")
         if not tmpf or not ensure_sudo_readable(tmpf):
@@ -2689,10 +2698,10 @@ class CibFactory(object):
         # produce a diff:
         # dump_new_conf | crm_diff -o self.cib_orig -n -
 
-        common_debug("Input: %s" % (xml_tostring(self.cib_elem)))
+        common_debug("Input: %s" % (xml_tostring(self.cib_snapshot)))
         rc, cib_diff = filter_string("%s -o %s -n -" %
                                      (self._crm_diff_cmd, tmpf),
-                                     etree.tostring(self.cib_elem))
+                                     etree.tostring(self.cib_snapshot))
         if not cib_diff and (rc == 0):
             # no diff = no action
             return True
@@ -2811,6 +2820,7 @@ class CibFactory(object):
         self.id_refs = {}        # dict of id-refs
         self.new_schema = False  # schema changed
         self._state = []
+        self.cib_snapshot = None
 
     def _push_state(self):
         '''
