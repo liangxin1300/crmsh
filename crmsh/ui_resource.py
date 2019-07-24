@@ -134,6 +134,7 @@ def set_deep_meta_attr(rsc, attr, value, commit=True):
     if not objs:
         common_error("Resource not found: %s" % (rsc))
         return False
+    cib_factory.set_changed_number(len(objs))
 
     ok = all(update_obj(obj) for obj in objs)
     if not ok:

@@ -2401,6 +2401,9 @@ class CibFactory(object):
         if not self.is_cib_sane():
             return None
         return self.cib_elem
+
+    def set_changed_number(self, num):
+        self.changed_num = num
     #
     # check internal structures
     #
@@ -2699,6 +2702,15 @@ class CibFactory(object):
         elif not cib_diff:
             common_err("crm_diff apparently failed to produce the diff (rc=%d)" % rc)
             return False
+        if self.changed_num != 0:
+            number = 0
+            for child in etree.fromstring(cib_diff).iterchildren():
+                if child.tag == "change":
+                    number += 1
+            if self.changed_num != number:
+                common_error("might have race condition here, abort!")
+                return False
+
         if not self._crm_diff_cmd.endswith('--no-version'):
             # skip the version information for source and target
             # if we dont have support for --no-version
@@ -2811,6 +2823,7 @@ class CibFactory(object):
         self.id_refs = {}        # dict of id-refs
         self.new_schema = False  # schema changed
         self._state = []
+        self.changed_num = 0
 
     def _push_state(self):
         '''
