@@ -46,6 +46,7 @@ def get_children_with_different_attr(node, attr, value):
 
 
 def set_deep_meta_attr_node(target_node, attr, value):
+    affected_num = 0
     nvpair_l = []
     if xmlutil.is_clone(target_node):
         for c in target_node.iterchildren():
@@ -64,8 +65,9 @@ def set_deep_meta_attr_node(target_node, attr, value):
                              (attr, c.get("id")))
                 rm_meta_attribute(c, attr, nvpair_l, force_children=True)
     xmlutil.rmnodes(list(set(nvpair_l)))
-    xmlutil.xml_processnodes(target_node,
-                             xmlutil.is_emptynvpairs, xmlutil.rmnodes)
+    affected_num += len(list(set(nvpair_l)))
+    affected_num += xmlutil.xml_processnodes(target_node, 
+            xmlutil.is_emptynvpairs, xmlutil.rmnodes)
 
     # work around issue with pcs interoperability
     # by finding exising nvpairs -- if there are any, just
@@ -75,10 +77,12 @@ def set_deep_meta_attr_node(target_node, attr, value):
     if len(nvpairs) > 0:
         for nvpair in nvpairs:
             nvpair.set("value", value)
+            affected_num += 1
     else:
         for n in xmlutil.get_set_nodes(target_node, "meta_attributes", create=True):
             xmlutil.set_attr(n, attr, value)
-    return True
+            affected_num += 1
+    return True, affected_num
 
 
 def set_deep_meta_attr(rsc, attr, value, commit=True):
@@ -134,12 +138,16 @@ def set_deep_meta_attr(rsc, attr, value, commit=True):
     if not objs:
         common_error("Resource not found: %s" % (rsc))
         return False
-    cib_factory.set_changed_number(len(objs))
 
-    ok = all(update_obj(obj) for obj in objs)
-    if not ok:
-        common_error("Failed to update meta attributes for %s" % (rsc))
-        return False
+    affected_num = 0
+    for obj in objs:
+        rc, num = update_obj(obj)
+        if rc:
+            affected_num += num
+        else:
+            common_error("Failed to update meta attributes for %s" % (rsc))
+            return False
+    cib_factory.set_changed_number(affected_num)
 
     if not commit:
         return True
