@@ -489,6 +489,8 @@ def xml_processnodes(e, node_filter, proc):
     if node_list:
         proc(node_list)
         return len(node_list)
+    else:
+        return 0
 
 
 # filter the cib
