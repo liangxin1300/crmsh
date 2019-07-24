@@ -2704,10 +2704,13 @@ class CibFactory(object):
             return False
         if self.changed_num != 0:
             number = 0
+            common_info("cib diff is {}".format(cib_diff))
             for child in etree.fromstring(cib_diff).iterchildren():
                 if child.tag == "change":
                     number += 1
             if self.changed_num != number:
+                common_info("self.changed_num is {}".format(self.changed_num))
+                common_info("number is {}".format(number))
                 common_error("might have race condition here, abort!")
                 return False
 
