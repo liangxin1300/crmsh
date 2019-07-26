@@ -2680,7 +2680,9 @@ class CibFactory(object):
             # now increase the epoch by 1
             self.bump_epoch()
         self._set_cib_attributes(self.cib_elem)
-        tmpf = cibdump2tmp(filterfn=sanitize_cib_for_patching)
+        sanitize_cib_for_patching(self.cib_orig)
+        cib_s = xml_tostring(self.cib_orig, pretty_print=True)
+        tmpf = str2tmp(cib_s, suffix=".xml")
         if not tmpf or not ensure_sudo_readable(tmpf):
             return False
         tmpfiles.add(tmpf)
