@@ -1499,6 +1499,19 @@ Configure Administration IP Address:
     wait_for_resource("Configuring virtual IP ({})".format(adminaddr), "admin-ip")
 
 
+def init_qdevice():
+    if _context.qdevice:
+        try:
+            status("""
+Enable corosync-qnetd.service""")
+            _context.qdevice.enable()
+            status("""
+Starting corosync-qnetd.service""")
+            _context.qdevice.start()
+        except ValueError as err:
+            error(err)
+
+
 def init():
     """
     Basic init
@@ -2153,6 +2166,7 @@ def bootstrap_init(cluster_name="hacluster", ui_context=None, nic=None, ocfs2_de
         if template == 'ocfs2':
             init_vgfs()
         init_admin()
+        init_qdevice()
 
     status("Done (log saved to %s)" % (LOG_FILE))
 
