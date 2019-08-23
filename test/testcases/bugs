@@ -82,8 +82,13 @@ configure
 erase
 node node1
 node node2
-up
+primitive st stonith:null \
+	params hostlist='node1' \
+	meta description="some description here" requires=nothing \
+	op monitor interval=60m
 commit
+up
+cluster run "ls"
 _test
 verify
 .
