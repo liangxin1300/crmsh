@@ -77,3 +77,13 @@ commit
 _test
 verify
 .
+session cluster run
+configure
+erase
+node node1
+node node2
+up
+commit
+_test
+verify
+.
