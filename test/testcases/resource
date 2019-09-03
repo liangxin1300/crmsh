@@ -45,7 +45,9 @@ configure rename p3 p4
 configure primitive p3 Dummy
 resource stop p3
 resource start p3
-configure show
+resource failcount p3 show node1
+resource failcount p3 set node1 1
+resource failcount p3 show node1
 resource cleanup
 resource cleanup p3
 resource cleanup p3 node1
