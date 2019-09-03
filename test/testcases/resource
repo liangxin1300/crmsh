@@ -45,6 +45,7 @@ configure rename p3 p4
 configure primitive p3 Dummy
 resource stop p3
 resource start p3
+configure show
 resource cleanup
 resource cleanup p3
 resource cleanup p3 node1
