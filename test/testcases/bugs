@@ -90,6 +90,10 @@ commit
 up
 resource
 failcount p4 show node1
+failcount p4 set node1 1
+failcount p4 show node1
+failcount p4 set node1 0
+failcount p4 show node1
 up
 configure
 _test
