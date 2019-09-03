@@ -87,7 +87,7 @@ primitive st stonith:null \
 	op monitor interval=60m
 primitive p4 Dummy
 commit
-configure show
+show
 up
 resource
 failcount p4 show node1
