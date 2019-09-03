@@ -90,6 +90,8 @@ commit
 up
 resource
 failcount p4 show node1
+up
+configure
 _test
 verify
 .
