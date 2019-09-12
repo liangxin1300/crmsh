@@ -2279,7 +2279,8 @@ def join_remote_auth(node):
     invoke("touch {}".format(PCMK_REMOTE_AUTH))
 
 
-def bootstrap_remove(cluster_node=None, ui_context=None, quiet=False, yes_to_all=False, force=False):
+def bootstrap_remove(cluster_node=None, ui_context=None, quiet=False, yes_to_all=False, force=False,
+                     qdevice=None, qnetd=None):
     """
     -c <cluster-node> - node to remove from cluster
     -q - quiet
@@ -2290,6 +2291,30 @@ def bootstrap_remove(cluster_node=None, ui_context=None, quiet=False, yes_to_all
     _context = Context(quiet=quiet, yes_to_all=yes_to_all)
     _context.cluster_node = cluster_node
     _context.ui_context = ui_context
+    _context.qdevice = qdevice
+    _context.qnetd = qnetd
+
+    if _context.qdevice:
+        if not utils.use_qdevice():
+            error("No QDevice configuration in this cluster")
+        if not confirm("Removing QDevice service and configuration from cluster: Are you sure?"):
+            return
+        status("Disable corosync-qdevice.service")
+        invoke("crm cluster run 'systemctl disable corosync-qdevice'")
+        status("Stopping corosync-qdevice.service")
+        invoke("crm cluster run 'systemctl stop corosync-qdevice'")
+
+        status("Removing QDevice configuration from cluster")
+        qnetd_host = corosync.get_value('quorum.device.net.host')
+        qdevice_inst = corosync.QDevice(qnetd_host)
+        qdevice_inst.remove_config()
+        update_expected_votes()
+        csync2_update(corosync.conf())
+
+        return
+
+    if _context.qnetd:
+        return
 
     if not yes_to_all and cluster_node is None:
         status("""Remove This Node from Cluster:
