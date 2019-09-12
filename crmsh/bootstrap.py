@@ -1516,10 +1516,32 @@ def init_qdevice():
         status("Copy ssh key to qnetd node({})".format(qnetd_addr))
         invoke("ssh-copy-id -i /root/.ssh/id_rsa.pub root@{}".format(qnetd_addr))
 
+    def qdevice_cert_process():
+        _context.qdevice.init_db_on_qnetd()
+        _context.qdevice.fetch_qnetd_crt_from_qnetd()
+        _context.qdevice.copy_qnetd_crt_to_cluster()
+        _context.qdevice.init_db_on_cluster()
+        _context.qdevice.create_ca_request()
+        _context.qdevice.copy_crq_to_qnetd()
+        _context.qdevice.sign_crq_on_qnetd()
+        _context.qdevice.fetch_cluster_crt_from_qnetd()
+        _context.qdevice.import_cluster_crt()
+        _context.qdevice.copy_p12_to_cluster()
+        _context.qdevice.import_p12_on_cluster()
+
     if not _context.qdevice:
         return
+
     status("""
 Configure Qdevice/Qnetd""")
+
+    qnetd_addr = _context.qdevice.ip
+    if _context.qdevice.test_ssh_need_passwd():
+        copy_ssh_id_to_qnetd()
+    try:
+        _context.qdevice.valid_qnetd()
+    except ValueError as err:
+        error(err)
 
     if _context.stage == "qdevice":
         if utils.use_qdevice() and not confirm("Qdevice is already configured - overwrite?"):
@@ -1528,14 +1550,17 @@ Configure Qdevice/Qnetd""")
     # qdevice need nodelist for mcast situation
     if corosync.get_value("totem.transport") != "udpu":
         add_nodelist_from_cmaptool()
+    status_long("Update configuration")
     update_expected_votes()
     csync2_update(corosync.conf())
     invoke("crm cluster run 'crm corosync reload'")
+    status_done()
 
-    qnetd_addr = _context.qdevice.ip
-    if _context.qdevice.test_ssh_need_passwd():
-        copy_ssh_id_to_qnetd()
     try:
+        if utils.qdevice_tls_on():
+            status_long("Qdevice certification process")
+            qdevice_cert_process()
+            status_done()
         status("Enable corosync-qdevice.service")
         invoke("crm cluster run 'systemctl enable corosync-qdevice'")
         status("Starting corosync-qdevice.service")
