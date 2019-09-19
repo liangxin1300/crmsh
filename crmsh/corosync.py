@@ -60,6 +60,7 @@ class Token(object):
 class QDevice(object):
     '''
     Whole certification process:
+    For init
     Step 1:  init_db_on_qnetd
     Step 2:  fetch_qnetd_crt_from_qnetd
     Step 3:  copy_qnetd_crt_to_cluster
@@ -71,14 +72,21 @@ class QDevice(object):
     Step 9:  import_cluster_crt
     Step 10: copy_p12_to_cluster
     Step 11: import_p12_on_cluster
+
+    For join
+    Step 1:  fetch_qnetd_crt_from_cluster
+    Step 2:  init_db_on_local
+    Step 3:  fetch_p12_from_cluster
+    Step 4:  import_p12_on_local
     '''
-    def __init__(self, ip, port=5403,
-                 algo="ffsplit", tie_breaker="lowest", tls="on"):
+    def __init__(self, ip, port=5403, algo="ffsplit",
+                 tie_breaker="lowest", tls="on", cluster_node=None):
         self.ip = ip
         self.port = port
         self.algo = algo
         self.tie_breaker = tie_breaker
         self.tls = tls
+        self.cluster_node = cluster_node
         self.askpass = False
 
         self.qnetd_service = "corosync-qnetd.service"
@@ -95,6 +103,10 @@ class QDevice(object):
     @property
     def qnetd_cacert_on_local(self):
         return "{}/{}/{}".format(self.qdevice_path, self.ip, self.qnetd_cacert_filename)
+
+    @property
+    def qnetd_cacert_on_cluster(self):
+        return "{}/{}/{}".format(self.qdevice_path, self.cluster_node, self.qnetd_cacert_filename)
 
     @property
     def qdevice_crq_on_qnetd(self):
@@ -116,6 +128,10 @@ class QDevice(object):
     def qdevice_p12_on_local(self):
         return "{}/nssdb/{}".format(self.qdevice_path, self.qdevice_p12_filename)
 
+    @property
+    def qdevice_p12_on_cluster(self):
+        return "{}/{}/{}".format(self.qdevice_path, self.cluster_node, self.qdevice_p12_filename)
+
     def valid_attr(self):
         if self.ip == utils.this_node() or \
            self.ip in utils.ip_in_local():
@@ -130,7 +146,7 @@ class QDevice(object):
             raise ValueError("invalid qdevice algorithm(ffsplit/lms)")
         if self.tie_breaker not in ["lowest", "highest"] and not utils.valid_nodeid(self.tie_breaker):
             raise ValueError("invalid qdevice tie_breaker(lowest/highest/valid_node_id)")
-        if self.tls not in ["on", "ff", "required"]:
+        if self.tls not in ["on", "off", "required"]:
             raise ValueError("invalid qdevice tls(on/off/required)")
 
     def valid_qnetd(self):
@@ -165,7 +181,7 @@ class QDevice(object):
 
     def init_db_on_qnetd(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 1
         Initialize database on QNetd server by running corosync-qnetd-certutil -i
         '''
@@ -184,7 +200,7 @@ class QDevice(object):
 
     def fetch_qnetd_crt_from_qnetd(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 2
         '''
         if os.path.exists(self.qnetd_cacert_on_local):
@@ -200,7 +216,7 @@ class QDevice(object):
 
     def copy_qnetd_crt_to_cluster(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 3
         Copy exported QNetd CA certificate (qnetd-cacert.crt) to every node
         '''
@@ -218,7 +234,7 @@ class QDevice(object):
 
     def init_db_on_cluster(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 4
         On one of cluster node initialize database by running
         /usr/sbin/corosync-qdevice-net-certutil -i -c qnetd-cacert.crt
@@ -232,7 +248,7 @@ class QDevice(object):
 
     def create_ca_request(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 5
         Generate certificate request:
         /usr/sbin/corosync-qdevice-net-certutil -r -n Cluster
@@ -248,7 +264,7 @@ class QDevice(object):
 
     def copy_crq_to_qnetd(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 6
         Copy exported CRQ to QNetd server
         '''
@@ -262,7 +278,7 @@ class QDevice(object):
 
     def sign_crq_on_qnetd(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 7
         On QNetd server sign and export cluster certificate by running
         corosync-qnetd-certutil -s -c qdevice-net-node.crq -n Cluster
@@ -276,7 +292,7 @@ class QDevice(object):
 
     def fetch_cluster_crt_from_qnetd(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 8
         Copy exported CRT to node where certificate request was created
         '''
@@ -290,7 +306,7 @@ class QDevice(object):
 
     def import_cluster_crt(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 9
         Import certificate on node where certificate request was created by
         running /usr/sbin/corosync-qdevice-net-certutil -M -c cluster-Cluster.crt
@@ -302,7 +318,7 @@ class QDevice(object):
 
     def copy_p12_to_cluster(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 10
         Copy output qdevice-net-node.p12 to all other cluster nodes
         '''
@@ -320,7 +336,7 @@ class QDevice(object):
 
     def import_p12_on_cluster(self):
         '''
-        Certificate process
+        Certificate process for init
         Step 11
         Import cluster certificate and key on all other cluster nodes:
         /usr/sbin/corosync-qdevice-net-certutil -m -c qdevice-net-node.p12
@@ -334,6 +350,58 @@ class QDevice(object):
         cmd = "corosync-qdevice-net-certutil -m -c {}".format(self.qdevice_p12_on_local)
         results = utils.parallax_call(node_list, cmd, self.askpass)
         self.handle_parallax_results(results)
+
+    def fetch_qnetd_crt_from_cluster(self):
+        '''
+        Certificate process for join
+        Step 1
+        '''
+        if os.path.exists(self.qnetd_cacert_on_cluster):
+            return
+
+        if self.askpass:
+            print("Fetch qnetd-cacert.crt from cluster node({})".format(self.cluster_node))
+        results = utils.parallax_slurp([self.cluster_node],
+                                       self.qdevice_path,
+                                       self.qnetd_cacert_on_local,
+                                       self.askpass)
+        self.handle_parallax_results(results)
+
+    def init_db_on_local(self):
+        '''
+        Certificate process for join
+        Step 2
+        '''
+        cmd = "corosync-qdevice-net-certutil -i -c {}".format(self.qnetd_cacert_on_cluster)
+        rc, _, err = utils.get_stdout_stderr(cmd)
+        if rc != 0:
+            raise ValueError(err)
+
+    def fetch_p12_from_cluster(self):
+        '''
+        Certificate process for join
+        Step 3
+        '''
+        if os.path.exists(self.qdevice_p12_on_cluster):
+            return
+
+        if self.askpass:
+            print("Fetch {} from cluster node({})".format(self.qdevice_p12_filename, self.cluster_node))
+        results = utils.parallax_slurp([self.cluster_node],
+                                       self.qdevice_path,
+                                       self.qdevice_p12_on_local,
+                                       self.askpass)
+        self.handle_parallax_results(results)
+
+    def import_p12_on_local(self):
+        '''
+        Certificate process for join
+        Step 4
+        '''
+        cmd = "corosync-qdevice-net-certutil -m -c {}".format(self.qdevice_p12_on_cluster)
+        rc, _, err = utils.get_stdout_stderr(cmd)
+        if rc != 0:
+            raise ValueError(err)
 
     def handle_parallax_results(self, results, _return=False):
         if not results:
