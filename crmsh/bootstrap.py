@@ -1565,9 +1565,9 @@ Configure Qdevice/Qnetd""")
         invoke("crm cluster run 'systemctl start corosync-qdevice'")
 
         status("Enable corosync-qnetd.service on {}".format(qnetd_addr))
-        _context.qdevice.enable()
+        _context.qdevice.enable_qnetd()
         status("Starting corosync-qnetd.service on {}".format(qnetd_addr))
-        _context.qdevice.start()
+        _context.qdevice.start_qnetd()
     except ValueError as err:
         error(err)
 
