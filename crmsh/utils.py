@@ -15,6 +15,7 @@ import bz2
 import fnmatch
 import gc
 import ipaddress
+import parallax
 from contextlib import contextmanager, closing
 from . import config
 from . import userdir
@@ -2221,84 +2222,43 @@ def valid_port(port):
     return int(port) >= 1024 and int(port) <= 65535
 
 
-def parallax_call(nodes, cmd, askpass=False, ssh_options=None):
-    def is_ssh_error(msg):
-        return re.search(" 255,.* (ssh:|Permission denied)", str(msg))
-
-    try:
-        import parallax
-    except ImportError:
-        raise ImportError("parallax python library is missing")
-
+def _parallax_before(askpass=False, ssh_options=None, localdir=None):
+    opts = parallax.Options()
     if ssh_options is None:
         ssh_options = ['StrictHostKeyChecking=no', 'ConnectTimeout=10']
-    opts = parallax.Options()
-    opts.ssh_options = ssh_options
-    opts.askpass = askpass
-    # warn_message will available from parallax-1.0.5
-    if hasattr(opts, 'warn_message'):
-        opts.warn_message = False
-
-    results = list(parallax.call(nodes, cmd, opts).items())
-    for host, result in results:
-        if isinstance(result, parallax.Error) and is_ssh_error(result):
-            common_warn("Failed on {}: {}".format(host, result))
-            results.remove((host, result))
-    return results
-
-
-def parallax_slurp(nodes, localdir, filename, askpass=False, ssh_options=None):
-    def is_ssh_error(msg):
-        return re.search(" 255,.* (ssh:|Permission denied)", str(msg))
-
-    try:
-        import parallax
-    except ImportError:
-        raise ImportError("parallax python library is missing")
-
-    if ssh_options is None:
-        ssh_options = ['StrictHostKeyChecking=no', 'ConnectTimeout=10']
-    opts = parallax.Options()
     opts.ssh_options = ssh_options
     opts.askpass = askpass
     # warn_message will available from parallax-1.0.5
     if hasattr(opts, 'warn_message'):
         opts.warn_message = False
     opts.localdir = localdir
-    dst = os.path.basename(filename)
+    return opts
 
-    results = list(parallax.slurp(nodes, filename, dst, opts).items())
+
+def _parallax_after(results):
     for host, result in results:
-        if isinstance(result, parallax.Error) and is_ssh_error(result):
-            common_warn("Failed on {}: {}".format(host, result))
-            results.remove((host, result))
+        if isinstance(result, parallax.Error):
+            raise ValueError("Failed on {}: {}".format(host, result))
     return results
+
+
+def parallax_call(nodes, cmd, askpass=False, ssh_options=None):
+    opts = _parallax_before(askpass, ssh_options)
+    results = list(parallax.call(nodes, cmd, opts).items())
+    return _parallax_after(results)
+
+
+def parallax_slurp(nodes, localdir, filename, askpass=False, ssh_options=None):
+    opts = _parallax_before(askpass, ssh_options, localdir)
+    dst = os.path.basename(filename)
+    results = list(parallax.slurp(nodes, filename, dst, opts).items())
+    return _parallax_after(results)
 
 
 def parallax_copy(nodes, src, dst, askpass=False, ssh_options=None):
-    def is_ssh_error(msg):
-        return re.search(" 255,.* (ssh:|Permission denied)", str(msg))
-
-    try:
-        import parallax
-    except ImportError:
-        raise ImportError("parallax python library is missing")
-
-    if ssh_options is None:
-        ssh_options = ['StrictHostKeyChecking=no', 'ConnectTimeout=10']
-    opts = parallax.Options()
-    opts.ssh_options = ssh_options
-    opts.askpass = askpass
-    # warn_message will available from parallax-1.0.5
-    if hasattr(opts, 'warn_message'):
-        opts.warn_message = False
-
+    opts = _parallax_before(askpass, ssh_options)
     results = list(parallax.copy(nodes, src, dst, opts).items())
-    for host, result in results:
-        if isinstance(result, parallax.Error) and is_ssh_error(result):
-            common_warn("Failed on {}: {}".format(host, result))
-            results.remove((host, result))
-    return results
+    return _parallax_after(results)
 
 
 def use_qdevice():
