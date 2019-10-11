@@ -1,3 +1,4 @@
+import re
 from crmsh import utils, bootstrap
 
 def run_command(cmd):
@@ -10,6 +11,8 @@ def before_scenario(context, scenario):
     if scenario.name == "Second node join and start qdevice":
         return
     if scenario.name == "Remove qdevice on a two nodes cluster":
+        return
+    if re.search(r'Validation [0-9]+', scenario.name):
         return
     if bootstrap.service_is_active('corosync.service'):
         run_command('crm cluster stop')
