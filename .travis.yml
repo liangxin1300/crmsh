@@ -41,13 +41,6 @@ jobs:
 
         - docker run -d --name=hanode1 --hostname hanode1 --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro -v "$(pwd):/app" ${Tumbleweed_image}
         - docker exec -t hanode1 /bin/sh -c "zypper -n in ${HA_packages}"
-        - docker exec -t hanode1 /bin/sh -c "echo \"172.17.0.3 hanode2\" >> /etc/hosts"
-
-        - docker run -d --name=hanode2 --hostname hanode2 --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro -v "$(pwd):/app" ${Tumbleweed_image}
-        - docker exec -t hanode2 /bin/sh -c "zypper -n in ${HA_packages}"
-        - docker exec -t hanode2 /bin/sh -c "echo \"172.17.0.2 hanode1\" >> /etc/hosts"
-        - docker exec -t hanode2 /bin/sh -c "systemctl start sshd.service"
-        - docker exec -t hanode2 /bin/sh -c "cd /app; ./test/run-in-travis.sh build"
 
       script:
         - docker exec -t hanode1 /bin/sh -c "cd /app; ./test/run-in-travis.sh bootstrap"

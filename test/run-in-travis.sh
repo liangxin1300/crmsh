@@ -23,7 +23,7 @@ regression_tests() {
 
 bootstrap_tests() {
 	echo "** Bootstrap process tests"
-        behave --no-capture --no-capture-stderr /usr/share/crmsh/tests/features
+        behave --no-capture --no-capture-stderr /usr/share/crmsh/tests/features/bootstrap.feature
 }
 
 case "$1" in
