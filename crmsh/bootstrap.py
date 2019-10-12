@@ -670,19 +670,26 @@ def init_ssh():
     start_service("sshd.service")
     invoke("mkdir -m 700 -p /root/.ssh")
     if os.path.exists("/root/.ssh/id_rsa"):
-        if not confirm("/root/.ssh/id_rsa already exists - overwrite?"):
-            return
-        if _context.yes_to_all and _context.no_overwrite_sshkey:
+        if _context.yes_to_all and _context.no_overwrite_sshkey or \
+           not confirm("/root/.ssh/id_rsa already exists - overwrite?"):
+
+            if os.path.exists("/root/.ssh/authorized_keys"):
+                check_authorized_keys_contain_sshkey()
+            else:
+                append("/root/.ssh/id_rsa.pub", "/root/.ssh/authorized_keys")
+
             return
         rmfile("/root/.ssh/id_rsa")
+
     status("Generating SSH key")
     invoke("ssh-keygen -q -f /root/.ssh/id_rsa -C 'Cluster Internal' -N ''")
     append("/root/.ssh/id_rsa.pub", "/root/.ssh/authorized_keys")
 
 
-def init_ssh_remote():
+def check_authorized_keys_contain_sshkey():
     """
-    Called by ha-cluster-join
+    Check whether /root/.ssh/authorized_keys contain ssh public key
+    If not, append ssh public key to /root/.ssh/authorized_keys
     """
     authkeys = open("/root/.ssh/authorized_keys", "r+")
     authkeys_data = authkeys.read()
@@ -693,6 +700,13 @@ def init_ssh_remote():
         keydata = open(fn + ".pub").read()
         if keydata not in authkeys_data:
             append(fn + ".pub", "/root/.ssh/authorized_keys")
+
+
+def init_ssh_remote():
+    """
+    Called by ha-cluster-join
+    """
+    check_authorized_keys_contain_sshkey()
 
 
 def init_csync2():
