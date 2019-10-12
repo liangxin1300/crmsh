@@ -21,8 +21,25 @@ regression_tests() {
 	sh /usr/share/crmsh/tests/regression.sh
 }
 
-unit_tests
-rc_unittest=$?
-configure
-make_install
-regression_tests && exit $rc_unittest
+bootstrap_tests() {
+	echo "** Bootstrap process tests"
+        behave --no-capture --no-capture-stderr /usr/share/crmsh/tests/features
+}
+
+case "$1" in
+	build)
+		configure
+		make_install
+		exit $?;;
+	bootstrap)
+		configure
+		make_install
+		bootstrap_tests
+		exit $?;;
+	*)
+		unit_tests
+		rc_unittest=$?
+		configure
+		make_install
+		regression_tests && exit $rc_unittest;;
+esac
