@@ -5,7 +5,7 @@ services:
   - docker
 
 stages:
-  - test
+  - test test_bootstrap
   - delivery
   - submit  
 
@@ -35,7 +35,7 @@ jobs:
       after_script:
         - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT
 
-    - stage: test bootstrap
+    - stage: test_bootstrap
       before_install:
         - docker pull ${Tumbleweed_image}
 

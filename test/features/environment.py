@@ -85,10 +85,3 @@ Note:
 def before_feature(context, feature):
     if feature.name == "HA bootstrap process":
         context.init_help_message = CLUSTER_INIT_HELP_MESSAGE
-
-def before_scenario(context, scenario):
-    if utils.check_service_active('corosync.service', 'local'):
-        utils.run_command('crm cluster stop')
-    if scenario.name == "No overwrite ssh key but append to authorized_keys":
-        if os.path.exists('/root/.ssh/authorized_keys'):
-            os.remove('/root/.ssh/authorized_keys')
