@@ -8,7 +8,6 @@ stages:
   - test test_bootstrap
   - delivery
   - submit  
-
 env:
   global:
     - CC_TEST_REPORTER_ID=a2579335b631ec35473874d7bb4fe983025c0287cea89c9dc34c35f98ee3963d
