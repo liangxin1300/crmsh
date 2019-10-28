@@ -77,3 +77,27 @@ commit
 _test
 verify
 .
+session failcount
+configure
+erase
+node node1
+primitive st stonith:null \
+	params hostlist='node1' \
+	meta description="some description here" requires=nothing \
+	op monitor interval=60m
+primitive p4 Dummy
+commit
+show
+up
+resource
+failcount p4 show node1
+failcount p4 set node1 1
+failcount p4 show node1
+failcount p4 set node1 0
+failcount p4 show node1
+up
+configure
+_test
+verify
+.
+
