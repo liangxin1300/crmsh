@@ -1,5 +1,5 @@
 @bootstrap
-Feature: HA bootstrap process 3
+Feature: HA bootstrap process - udpu
 
   Scenario: 9. Init cluster service with udpu
     Given   Cluster service is "stopped" on "local"

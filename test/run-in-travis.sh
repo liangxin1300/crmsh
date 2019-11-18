@@ -23,7 +23,7 @@ regression_tests() {
 
 bootstrap_tests() {
 	echo "** Bootstrap process tests using python-behave"
-        behave --no-logcapture --tags "@bootstrap" --tags "~@wip" /usr/share/crmsh/tests/features/bootstrap_$1.feature
+        behave --no-logcapture --tags "@bootstrap" --tags "~@wip" /usr/share/crmsh/tests/features/bootstrap_*.feature
 }
 
 case "$1" in
@@ -34,7 +34,7 @@ case "$1" in
 	bootstrap)
 		configure
 		make_install
-		bootstrap_tests "$2"
+		bootstrap_tests
 		exit $?;;
 	*)
 		unit_tests

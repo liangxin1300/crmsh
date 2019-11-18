@@ -27,7 +27,7 @@ before() {
 }
 
 run() {
-  docker exec -t hanode1 /bin/sh -c "cd /app; ./test/run-in-travis.sh bootstrap $1"
+  docker exec -t hanode1 /bin/sh -c "cd /app; ./test/run-in-travis.sh bootstrap"
 }
 
 case "$1" in
@@ -35,6 +35,6 @@ case "$1" in
     before
     ;;
   script)
-    run $2
+    run
     ;;
 esac
