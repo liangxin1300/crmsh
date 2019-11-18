@@ -69,7 +69,6 @@ test/features/bootstrap_1.feature
 test/features/bootstrap_2.feature
 test/features/bootstrap_3.feature
 test/features/environment.py
-test/features/hb_report_1.feature
 test/features/steps/step_bootstrap.py
 test/features/steps/utils.py
 test/history-test.tar.bz2
