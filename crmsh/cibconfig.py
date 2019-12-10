@@ -3231,6 +3231,7 @@ class CibFactory(object):
                 continue
             if spec == "changed":
                 obj_set |= orderedset.oset(self.modified_elems())
+                obj_set |= orderedset.oset(self.remove_queue)
             elif spec.startswith("type:"):
                 obj_set |= orderedset.oset(self.get_elems_on_type(spec))
             elif spec.startswith("tag:"):
