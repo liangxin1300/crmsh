@@ -1,9 +1,11 @@
+import os
 import re
 import time
+import datetime
 from behave import given, when, then
 from crmsh import corosync, parallax
 from utils import check_cluster_state, check_service_state, online, run_command, me, \
-                  run_command_local_or_remote
+        run_command_local_or_remote, get_file_type, get_all_files
 import const
 
 
@@ -32,7 +34,9 @@ def step_impl(context, addr, iface):
 @when('Run "{cmd}" on "{addr}"')
 def step_impl(context, cmd, addr):
     out = run_command_local_or_remote(context, cmd, addr)
-    context.stdout = out
+    if out:
+        context.stdout = out
+        context.logger.info("\n{}".format(out))
 
 
 @when('Try "{cmd}" on "{addr}"')
@@ -77,6 +81,12 @@ def step_impl(context, msg):
 @then('Except "{msg}" in stderr')
 def step_impl(context, msg):
     assert msg in context.command_error_output
+    context.command_error_output = None
+
+
+@then('Except multiline')
+def step_impl(context):
+    assert context.command_error_output == context.text
     context.command_error_output = None
 
 
@@ -186,3 +196,43 @@ def step_impl(context, cmd):
     cmd_help["crm_cluster_geo-init-arbitrator"] = const.CRM_CLUSTER_GEO_INIT_ARBIT_H_OUTPUT
     key = '_'.join(cmd.split())
     assert context.stdout == cmd_help[key]
+
+
+@then('Default hb_report tar file created')
+def step_impl(context):
+    default_file_name = 'hb_report-{}.tar.bz2'.format(datetime.datetime.now().strftime("%a-%d-%b-%Y"))
+    assert os.path.exists(default_file_name) is True
+
+
+@then('Default hb_report directory created')
+def step_impl(context):
+    default_file_name = 'hb_report-{}'.format(datetime.datetime.now().strftime("%a-%d-%b-%Y"))
+    assert os.path.isdir(default_file_name) is True
+
+
+@then('"{file_name}" created')
+def step_impl(context, file_name):
+    file_type = get_file_type(file_name)
+    if file_type == "bzip2":
+        assert os.path.exists(file_name) is True
+    if file_type == "directory":
+        assert os.path.isdir(file_name) is True
+
+
+@then('"{archive_name}" include essential files for "{nodes}"')
+def step_impl(context, archive_name, nodes):
+    files = 'cib.txt cib.xml context.txt corosync.conf crm_mon.txt journal.log sysinfo.txt'
+    essential_files_list = []
+    base_archive_name = ""
+    archive_type = get_file_type(archive_name)
+
+    if archive_type == "bzip2":
+        base_archive_name = '.'.join(os.path.basename(archive_name).split('.')[:-2])
+    if archive_type == "directory":
+        base_archive_name = archive_name
+    for node in nodes.split():
+        essential_files_list += ["{}/{}/{}".format(base_archive_name, node, f) for f in files.split()]
+    
+    all_files = get_all_files(archive_name)
+    for ef in essential_files_list:
+        assert ef in all_files
