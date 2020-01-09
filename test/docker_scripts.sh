@@ -1,6 +1,6 @@
 #!/bin/bash
 Tumbleweed_image='liangxin1300/hatbw'
-HA_packages='pacemaker corosync corosync-qdevice'
+HA_packages='pacemaker corosync corosync-qdevice file'
 TEST_TYPE='bootstrap qdevice hb_report'
 
 before() {

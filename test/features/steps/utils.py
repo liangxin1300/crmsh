@@ -1,5 +1,26 @@
+import re
 import socket
+import tarfile
+import glob
 from crmsh import utils, bootstrap, parallax
+
+
+def get_file_type(file_path):
+    rc, out, _ = utils.get_stdout_stderr("file {}".format(file_path))
+    if re.search(r'{}: bzip2'.format(file_path), out):
+        return "bzip2"
+    if re.search(r'{}: directory'.format(file_path), out):
+        return "directory"
+
+
+def get_all_files(archive_path):
+    archive_type = get_file_type(archive_path)
+    if archive_type == "bzip2":
+        with tarfile.open(archive_path) as tar:
+            return tar.getnames()
+    if archive_type == "directory":
+        all_files = glob.glob("{}/*".format(archive_path)) + glob.glob("{}/*/*".format(archive_path))
+        return all_files
 
 
 def me():
