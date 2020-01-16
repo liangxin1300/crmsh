@@ -24,10 +24,10 @@ jobs:
         - ./cc-test-reporter before-build
 
       before_install:
-        - docker pull krig/crmsh:latest
+        - docker pull liangxin1300/haleap:15.2
 
       script:
-        - docker run -t -v "$(pwd):/app" krig/crmsh /bin/sh -c "systemctl start dbus; cd /app; ./test/run-in-travis.sh"
+        - docker run -t -v "$(pwd):/app" liangxin1300/haleap:15.2 /bin/sh -c "systemctl start dbus; cd /app; ./test/run-in-travis.sh"
 
       after_failure:
         - sudo cat $TRAVIS_BUILD_DIR/crmtestout/regression.out $TRAVIS_BUILD_DIR/crmtestout/crm.*
