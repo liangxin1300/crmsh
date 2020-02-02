@@ -2,16 +2,18 @@ import re
 import os
 import sys
 import shutil
-import stat
 import pwd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from hb_report import const, utils
+from hb_report import const, utils, core
 from crmsh import utils as crmutils
 from crmsh import bootstrap
 
 
 def distro():
+    """
+    Get distro information
+    """
     if os.path.exists(const.OSRELEASE):
         utils.log_debug2("Using {} for distribution info".format(const.OSRELEASE))
         cmd = "cat {}|awk -F'=' '/PRETTY_NAME/{{print $2}}'".format(const.OSRELEASE)
@@ -29,22 +31,24 @@ def distro():
 
 
 def sys_info(context):
-    '''
+    """
     packages version and system info
-    '''
+    """
     pkg_inst = utils.Package(const.PACKAGES)
-    out_string = "===== Cluster Stack Packages Verion =====\n"
+    out_string = "===== Cluster Stack Packages Version =====\n"
     out_string += pkg_inst.version()
     if not context.speed_up:
         out_string += "\n===== Cluster Stack Packages Verify =====\n"
         out_string += pkg_inst.verify()
+    else:
+        utils.log_debug1("Skip verify cluster stack packages")
 
     platform, _, release, _, arch = os.uname()
     out_string += "\n===== System Info =====\n"
     out_string += "Platform: %s\n" % platform
     out_string += "Kernel release: %s\n" % release
     out_string += "Architecture: %s\n" % arch
-    if os.uname()[0] == "Linux":
+    if platform == "Linux":
         out_string += "Distribution: %s\n" % distro()
 
     crmutils.str2file(out_string, os.path.join(context.work_dir, const.SYSINFO_F))
@@ -55,9 +59,11 @@ def sbd_info(context):
     """
     save sbd configuration file
     """
-    if os.path.exists(const.SBDCONF):
-        shutil.copy2(const.SBDCONF, context.work_dir)
-        utils.log_debug1("Dump SBD config into {}/{}".format(context.dest_path, os.path.basename(const.SBDCONF)))
+    if not os.path.exists(const.SBDCONF):
+        utils.log_debug2("SBD config file {} not exist".format(const.SBDCONF))
+        return
+    shutil.copy2(const.SBDCONF, context.work_dir)
+    utils.log_debug1("Dump SBD config into {}/{}".format(context.dest_path, os.path.basename(const.SBDCONF)))
     if not utils.which("sbd"):
         utils.log_debug2("Command \"sbd\" not exist")
         return
@@ -68,7 +74,7 @@ def sbd_info(context):
         if rc == 0 and out:
             f.write("===== Run \"{}\" on {} =====\n".format(cmd, utils.me()))
             f.write(out)
-    utils.log_debug1("Dump SBD info into {}/{}".format(context.dest_path, const.SBD_F))
+            utils.log_debug1("Dump SBD info into {}/{}".format(context.dest_path, const.SBD_F))
 
 
 def sys_stats(context):
@@ -95,6 +101,9 @@ def sys_stats(context):
 
 
 def dump_state(context):
+    """
+    Dump output of crm_mon, cibadmin and crm_node
+    """
     for cmd, outf, means in [("crm_mon -1", const.CRM_MON_F, "crm_mon output"),
             ("cibadmin -Ql", const.CIB_F, "cib xml"),
             ("crm_node -p", const.MEMBERSHIP_F, "members of this partition")]:
@@ -104,11 +113,13 @@ def dump_state(context):
             utils.log_debug1("Dump {} into {}/{}".format(means, context.dest_path, outf))
 
 
-def get_config(context):
+def get_corosync_conf(context):
     if os.path.isfile(const.CONF):
         shutil.copy2(const.CONF, context.work_dir)
         utils.log_debug1("Dump corosync config into {}/{}".format(context.dest_path, os.path.basename(const.CONF)))
 
+
+def dump_cluster_status(context):
     if bootstrap.service_is_active("pacemaker.service"):
         dump_state(context)
         utils.touch_file(os.path.join(context.work_dir, "RUNNING"))
@@ -121,18 +132,29 @@ def get_config(context):
         utils.touch_file(os.path.join(context.work_dir, "STOPPED"))
         utils.log_debug1("Cluster service is stopped, touch \"STOPPED\" file at {}".format(context.dest_path))
 
+
+def get_crm_configure(context):
     if os.path.isfile(os.path.join(context.work_dir, const.CIB_F)):
         cmd = r"CIB_file=%s/%s crm configure show" % (context.work_dir, const.CIB_F)
         rc, out, _ = crmutils.get_stdout_stderr(cmd)
         if rc == 0 and out:
             crmutils.str2file(out, os.path.join(context.work_dir, const.CIB_TXT_F))
             utils.log_debug1("Dump cib config into {}/{}".format(context.dest_path, const.CIB_TXT_F))
+        dump_crm_verify(context)
 
-        cmd = "crm_verify -V -x %s" % os.path.join(context.work_dir, const.CIB_F)
-        rc, _, err = crmutils.get_stdout_stderr(cmd)
-        if rc != 0 and err:
-            crmutils.str2file(err, os.path.join(context.work_dir, const.CRM_VERIFY_F))
-            utils.log_error("Create {} because crm_verify failed".format(const.CRM_VERIFY_F))
+
+def dump_crm_verify(context):
+    cmd = "crm_verify -V -x %s" % os.path.join(context.work_dir, const.CIB_F)
+    rc, _, err = crmutils.get_stdout_stderr(cmd)
+    if rc != 0 and err:
+        crmutils.str2file(err, os.path.join(context.work_dir, const.CRM_VERIFY_F))
+        utils.log_error("Create {} because crm_verify failed".format(const.CRM_VERIFY_F))
+
+
+def get_config(context):
+    get_corosync_conf(context)
+    dump_cluster_status(context)
+    get_crm_configure(context)
 
 
 def get_pe_inputs(context):
@@ -152,18 +174,20 @@ def get_pe_inputs(context):
 
 
 def convert_pe_dot_files(context, flist, flist_dir):
-    if len(flist) <= 20:
-        if not context.speed_up:
-            for f in flist:
-                pe_to_dot(os.path.join(flist_dir, os.path.basename(f)))
-    else:
+    if context.speed_up:
+        utils.log_debug1("Skip convert PE inputs to dot files")
+        return
+    if len(flist) > 20:
         utils.log_debug2("Too many PE inputs to create dot files")
+        return
+    for f in flist:
+        pe_to_dot(os.path.join(flist_dir, os.path.basename(f)))
 
 
 def find_pe_files(context):
     flist = []
     utils.log_debug2("Looking for PE files in {}".format(context.pe_dir))
-    for f in utils.find_files(context, context.pe_dir):
+    for f in find_files(context, context.pe_dir):
         if re.search("[.]last$", f):
             continue
         flist.append(f)
@@ -180,6 +204,7 @@ def pe_to_dot(pe_file):
 
 def touch_dc(context):
     if context.speed_up:
+        utils.log_debug1("Skip find DC node")
         return
     node = crmutils.get_dc()
     if node and node == utils.me():
@@ -191,7 +216,7 @@ def get_core_files(context):
     """
     Collect for core files within the report timeframe
     """
-    cores = utils.find_files(context, context.cores_dirs)
+    cores = find_files(context, context.cores_dirs)
     flist = [f for f in cores if "core" in os.path.basename(f)]
     if flist:
         utils.log_debug2("Found core files: %s" % ' '.join(flist))
@@ -208,8 +233,6 @@ def get_other_confs(context):
             shutil.copy2(conf, context.work_dir)
         elif os.path.isdir(conf):
             shutil.copytree(conf, os.path.join(context.work_dir, os.path.basename(conf)))
-        else:
-            continue
         utils.log_debug1("Dump {} into {}".format(conf, context.dest_path))
 
 
@@ -219,64 +242,79 @@ def check_perms(context):
     """
     out_string = ""
     for check_dir in (context.pcmk_lib, context.pe_dir, context.cib_dir):
-        OK = True
         out_string += "===== Check permissions for {} on {} ===== ".format(check_dir, utils.me())
-        stat_info = os.stat(check_dir)
-        if not stat.S_ISDIR(stat_info.st_mode):
-            OK = False
-            out_string += "\n{} wrong type or doesn't exist\n".format(check_dir)
+        if not os.path.exists(check_dir):
+            out_string += "\n{} not exist\n".format(check_dir)
             continue
-        if stat_info.st_uid != pwd.getpwnam('hacluster')[2] or\
-           stat_info.st_gid != pwd.getpwnam('hacluster')[3] or\
-           "%04o" % (stat_info.st_mode & 0o7777) != "0750":
-            OK = False
-            out_string += "\nwrong permissions or ownership for {}: ".format(check_dir)
-            out_string += crmutils.get_stdout("ls -ld {}".format(check_dir))[1] + '\n'
-        if OK:
-            out_string += "\nOK\n"
+        if not os.path.isdir(check_dir):
+            out_string += "\n{} is not directory\n".format(check_dir)
+            continue
+
+        stat_info = os.stat(check_dir)
+        _, _, uid, gid, *_ = pwd.getpwnam('hacluster')
+        if stat_info.st_uid != uid or stat_info.st_gid != gid or\
+                "%04o" % (stat_info.st_mode & 0o7777) != "0750":
+            out_string += "\nWrong permissions or ownership for {}: ".format(check_dir)
+            _, out = crmutils.get_stdout("ls -ld {}".format(check_dir))
+            out_string += out + '\n'
+            continue
+
+        out_string += "\nOK\n"
+
     crmutils.str2file(out_string, os.path.join(context.work_dir, const.PERMISSIONS_F))
     utils.log_debug1("Dump permissions info into {}".format(context.dest_path))
 
 
-def dlm_dump(context):
-    '''
-    Get dlm info
-    '''
-    def has_error(cmd, rc, out, err):
-        if rc != 0:
-            utils.log_debug2("Error running \"{}\": {}".format(cmd, err))
-            return True
-        if not out:
-            utils.log_debug2("No output for \"{}\"".format(cmd))
-            return True
-        return False
-
-    if not utils.which("dlm_tool"):
-        utils.log_debug2("Command dlm_tool not exist")
-        return
-
+def dlm_lockspace_dump():
     out_string = "===== DLM lockspace overview =====\n"
     cmd = "dlm_tool ls"
     rc, out, err = crmutils.get_stdout_stderr(cmd)
-    if has_error(cmd, rc, out, err):
-        return
+    if rc != 0 and err:
+        utils.log_error("Error running \"{}\": {}".format(cmd, err))
+        return None
     out_string += out + '\n'
     for item in re.findall("^name", out, re.M):
         lock_name = item.split()[1]
         out_string += "-- DLM lockspace {} --\n".format(lock_name)
         cmd = "dlm_tool lockdebug {}".format(lock_name)
         rc, debug_out, err = crmutils.get_stdout_stderr(cmd)
-        if has_error(cmd, rc, debug_out, err):
-            return
+        if rc != 0 and err:
+            utils.log_error("Error running \"{}\": {}".format(cmd, err))
+            return None
         out_string += debug_out + '\n'
+    return out_string
 
-    out_string += "===== DLM lockspace history =====\n"
+
+def dlm_lockspace_history():
+    out_string = "===== DLM lockspace history =====\n"
     cmd = "dlm_tool dump"
     rc, out, err = crmutils.get_stdout_stderr(cmd)
-    if has_error(cmd, rc, out, err):
-        return
+    if rc != 0 and err:
+        utils.log_error("Error running \"{}\": {}".format(cmd, err))
+        return None
     out_string += out + '\n'
-    
+    return out_string
+
+
+def dlm_dump(context):
+    '''
+    Get dlm info
+    '''
+    if not utils.which("dlm_tool"):
+        utils.log_debug2("Command dlm_tool not exist")
+        return
+
+    out_string = ""
+    data_dump = dlm_lockspace_dump()
+    if not data_dump:
+        return
+    out_string += data_dump
+
+    data_history = dlm_lockspace_history()
+    if not data_history:
+        return
+    out_string += data_history
+
     crmutils.str2file(out_string, os.path.join(context.work_dir, const.DLM_DUMP_F))
     utils.log_debug1("Dump DLM info into {}/{}".format(context.dest_path, const.DLM_DUMP_F))
 
@@ -298,7 +336,7 @@ def corosync_blackbox(context):
             utils.log_debug2("Command {} not exist".format(cmd))
             return
     fdata_list = []
-    for f in utils.find_files(context, const.COROSYNC_LIB):
+    for f in find_files(context, const.COROSYNC_LIB):
         if re.search("fdata", f):
             fdata_list.append(f)
     if fdata_list:
@@ -314,9 +352,70 @@ def get_ratraces(context):
         return
     utils.log_debug2("Looking for RA trace files in {}".format(trace_dir))
     flist = []
-    for f in utils.find_files(context, trace_dir):
+    for f in find_files(context, trace_dir):
         flist.append(os.path.join("trace_ra", '/'.join(f.split('/')[-2:])))
     if flist:
         cmd = "tar -cf - -C {} {} | tar -xf - -C {}".format(os.path.dirname(trace_dir), ' '.join(flist), context.work_dir)
         crmutils.get_stdout_stderr(cmd)
         utils.log_debug1("Dump RA trace files at {}".format(context.dest_path))
+
+
+def dump_D_process():
+    '''
+    dump D-state process stack
+    '''
+    out_string = ""
+    _, out, _ = crmutils.get_stdout_stderr("ps aux|awk '$8 ~ /^D/{print $2}'")
+    len_D_process = len(out.split('\n')) if out else 0
+    out_string += "Dump D-state process stack: {}\n".format(len_D_process)
+    if len_D_process == 0:
+        return out_string
+    for pid in out.split('\n'):
+        _, cmd_out, _ = crmutils.get_stdout_stderr("cat /proc/{}/comm".format(pid))
+        out_string += "pid: {}     comm: {}\n".format(pid, cmd_out)
+        _, stack_out, _ = crmutils.get_stdout_stderr("cat /proc/{}/stack".format(pid))
+        out_string += stack_out + "\n\n"
+    return out_string
+
+
+def dump_ocfs2(context):
+    out_string = ""
+    out_string += dump_D_process()
+
+    cmds = ["dmesg",  "ps -efL", "lsof",
+            "lsblk -o 'NAME,KNAME,MAJ:MIN,FSTYPE,LABEL,RO,RM,MODEL,SIZE,OWNER,GROUP,MODE,ALIGNMENT,MIN-IO,OPT-IO,PHY-SEC,LOG-SEC,ROTA,SCHED,MOUNTPOINT'",
+            "mounted.ocfs2 -f", "findmnt", "mount", "cat /sys/fs/ocfs2/cluster_stack"]
+    for cmd in cmds:
+        cmd_name = cmd.split()[0]
+        if not utils.which(cmd_name) or\
+                cmd_name == "cat" and not os.path.exists(cmd.split()[1]):
+            continue
+        _, out = crmutils.get_stdout(cmd)
+        if out:
+            out_string += "\n\n#=====[ Command ] ==========================#\n"
+            out_string += "# {}\n".format(cmd)
+            out_string += out
+
+    crmutils.str2file(out_string, os.path.join(context.work_dir, const.OCFS2_F))
+    utils.log_debug1("Dump OCFS2 info into {}/{}".format(context.dest_path, const.OCFS2_F))
+
+
+def find_files(context, find_dirs):
+    res = []
+    findexp = "-newer {} ! -newer {}".format(context.from_time_file, context.to_time_file)
+    cmd = r"find {} -type f {}".format(find_dirs, findexp)
+    rc, out, _ = crmutils.get_stdout_stderr(cmd)
+    if rc == 0 and out:
+        res = out.split('\n')
+    return res
+
+
+def get_extra_logs(context):
+    for l in context.extra_logs:
+        if not os.path.isfile(l):
+            continue
+        core.dump_logset(context, l)
+
+
+def dump_context(context):
+    crmutils.str2file(context.dumps(), os.path.join(context.work_dir, const.CTX_F))

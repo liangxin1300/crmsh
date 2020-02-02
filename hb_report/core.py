@@ -2,7 +2,6 @@ import os
 import sys
 import argparse
 import datetime
-import atexit
 import shutil
 import time
 import glob
@@ -14,7 +13,7 @@ from multiprocessing import Process
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from hb_report import const, utils, collect
 from crmsh import utils as crmutils
-from crmsh import corosync
+from crmsh import corosync, tmpfiles
 from crmsh.config import report, path, core
 
 
@@ -56,8 +55,8 @@ class Context(object):
         self.__dict__['single'] = report.single_node
 
         self.__dict__['to_time'] = utils.parse_to_timestamp(utils.now())
-        self.__dict__['sensitive_regex'] = "passw.*"
-        self.__dict__['regex'] = "CRIT: ERROR: error: warning: crit:"
+        self.__dict__['sensitive_regex'] = ["passw.*"]
+        self.__dict__['regex'] = "CRIT: ERROR: error: warning: crit:".split()
         self.__dict__['ssh_askpw_nodes'] = []
 
     def __str__(self):
@@ -66,8 +65,17 @@ class Context(object):
     def __setattr__(self, name, value):
         if name in ["from_time", "to_time"]:
             value = utils.parse_to_timestamp(value)
-        elif isinstance(value, list) and utils.is_2dlist(value):
-            value = utils.zip_nested(value)
+        if name == "ssh_options" and value:
+            value = utils.unzip_list(value)
+            for item in value:
+                if not re.search('.*=.*', item):
+                    utils.log_fatal("Wrong format of ssh option \"{}\"".format(item))
+        if name == "nodes":
+            value = utils.unzip_list(value)
+        if name in ["extra_logs", "regex", "sensitive_regex"]:
+            value = utils.unzip_list(value) + self.__dict__[name]
+        if isinstance(value, list):
+            value = utils.unique(value)
         super().__setattr__(name, value)
 
     def __setitem__(self, key, value):
@@ -76,121 +84,51 @@ class Context(object):
     def dumps(self):
         return json.dumps(self.__dict__, indent=2)
 
-    def create_tempfile(self):
-        self.temp_file = utils.make_temp_file()
-        utils.log_debug2("Create tempfile \"{}\"".format(self.temp_file))
-
-    def add_tempfile(self, filename):
-        with open(self.temp_file, 'a') as f:
-            f.write(filename + '\n')
-        utils.log_debug2("Add tempfile \"{}\" to \"{}\"".format(filename, self.temp_file))
-
-    def drop_tempfile(self):
-        with open(self.temp_file, 'r') as f:
-            for line in f.read().split('\n'):
-                if os.path.isdir(line):
-                    shutil.rmtree(line)
-                if os.path.isfile(line):
-                    os.remove(line)
-        os.remove(self.temp_file)
-        utils.log_debug2("Remove tempfile \"{}\"".format(self.temp_file))
-
-
-def print_extra_help():
-    print('''
-  . the multifile output is stored in a tarball {dest}.tar.bz2
-  . the time specification is as in either Date::Parse or
-    Date::Manip, whatever you have installed; Date::Parse is
-    preferred
-  . we try to figure where is the logfile; if we can't, please
-    clue us in ('-l')
-  . we collect only one logfile and /var/log/messages; if you
-    have more than one logfile, then use '-E' option to supply
-    as many as you want ('-M' empties the list)
-
-  Examples
-
-    report -f 2pm report_1
-    report -f "2007/9/5 12:30" -t "2007/9/5 14:00" report_2
-    report -f 1:00 -t 3:00 -l /var/log/cluster/ha-debug report_3
-    report -f "09sep07 2:00" -u hbadmin report_4
-    report -f 18:00 -p "usern.*" -p "admin.*" report_5
-    report -f cts:133 ctstest_133
-
-  . WARNING . WARNING . WARNING . WARNING . WARNING . WARNING .
-
-    We won't sanitize the CIB and the peinputs files, because
-    that would make them useless when trying to reproduce the
-    PE behaviour. You may still choose to obliterate sensitive
-    information if you use the -s and -p options, but in that
-    case the support may be lacking as well. The logs and the
-    crm_mon, ccm_tool, and crm_verify output are *not* sanitized.
-
-    Additional system logs (/var/log/messages) are collected in
-    order to have a more complete report. If you don't want that
-    specify -M.
-
-    IT IS YOUR RESPONSIBILITY TO PROTECT THE DATA FROM EXPOSURE!''')
-
-
 
 def parse_argument(context):
-    parser = argparse.ArgumentParser(description='{} - create report for HA cluster'.format(context.name),
-                                     add_help=False)
-    parser.add_argument('-h', '--help', dest='help', action='store_true',
-                        help='show this help message and exit')
+    parser = argparse.ArgumentParser(
+            usage="{} [options] [dest]".format(context.name),
+            add_help=False,
+            formatter_class=lambda prog: argparse.HelpFormatter(prog, width=80))
+    parser.add_argument("-h", "--help", action="store_true", dest="help",
+            help="Show this help message and exit")
     parser.add_argument('-f', dest='from_time', metavar='time',
-                        help='time to start from')
+            help='time to start from (default: 12 hours before)')
     parser.add_argument('-t', dest='to_time', metavar='time',
-                        help='time to finish at (default: now)')
+            help='time to finish at (default: now)')
     parser.add_argument('-d', dest='no_compress', action='store_true',
-                        help="don't compress, but leave result in a directory")
-    parser.add_argument('-n', dest='nodes', metavar='node', action="append",
-                        help='''node names for this cluster; this option is additive
-                                (use -n a -n b)
-                                if you run report on the loghost or use autojoin,
-                                it is highly recommended to set this option''')
+            help="don't compress, but leave result in a directory")
+    parser.add_argument('-n', dest='nodes', metavar='node', action="append", default=[],
+            help='node names for this cluster; this option is additive (use -n a -n b or -n "a b"); if you run report on the loghost or use autojoin, it is highly recommended to set this option''')
     parser.add_argument('-u', dest='ssh_user', metavar='user',
-                        help='ssh user to access other nodes'),
+            help='ssh user to access other nodes'),
     parser.add_argument('-X', dest='ssh_options', metavar='ssh-options', action='append', default=[],
-                        help='extra ssh(1) options'),
-    parser.add_argument('-l', dest='ha_log', metavar='file',
-                        help='log file')
-    parser.add_argument('-E', dest='extra_logs', metavar='file', action='append',
-                        help='''extra logs to collect; this option is additive
-                                (dflt: /var/log/messages)''')
+            help='extra ssh(1) options (default: StrictHostKeyChecking=no EscapeChar=none ConnectTimeout=15); this option is additive (use -X opt1 -X opt2 or -X "opt1 opt2")'),
+    parser.add_argument('-E', dest='extra_logs', metavar='file', action='append', default=[],
+            help='extra logs to collect (default: /var/log/messages, /var/log/pacemaker/pacemaker.log, /var/log/pacemaker.log, /var/log/ha-cluster-bootstrap.log); this option is additive (use -E file1 -E file2 or -E "file1 file2")')
     parser.add_argument('-s', dest='sanitize', action='store_true',
-                        help='sanitize the PE and CIB files')
-    parser.add_argument('-p', dest='sensitive_regex', metavar='patt', action='append',
-                        help='''regular expression to match variables containing sensitive data;
-                                this option is additive (dflt: "passw.*")''')
-    parser.add_argument('-L', dest='regex', metavar='patt', action='append',
-                        help='''regular expression to match in log files for analysis;
-                                this option is additive (dflt: CRIT: ERROR:)''')
-    parser.add_argument('-e', dest='editor', metavar='prog',
-                        help='your favourite editor')
+            help='replace sensitive info in PE or CIB files')
+    parser.add_argument('-p', dest='sensitive_regex', metavar='patt', action='append', default=[],
+            help='regular expression to match variables containing sensitive data (default: passw.*); this option is additive (use -p patt1 -p patt2 or -p "patt1 patt2")')
+    parser.add_argument('-L', dest='regex', metavar='patt', action='append', default=[],
+            help='regular expression to match in log files for analysis (default: CRIT:, ERROR:, error:, warning:, crit:); this option is additive (use -L patt1 -L patt2 or -L "patt1 patt2")')
     parser.add_argument('-Q', dest='speed_up', action='store_true',
-                        help="don't run resource intensive operations (speed up)")
+            help="don't run resource intensive operations (speed up)")
     parser.add_argument('-M', dest='no_extra', action='store_true',
-                        help="don't collect extra logs (/var/log/messages)")
-    parser.add_argument('-D', dest='no_editor', action='store_true',
-                        help="don't invoke editor to write description")
+            help="don't collect extra logs")
     parser.add_argument('-Z', dest='rm_exist_dest', action='store_true',
-                        help='if destination directories exist, remove them instead of exiting')
+            help='if destination directories exist, remove them instead of exiting')
     parser.add_argument('-S', dest='single', action='store_true',
-                        help='''single node operation; don't try to start report
-                                collectors on other nodes''')
+            help="single node operation; don't try to start report collectors on other nodes")
     parser.add_argument('-v', dest='debug', action='count', default=0,
-                        help='increase verbosity')
-    parser.add_argument('-V', dest='version', action='store_true',
-                        help='print version')
+            help='increase verbosity')
     parser.add_argument('dest', nargs='?',
-                        help='report name (may include path where to store the report)')
+            help='report name (may include path where to store the report)')
 
     args = parser.parse_args()
     if args.help:
         parser.print_help()
-        print_extra_help()
+        print(const.EXTRA_HELP)
         sys.exit(0)
 
     for arg in vars(args):
@@ -208,23 +146,19 @@ def process_some_arguments(context):
     if not context.dest:
         context.dest = '{}-{}'.format(context.name, utils.now("%a-%d-%b-%Y"))
 
-    context.from_time_str = utils.dt_to_str(utils.ts_to_dt(context.from_time))
-    context.to_time_str = utils.dt_to_str(utils.ts_to_dt(context.to_time))
-
-    # log provided by the user?
-    if context.ha_log and \
-       not os.path.isfile(context.ha_log) and \
-       not is_collector():
-        utils.log_warning("\"{}\" not found; we will try to find log ourselves".format(context.ha_log))
+    context.from_time_str = utils.ts_to_str(context.from_time)
+    context.to_time_str = utils.ts_to_str(context.to_time)
+    _, context.from_time_file = tmpfiles.create(time=context.from_time)
+    _, context.to_time_file = tmpfiles.create(time=context.to_time)
 
 
-def load_from_config(context):
-    '''
-    load context attributes from crmsh.config and corosync.conf
-    '''
+def get_ocf_root(context):
     context.ocf_root = getattr(path, 'ocf_root', None)
     if not context.ocf_root or not os.path.isdir(context.ocf_root):
         utils.log_fatal("Cannot find ocf root directory!")
+
+
+def get_ha_varlib(context):
     ocf_lib_file = "{}/lib/heartbeat/ocf-directories".format(context.ocf_root)
     if not os.path.exists(ocf_lib_file):
         utils.log_fatal("File {} not exist".format(ocf_lib_file))
@@ -235,21 +169,28 @@ def load_from_config(context):
         if res:
             context.ha_varlib = res.group(1)
 
+
+def get_pe_dir(context):
     context.pe_dir = getattr(path, 'pe_state_dir', None)
     if not context.pe_dir or not os.path.isdir(context.pe_dir):
         utils.log_fatal("Cannot find PE files directory!")
 
+
+def get_cib_dir(context):
     context.cib_dir = getattr(path, 'crm_config', None)
     if not context.cib_dir or not os.path.isdir(context.cib_dir):
         utils.log_fatal("Cannot find CIB files directory!")
 
+
+def get_cores_dir(context):
     context.pcmk_lib = os.path.dirname(context.cib_dir)
     utils.log_debug2("Setting PCMK_LIB to %s" % context.pcmk_lib)
     context.cores_dirs = os.path.join(context.pcmk_lib, "cores")
     if os.path.isdir(const.COROSYNC_LIB):
         context.cores_dirs += " {}".format(const.COROSYNC_LIB)
 
-    # from corosync.conf
+
+def load_from_corosync_conf(context):
     if not os.path.exists(corosync.conf()):
         return
     context.to_logfile = crmutils.get_boolean(corosync.get_value('logging.to_logfile'))
@@ -259,15 +200,34 @@ def load_from_config(context):
         context.log_facility = "daemon"
 
 
+def load_from_config(context):
+    '''
+    load context attributes from crmsh.config and corosync.conf
+    '''
+    get_ocf_root(context)
+    get_ha_varlib(context)
+    get_pe_dir(context)
+    get_cib_dir(context)
+    get_cores_dir(context)
+    load_from_corosync_conf(context)
+
+
 def is_our_log(context, logf):
     '''
     check if the log contains a piece of our segment
-    '''
-    data = utils.data_from_all_types_file(logf)
-    if not data:
-        return 0 # don't include this log
 
-    # reset this var to check every file's format
+    return value
+    0      good log;        include
+    1      irregular log;   include
+    2      empty log;       don't include
+    3      before timespan; don't include
+    4      after timespan;  don't include
+    '''
+    data = utils.read_from_file(logf)
+    if not data:
+        return 2
+
+    # reset this attr to check file's format
     if hasattr(context, 'stamp_type'):
         delattr(context, "stamp_type")
     first_time = utils.find_first_ts(utils.head(10, data))
@@ -276,18 +236,15 @@ def is_our_log(context, logf):
     to_time = context.to_time
 
     if (not first_time) or (not last_time):
-        if os.stat(logf).st_size > 0:
-            return 4 # irregular log, not empty
-        return 0  # skip (empty log?)
+        return 1
     if from_time > last_time:
-        # we shouldn't get here anyway if the logs are in order
-        return 2  # we're past good logs; exit
+        return 3
     if from_time >= first_time:
-        return 3  # this is the last good log
+        return 0
     if to_time >= first_time:
-        return 1  # include this log
+        return 0
     else:
-        return 0  # don't include this log
+        return 4
 
 
 def arch_logs(context, logf):
@@ -298,98 +255,83 @@ def arch_logs(context, logf):
     hasn't been changed)
     '''
     ret = []
+    _type = -1
     # look for rotation files such as: ha-log-20090308 or
     # ha-log-20090308.gz (.bz2) or ha-log.0, etc
     files = [logf] + glob.glob(logf+"*[0-9z]")
-    for f in sorted(files, key=os.path.getctime):
+    # like ls -t, newest first
+    for f in sorted(files, key=os.path.getmtime, reverse=True):
         res = is_our_log(context, f)
-        if res == 0: # noop, continue
+        # empty or after timespan, continue
+        if res in [2, 4]:
             continue
-        elif res == 1: # include log and continue
-            ret.append(f)
-            utils.log_debug2("Found log %s" % f)
-        elif res == 2: # don't go through older logs!
+        # before timespan, no need go ahead
+        if res == 3:
             break
-        elif res == 3: # include log and continue
+        # good/irregular file, append
+        if res in [0, 1]:
+            _type = res
             ret.append(f)
-            utils.log_debug2("Found log %s" % f)
-            break
-    return ret
+    if ret:
+        utils.log_debug2("Found logs {} in timespan".format(ret))
+    return _type, ret
 
 
-def print_logseg(context, logf):
-    data = utils.data_from_all_types_file(logf)
-    if data is None:
-        return
-    
-    from_time = context.from_time
-    to_time = context.to_time
+def print_logseg(logf, from_time, to_time):
+    data = utils.read_from_file(logf)
 
-    if not from_time or from_time == 0:
+    if from_time == 0:
         from_line = 1
     else:
-        from_line = utils.findln_by_time(logf, from_time)
-    if from_line is None:
-        utils.log_warning("Couldn't find line for time {}; corrupt log file?".format(from_time))
-        return
+        from_line = utils.findln_by_time(data, from_time)
+        if from_line is None:
+            utils.log_warning("Couldn't find line in {} for time {}".\
+                    format(logf, utils.ts_to_str(from_time)))
+            return ""
 
-    if to_time != 0:
-        to_line = findln_by_time(logf, to_time)
+    if to_time == 0:
+        to_line = len(data.split('\n'))
+    else:
+        to_line = utils.findln_by_time(data, to_time)
         if to_line is None:
-            utils.log_warning("Couldn't find line for time {}; corrupt log file?".format(to_time))
-            return
+            utils.log_warning("Couldn't find line in {} for time {}".\
+                    format(logf, utils.ts_to_str(to_time)))
+            return ""
 
     utils.log_debug2("Including segment [{}-{}] from {}".format(from_line, to_line, logf))  
-    return utils.filter_lines(logf, from_line, to_line)    
+    return utils.filter_lines(data, from_line, to_line) 
 
 
-def find_log(context):
-    #journalctl -u pacemaker -u corosync -u sbd
-    if context.extra_logs:
-        for f in context.extra_logs.split():
-            if os.path.isfile(f) and f not in const.PCMK_LOG.split():
-                return f
-
-        f = os.path.join(context.work_dir, const.JOURNAL_F)
-        if os.path.isfile(f):
-            return f
-
-        for f in const.PCMK_LOG.split():
-            if os.path.isfile(f):
-                return f
-    else:
-        utils.log_debug2("Will try with {}".format(context.logfile))
-        return context.logfile
-
-
-def dump_logset(context, logf, outf):
+def dump_logset(context, logf):
     '''
     find log/set of logs which are interesting for us
     '''
-    logf_set = []
-    logf_set = arch_logs(context, logf)
-    if len(logf_set) == 0:
+    logf_type, logf_list = arch_logs(context, logf)
+    if not logf_list:
+        utils.log_debug2("No suitable log set found for log {}".format(logf))
         return
 
-    num_logs = len(logf_set)
-    oldest = logf_set[-1]
-    newest = logf_set[0]
-    mid_logfiles = logf_set[1:-1]
     out_string = ""
-
-    # the first logfile: from $from_time to $to_time (or end)
-    # logfiles in the middle: all
-    # the last logfile: from beginning to $to_time (or end)
-    if num_logs == 1:
-        out_string += print_logseg(newest, context)
+    # irregular file list
+    if logf_type == 1:
+        for f in logf_list:
+            out_string += print_logseg(f, 0, 0)
     else:
-        out_string += print_logseg(oldest, from_time, 0)
-        for f in mid_logfiles:
-            out_string += print_log(f)
-            log_debug2("Including complete %s logfile" % f)
-        out_string += print_logseg(newest, 0, to_time)
+        num_logs = len(logf_list)
+        if num_logs == 1:
+            out_string += print_logseg(logf_list[0], context.from_time, context.to_time)
+        else:
+            newest, *middles, oldest = logf_list
+            out_string += print_logseg(oldest, context.from_time, 0)
+            for f in middles:
+                out_string += print_logseg(f, 0, 0)
+            out_string += print_logseg(newest, 0, context.to_time)
 
-    crmutils.str2file(out_string, outf)
+    if out_string:
+        outf = os.path.join(context.work_dir, os.path.basename(logf))
+        crmutils.str2file(out_string.strip('\n'), outf)
+        utils.log_debug1("Dump logset {} into {}/{}".\
+                format(logf_list, context.dest_path, os.path.basename(logf)))
 
 
 def valid_dest(context):
@@ -416,8 +358,7 @@ def setup_workdir(context):
     setup work directory that we can put all logs into it
     '''
     valid_dest(context)
-    tmpdir = utils.make_temp_dir()
-    context.add_tempfile(tmpdir)
+    tmpdir = tmpfiles.create_dir()
     if not is_collector():
         context.work_dir = os.path.join(tmpdir, os.path.basename(context.dest))
     else:
@@ -467,6 +408,7 @@ def collect_journal_general(context):
 
 
 def collect_other_logs_and_info(context):
+    #collect other configurations and information
     process_list = []
     for cf in const.COLLECT_FUNCTIONS:
         p = Process(target=getattr(collect, cf), args=(context,))
@@ -474,44 +416,32 @@ def collect_other_logs_and_info(context):
         process_list.append(p)
     for p in process_list:
         p.join()
-
-    #if not context.speed_up:
-        #TODO
-        #sanitize(context)
-
-    for l in context.extra_logs:
-        if not os.path.isfile(l):
-            continue
-
-
-def test_ssh_conn(addr):
-    cmd = r"ssh %s -T -o Batchmode=yes %s true" % (const.SSH_OPTS, addr)
-    rc, _, _= crmutils.get_stdout_stderr(cmd)
-    return rc == 0
+    # replace sensitive content
+    sanitize(context)
 
 
 def find_ssh_user(context):
     ssh_user = "__undef"
 
     if not context.ssh_user:
-        try_user_list = "__default " + const.TRY_SSH
+        try_user_list = ["__default"] + const.TRY_SSH.split()
     else:
-        try_user_list = context.ssh_user
+        try_user_list = [context.ssh_user]
 
     for n in context.nodes:
         rc = 1
         if n == utils.me():
             continue
-        for u in try_user_list.split():
+        for u in try_user_list:
             if u != '__default':
                 ssh_s = '@'.join((u, n))
             else:
                 ssh_s = n
 
-            if test_ssh_conn(ssh_s):
-                utils.log_debug2("SSH {} OK".format(ssh_s))
+            if not crmutils.check_ssh_passwd_need([ssh_s]):
+                utils.log_debug2("ssh {} OK".format(ssh_s))
                 ssh_user = u
-                try_user_list = u
+                try_user_list = [u] # we support just one user
                 rc = 0
                 break
             else:
@@ -538,13 +468,13 @@ def ssh_issue(context):
     if not context.single:
         find_ssh_user(context)
 
-    ssh_opts = const.SSH_OPTS
-    for opt in context.ssh_options:
-        if opt not in const.SSH_OPTS:
-            ssh_opts += " -o {}".format(opt)
+    if context.ssh_options:
+        ssh_opts = ' '.join(context.ssh_options)
+    else:
+        ssh_opts = const.SSH_OPTS
     if context.ssh_user:
-        ssh_opts += " -o User={}".format(context.ssh_user)
-    context.ssh_options = ssh_opts
+        ssh_opts += " User={}".format(context.ssh_user)
+    context.ssh_options = ssh_opts.split()
 
     context.sudo = ""
     if (not context.ssh_user and os.getuid() != 0) or \
@@ -559,31 +489,35 @@ def ssh_issue(context):
 
 
 def collect_for_nodes(context):
+    process_list = []
     for node in context.nodes:
         if node in context.ssh_askpw_nodes:
             utils.log_info("Please provide password for {} at {}".format(say_ssh_user(context), node))
             utils.log_info("Note that collecting data will take a while.")
-            start_slave_collector(node, context)
+            start_slave_collector(context, node)
         else:
-            p = Process(target=start_slave_collector, args=(node, context))
+            p = Process(target=start_slave_collector, args=(context, node))
             p.start()
-            p.join()
+            process_list.append(p)
+    for p in process_list:
+        p.join()
 
 
-def start_slave_collector(node, context):
+def start_slave_collector(context, node):
     cmd_slave = r"{} __slave '{}'".format(context.name, context)
     if node == utils.me():
         cmd = r'{} {}'.format(context.local_sudo, cmd_slave)
     else:
-        cmd = r'ssh {} {} "{} {}"'.format(context.ssh_options, node, context.sudo, cmd_slave.replace('"', '\\"'))
+        cmd = r'ssh -o {} {} "{} {}"'.format(' -o '.join(context.ssh_options), node, context.sudo, cmd_slave.replace('"', '\\"'))
 
     _, out = crmutils.get_stdout(cmd)
-    out_data_list = out.split('\n')
     compress_data = ""
-    for data in out_data_list:
+    for data in out.split('\n'):
         if data.startswith(const.COMPRESS_DATA_FLAG):
+            # hb_report data from collector
             compress_data = data.lstrip(const.COMPRESS_DATA_FLAG)
         else:
+            # log data from collector
             print(data)
 
     cmd = r"(cd {} && tar xf -)".format(context.work_dir)
@@ -594,8 +528,6 @@ def load_context(context):
     '''
     Load context attributes from master process
     '''
-    if len(sys.argv) < 3:
-        utils.log_fatal("For collector, the number of arguments must > 3")
     for key, value in json.loads(sys.argv[2]).items():
         context[key] = value
 
@@ -604,34 +536,50 @@ def sanitize(context):
     '''
     replace sensitive info with '****'
     '''
-    conf = os.path.join(context.work_dir, os.path.basename(const.CONF))
-    if os.path.isfile(conf):
-        sanitize_one(context, conf)
-
-    cib_f = os.path.join(context.work_dir, const.CIB_F)
-    file_list = [cib_f] + glob.glob(os.path.join(context.work_dir, "pengine", "*"))
+    if context.speed_up:
+        utils.log_debug1("Skip check sensitive info")
+        return
+    utils.log_debug2("Check or replace sensitive info from cib and pe files")
+    context.sanitize_pattern_string = '|'.join(context.sensitive_regex)
+    cib_xml = os.path.join(context.work_dir, const.CIB_F)
+    pe_list = glob.glob(os.path.join(context.work_dir, "pengine", "*"))
+    file_list = [cib_xml] + pe_list
     for f in [item for item in file_list if os.path.isfile(item)]:
-        if context.sanitize:
-            sanitize_one(context, f)
-        else:
-            if utils.is_sensitive_file(f):
-                utils.log_warning("Some PE or CIB files contain possibly sensitive data")
-                utils.log_warning("You may not want to send this report to a public mailing list")
+        rc = sanitize_one(context, f)
+        if rc == 1:
+            utils.log_warning("Some PE or CIB files contain possibly sensitive data")
+            utils.log_warning("Using \"-s\" option can replace sensitive data")
+            break
 
 
 def sanitize_one(context, in_file):
-    data = utils.get_data_from_tarfile(in_file)
+    data = utils.read_from_file(in_file)
     if not data:
         return
+    if not include_sensitive_data(context, data):
+        return
+    if not context.sanitize:
+        return 1
+    utils.log_debug2("Replace sensitive info for {}".format(in_file))
+    utils.write_to_file(in_file, sub_sensitive_string(context, data))
 
-    ref = make_temp_file()
-    context.add_tempfile(ref)
-    touch_r(in_file, ref)
 
-    with open_(in_file, 'w') as f:
-        f.write(sub_string(data))
+def sub_sensitive_string(context, data):
+    sub_pattern= ' value=".*" '
+    replace_string = ' value="******" '
+    res_string = ""
+    for line in data.strip('\n').split('\n'):
+        if include_sensitive_data(context, line):
+            res_string += re.sub(sub_pattern, replace_string, line) + '\n'
+        else:
+            res_string += line + '\n'
+    return res_string
 
-    touch_r(ref, in_file)
+
+def include_sensitive_data(context, data):
+    if re.search('name="{}"'.format(context.sanitize_pattern_string), data):
+        return True
+    return False
 
 
 def pick_first(choice):
@@ -712,7 +660,7 @@ def diff_check(file1, file2):
     out_string = ""
     return_code = False
     for f in [file1, file2]:
-        if not os.path.isfile(f):
+        if not os.path.exists(f):
             out_string += "{} does not exist\n".format(f)
             return return_code, out_string
     if os.path.basename(file1) == const.CIB_F:
@@ -779,16 +727,17 @@ def check_cores(context):
     return out_string
 
 
-def check_logs(context):
-    def filter_log(log, patt):
-        out = ""
-        with open(log) as fd:
-            data = fd.read()
-        for line in data.split('\n'):
-            if re.search(patt, line):
-                out += '{}\n'.format(line)
-        return out
+def filter_log(log, patt):
+    out = ""
+    with open(log) as fd:
+        data = fd.read()
+    for line in data.split('\n'):
+        if re.search(patt, line):
+            out += '{}\n'.format(line)
+    return out
 
+
+def check_logs(context):
     out_string = ""
     logfile_list = []
     flist = [os.path.basename(f) for f in context.extra_logs] + [const.HALOG_F]
@@ -797,7 +746,7 @@ def check_logs(context):
     if not logfile_list:
         return out_string
     out_string += "\nLog patterns:\n"
-    log_patterns = context.regex.replace(' ', '|')
+    log_patterns = '|'.join(context.regex)
     for f in logfile_list:
         out_string += filter_log(f, log_patterns)
     return out_string
@@ -819,9 +768,7 @@ def process_results(context):
         }
         cmd = r"(cd {w_dir}/.. && tar cf - {dest})|{comp_prog} > {d_dir}/{dest}.tar{comp_ext}".format(**cmd_meta)
         utils.log_debug2("Running: {}".format(cmd))
-        rc, _, err = crmutils.get_stdout_stderr(cmd)
-        if err:
-            utils.log_fatal(err)
+        crmutils.get_stdout(cmd)
 
     finalword(context)
 
@@ -847,10 +794,6 @@ def push_data(context):
         utils.log_fatal(err)
 
 
-def dump_context(context):
-    crmutils.str2file(context.dumps(), os.path.join(context.work_dir, const.CTX_F))
-
-
 def run(context):
     '''
     Major work flow
@@ -861,21 +804,15 @@ def run(context):
         parse_argument(context)
         load_from_config(context)
 
-    context.create_tempfile()
-    atexit.register(context.drop_tempfile)
     setup_workdir(context)
 
     if is_collector():
         collect_journal_ha(context)
         collect_journal_general(context)
         collect_other_logs_and_info(context)
-        dump_context(context)
         push_data(context)
     else:
         get_nodes(context)
         ssh_issue(context)
         collect_for_nodes(context)
         process_results(context)
-
-
-ctx = Context()

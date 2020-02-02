@@ -6,10 +6,11 @@ import string
 import random
 import os
 import tempfile
-import contextlib
-import tarfile
 import subprocess
 import threading
+import gzip
+import bz2
+import lzma
 from dateutil import tz
 
 import crmsh.config
@@ -17,38 +18,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from hb_report import const, core
 from crmsh import msg as crmmsg
 from crmsh import utils as crmutils
-
-
-@contextlib.contextmanager
-def stdchannel_redirected(stdchannel, dest_filename):
-    """
-    A context manager to temporarily redirect stdout or stderr
-    e.g.:
-    with stdchannel_redirected(sys.stderr, os.devnull):
-        if compiler.has_function('clock_gettime', libraries=['rt']):
-            libraries.append('rt')
-    """
-
-    try:
-        oldstdchannel = os.dup(stdchannel.fileno())
-        dest_file = open(dest_filename, 'w')
-        os.dup2(dest_file.fileno(), stdchannel.fileno())
-        yield
-
-    finally:
-        if oldstdchannel is not None:
-            os.dup2(oldstdchannel, stdchannel.fileno())
-        if dest_file is not None:
-            dest_file.close()
-
-
-def parse_time(timeline):
-    with stdchannel_redirected(sys.stderr, os.devnull):
-        try:
-            res = crmutils.parse_time(timeline)
-        except:
-            return None
-        return res
 
 
 def log_info(msg):
@@ -87,31 +56,28 @@ def log_debug2(msg):
         crmmsg.common_debug("{}#{}: {}".format(me(), get_role(), msg))
 
 
-def get_stamp_legacy(line):
-    return parse_time(line.split()[1])
+def parse_time(line, quiet=False):
+    try:
+        res = crmutils.parse_time(line, quiet)
+    except:
+        return None
+    return res
 
 
-def get_stamp_rfc5424(line):
-    return parse_time(line.split()[0])
+def is_rfc5424(line):
+    return parse_time(line.split()[0], quiet=True)
 
 
-def get_stamp_syslog(line):
-    return parse_time(' '.join(line.split()[0:3]))
+def is_syslog(line):
+    return parse_time(' '.join(line.split()[0:3]), quiet=True)
 
 
 def find_stamp_type(line):
-    _type = None
-    if get_stamp_syslog(line):
-        _type = "syslog"
-    elif get_stamp_rfc5424(line):
-        _type = "rfc5424"
-    elif get_stamp_legacy(line):
-        _type = "legacy"
-    log_msg = "the log file is in the {} format".format(_type)
-    if _type == "legacy":
-        log_msg += "(please consider switching to syslog format)"
-    log_debug2(log_msg)
-    return _type
+    if is_syslog(line):
+        return "syslog"
+    elif is_rfc5424(line):
+        return "rfc5424"
+    return None
 
 
 def get_ts(line):
@@ -119,62 +85,65 @@ def get_ts(line):
     if not hasattr(core.ctx, "stamp_type"):
         core.ctx.stamp_type = find_stamp_type(line)
     _type = core.ctx.stamp_type
+    # rfc5424 format is like
+    # 2003-10-11T22:14:15.003Z mymachine.example.com su
     if _type == "rfc5424":
         ts = crmutils.parse_to_timestamp(line.split()[0])
+    # syslog format is like
+    # Feb 12 18:30:08 15sp1-1 kernel: e820: BIOS-provided physical RAM map:
     if _type == "syslog":
         ts = crmutils.parse_to_timestamp(' '.join(line.split()[0:3]))
-    if _type == "legacy":
-        ts = crmutils.parse_to_timestamp(line.split()[1])
     return ts
 
 
-def line_time(logf, line_num):
-    ts = None
-    with open(logf, 'r', encoding='utf-8', errors='replace') as fd:
-        line_res = head(line_num, fd.read())
-        if line_res:
-            ts = get_ts(line_res[-1])
-    return ts
+def line_time(data_list, line_num):
+    '''
+    Get time stamp of the specific line
+    '''
+    return get_ts(data_list[line_num-1])
 
 
-def findln_by_time(logf, tm):
-    tmid = None
-    first = 1
-    last = sum(1 for l in open(logf, 'r', encoding='utf-8', errors='replace'))
+def findln_by_time(data, ts):
+    '''
+    Get line number of the specific time stamp
+    '''
+    data_list = data.split('\n')
+
+    first= 1
+    last= len(data_list)
+    time_middle = None
 
     while first <= last:
-        mid = (last+first)//2
+        middle = (last + first) // 2
         trycnt = 10
         while trycnt > 0:
-            res = line_time(logf, mid)
+            res = line_time(data_list, middle)
             if res:
-                tmid = int(res)
+                time_middle = res
                 break
-            log_debug2("Cannot extract time: %s:%d; will try the next one" % (logf, mid))
             trycnt -= 1
             # shift the whole first-last segment
-            prevmid = mid
-            while prevmid == mid:
+            prevmid = middle
+            while prevmid == middle:
                 first -= 1
                 if first < 1:
                     first = 1
                 last -= 1
                 if last < first:
                     last = first
-                prevmid = mid
-                mid = (last+first)//2
+                prevmid = middle
+                middle = (last + first) // 2
                 if first == last:
                     break
-        if not tmid:
-            log_warning("Giving up on log...")
+        if not time_middle:
             return None
-        if int(tmid) > tm:
-            last = mid - 1
-        elif int(tmid) < tm:
-            first = mid + 1
+        if time_middle > ts:
+            last = middle - 1
+        elif time_middle < ts:
+            first = middle + 1
         else:
             break
-    return mid
+    return middle
 
 
 def find_first_ts(data):
@@ -194,22 +163,20 @@ def tail(n, indata):
     return indata.split('\n')[-n:]
 
 
-def is_2dlist(aList):
-    return all([isinstance(sublist, list) for sublist in aList])
-
-
 def parse_to_timestamp(time):
-    if re.search("^-[1-9][0-9]*[YmdHM]$", time):
-        number = int(re.findall("[1-9][0-9]*", time)[0])
-        if re.search("^-[1-9][0-9]*Y$", time):
+    res = re.match("^-([1-9][0-9]*)([YmdHM])$", time)
+    if res:
+        number_str, flag = res.groups()
+        number = int(number_str)
+        if flag == 'Y':
             timedelta = datetime.timedelta(days = number * 365)
-        if re.search("^-[1-9][0-9]*m$", time):
+        if flag == 'm':
             timedelta = datetime.timedelta(days = number * 30)
-        if re.search("^-[1-9][0-9]*d$", time):
+        if flag == 'd':
             timedelta = datetime.timedelta(days = number)
-        if re.search("^-[1-9][0-9]*H$", time):
+        if flag == 'H':
             timedelta = datetime.timedelta(hours = number)
-        if re.search("^-[1-9][0-9]*M$", time):
+        if flag == 'M':
             timedelta = datetime.timedelta(minutes = number)
         time = (datetime.datetime.now() - timedelta).strftime("%Y-%m-%d %H:%M")
 
@@ -217,23 +184,20 @@ def parse_to_timestamp(time):
     if res:
         return res
     else:
-        log_fatal('''Try these format like: 2pm; 1:00; "2019/9/5 12:30"; "09-Sep-07 2:00"'''.format(time))
+        log_fatal('Try these format like: 2pm; 1:00; "2019/9/5 12:30"; "09-Sep-07 2:00"'.format(time))
 
 
 def me():
     return socket.gethostname()
 
 
-def zip_nested(nested):
-    return [x for sublist in nested for x in sublist]
-
-
 class Package(object):
     def __init__(self, pkgs):
         self.for_rpm = True
-        if get_pkg_mgr() != "rpm":
+        pkg_type = get_pkg_mgr()
+        if pkg_type != "rpm":
             self.for_rpm = False
-            log_warning("The package manager is %s, not support for now" % p)
+            log_warning("The package manager is {}, not support for now".format(pkg_type))
         else:
             self.pkgs = installed_pkgs(pkgs)
 
@@ -252,9 +216,8 @@ def get_pkg_mgr():
     for p in ["rpm", "dpkg", "pkg_info", "pkginfo"]:
         if which(p):
             return p
-    else:
-        log_warning("Unknown package manager!")
-        return None
+    log_warning("Unknown package manager!")
+    return None
 
 
 def installed_pkgs(packages):
@@ -285,23 +248,15 @@ def verify_rpm(packages):
         if rc != 0 and err:
             log_warning(err)
             res += "Verify {} error: {}\n".format(pkg, err)
-    else:
+    if not res:
         res = "All packages verify successfully\n"
         log_debug2(res)
     return res
 
 
 def which(prog):
-    return crmutils.get_stdout_stderr("which {}".format(prog))[0] == 0
-
-
-def random_string(num):
-    if not isinstance(num, int):
-        raise TypeError('expected int')
-    if num <= 0:
-        raise ValueError('expected positive int')
-    s = string.ascii_letters + string.digits
-    return ''.join(random.sample(s, num))
+    rc, _, _ = crmutils.get_stdout_stderr("which {}".format(prog))
+    return rc == 0
 
 
 def _mkdir(directory):
@@ -310,23 +265,6 @@ def _mkdir(directory):
             os.makedirs(directory)
         except OSError as err:
             log_fatal("Failed to create directory: %s" % (err))
-
-
-def make_temp_dir():
-    dir_path = '/tmp/{}.{}'.format(const.WORKDIR_PREFIX, random_string(6))
-    _mkdir(dir_path)
-    return dir_path
-
-
-def make_temp_file(time=None):
-    random_str = random_string(4)
-    try:
-        filename = tempfile.mkstemp(suffix=random_str, prefix="tmp.")[1]
-    except:
-        log_fatal("Can't create file {}".format(filename))
-    if time:
-        os.utime(filename, (time, time))
-    return filename
 
 
 def dirname(path):
@@ -353,6 +291,10 @@ def dt_to_str(dt, form="%Y-%m-%d %H:%M"):
     return dt.strftime(form)
 
 
+def ts_to_str(ts):
+    return dt_to_str(ts_to_dt(ts))
+
+
 def get_stdout_stderr_timeout(cmd, input_s=None, shell=True, timeout=5):
     '''
     Run a cmd, return (rc, stdout, stderr)
@@ -368,99 +310,59 @@ def get_stdout_stderr_timeout(cmd, input_s=None, shell=True, timeout=5):
         proc.kill()
         log_error("Timeout running \"{}\"".format(cmd))
         return (-1, None, None)
-    return (proc.returncode,
-            crmutils.to_ascii(stdout_data).strip(),
-            crmutils.to_ascii(stderr_data).strip())
+    return (proc.returncode, crmutils.to_ascii(stdout_data), crmutils.to_ascii(stderr_data))
 
 
-def get_data_from_tarfile(logf):
-    with tarfile.open(logf, 'r') as tar:
-        for member in tar.getmembers():
-            f = tar.extractfile(member)
-            if f:
-                return crmutils.to_ascii(f.read())
-            else:
-                return None
+def get_open_method(infile):
+    file_type_open_dict = {
+            "gz": gzip.open,
+            "bz2": bz2.open,
+            "xz": lzma.open
+            }
+    try:
+        _open = file_type_open_dict[infile.split('.')[-1]]
+    except KeyError:
+        _open = open
+    return _open
 
 
-def data_from_all_types_file(in_file):
-    if tarfile.is_tarfile(in_file):
-        return get_data_from_tarfile(in_file)
-    with open(in_file, 'r', encoding='utf-8', errors="replace") as fd:
-        return fd.read()
+def read_from_file(infile):
+    data = None
+    _open = get_open_method(infile)
+    with _open(infile, 'rt', encoding='utf-8', errors='replace') as f:
+        data = f.read()
+    return crmutils.to_ascii(data)
 
 
-def is_sensitive_string(in_string, pattern):
-    pattern_string = re.sub(" ", "|", pattern)
-    for line in crmutils.to_ascii(in_string).split('\n'):
-        if re.search('name="{}"'.format(pattern_string[1:]), line):
-            return True
-    return False
+def write_to_file(tofile, data):
+    _open = get_open_method(tofile)
+    with _open(tofile, 'w') as f:
+        if _open == open:
+            f.write(data)
+        else:
+            f.write(data.encode('utf-8'))
 
 
-def is_sensitive_file(in_file):
-    data = data_from_all_types_file(in_file)
-    if not data:
-        return False
-    if is_sensitive_string(data):
-        return True
-    else:
-        return False
-
-
-def filter_lines(logf, from_line, to_line):
+def filter_lines(data, from_line, to_line):
     out_string = ""
     count = 1
-    with open(logf, 'r', encoding='utf-8', errors='replace') as f:
-        for line in f.readlines():
-            if count >= from_line and count <= to_line:
-                out_string += line
-            if count > to_line:
-                break
-            count += 1
+    for line in data.split('\n'):
+        if count >= from_line and count <= to_line:
+            out_string += line + '\n'
+        if count > to_line:
+            break
+        count += 1
     return out_string
-
-'''
-def rpm_version(pkg):
-    cmd = "rpm -qi {}|awk -F':' '/Version/{print $2}'".format(pkg)
-    rc, out = utils.crmutils.get_stdout(cmd)
-    if rc == 0:
-        return out.lstrip()
-    else:
-        return None
-'''
 
 
 def touch_file(filename):
     open(filename, 'w').close()
 
 
-def find_files(context, find_dirs):
-    res = []
-    from_time = context.from_time
-    to_time = context.to_time
-
-    from_stamp = make_temp_file(from_time)
-    context.add_tempfile(from_stamp)
-    findexp = "-newer %s" % from_stamp
-    if to_time > 0:
-        to_stamp = make_temp_file(to_time)
-        context.add_tempfile(to_stamp)
-        findexp += " ! -newer %s" % to_stamp
-
-    cmd = r"find %s -type f %s" % (find_dirs, findexp)
-    rc, out, _ = crmutils.get_stdout_stderr(cmd)
-    if rc == 0 and out:
-        res = out.split('\n')
-    return res
+def unzip_list(_list):
+    return [y for x in _list for y in x.split()]
 
 
-def touch_r(src, dst):
-    '''
-    like shell command "touch -r src dst"
-    '''
-    if not os.path.exists(src):
-        log_warning("In touch_r function, %s not exists" % src)
-        return
-    stat_info = os.stat(src)
-    os.utime(dst, (stat_info.st_atime, stat_info.st_mtime))
+def unique(sequence):
+    seen = set()
+    return [x for x in sequence if not (x in seen or seen.add(x))]

@@ -7,6 +7,7 @@ from hb_report import core
 
 if __name__ == "__main__":
     try:
+        core.ctx = core.Context()
         core.ctx.name = os.path.basename(__file__)
         core.run(core.ctx)
     except KeyboardInterrupt:
