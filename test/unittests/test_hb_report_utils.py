@@ -600,3 +600,8 @@ class TestUtils(unittest.TestCase):
         mock_isdir.assert_called_once_with("dir")
         mock_makedirs.assert_called_once_with("dir")
         mock_fatal.assert_called_once_with("Failed to create directory: error")
+
+    def test_unique(self):
+        a = [3,2,1,3,4,5]
+        res = utils.unique(a)
+        self.assertEqual(res, [3,2,1,4,5])

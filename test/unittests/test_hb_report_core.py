@@ -72,7 +72,14 @@ class TestContext(unittest.TestCase):
         self.context.to_time = "2020-01-31"
         self.assertEqual(self.context.to_time, 1580428800.0)
         self.context.extra_logs = ["/var/log/test"]
-        self.assertEqual(self.context.extra_logs, ["/var/log/test"]+self.expected_extra_logs)
+        assert "/var/log/test" in self.context.extra_logs
+        self.context.nodes = ["node1", "node2", "node3"]
+        self.assertEqual(self.context.nodes, ["node1", "node2", "node3"])
+
+    @mock.patch('hb_report.utils.log_fatal')
+    def test_setattr_fatal(self, mock_fatal):
+        self.context.ssh_options = ["test"]
+        mock_fatal.assert_called_once_with('Wrong format of ssh option "test"')
 
     def test_setitem(self):
         self.context['tmp_name'] = "tmp_name"
@@ -659,7 +666,7 @@ class TestCore(unittest.TestCase):
     @mock.patch('os.getuid')
     @mock.patch('hb_report.core.find_ssh_user')
     def test_ssh_issue_root(self, mock_find_ssh_user, mock_getuid, mock_debug2):
-        self.context.ssh_options = ["opt1", "opt2"]
+        self.context.ssh_options = None
         self.context.ssh_user = "root"
         mock_getuid.return_value = 0
 
@@ -1264,20 +1271,14 @@ class TestCore(unittest.TestCase):
                 format(mock_arch.return_value[1], self.context.dest_path))
 
     @mock.patch('hb_report.core.sanitize')
-    @mock.patch('hb_report.core.dump_context')
-    @mock.patch('hb_report.core.dump_logset')
-    @mock.patch('os.path.isfile')
     @mock.patch('hb_report.core.Process')
     @mock.patch('hb_report.collect.sys_stats')
     @mock.patch('hb_report.collect.sys_info')
-    def test_collect_other_logs_and_info(self, mock_sys_info, mock_sys_stats, mock_process,
-            mock_isfile, mock_dump_log, mock_dump_context, mock_sanitize):
-        self.context.extra_logs = ["file1", "file2"]
+    def test_collect_other_logs_and_info(self, mock_sys_info, mock_sys_stats, mock_process, mock_sanitize):
         const.COLLECT_FUNCTIONS = ("sys_info", "sys_stats")
         mock_process_inst1 = mock.Mock()
         mock_process_inst2 = mock.Mock()
         mock_process.side_effect = [mock_process_inst1, mock_process_inst2]
-        mock_isfile.side_effect = [False, True]
 
         core.collect_other_logs_and_info(self.context)
 
@@ -1289,9 +1290,6 @@ class TestCore(unittest.TestCase):
         mock_process_inst1.join.assert_called_once_with()
         mock_process_inst2.start.assert_called_once_with()
         mock_process_inst2.join.assert_called_once_with()
-        mock_isfile.assert_has_calls([mock.call("file1"), mock.call("file2")])
-        mock_dump_log.assert_called_once_with(self.context, "file2")
-        mock_dump_context.assert_called_once_with(self.context)
         mock_sanitize.assert_called_once_with(self.context)
 
     @mock.patch('hb_report.utils.log_fatal')
@@ -1421,22 +1419,10 @@ class TestCore(unittest.TestCase):
 
         mock_me.assert_called_once_with()
         cmd_slave = r"{} __slave '{}'".format(self.context.name, self.context)
-        cmd = r'ssh {} {} "{} {}"'.format(self.context.ssh_options, "node2", self.context.sudo, cmd_slave.replace('"', '\\"'))
+        cmd = r'ssh -o {} {} "{} {}"'.format(' -o '.join(self.context.ssh_options), "node2", self.context.sudo, cmd_slave.replace('"', '\\"'))
         mock_stdout.assert_called_once_with(cmd)
         cmd = r"(cd {} && tar xf -)".format(self.context.work_dir)
         mock_stdout_stderr.assert_called_once_with(cmd, input_s=mock_eval.return_value)
-
-    @mock.patch('hb_report.core.crmutils.str2file')
-    @mock.patch('os.path.join')
-    def test_dump_context(self, mock_join, mock_str2file):
-        self.context.dumps.return_value = "dumps data"
-        mock_join.return_value = "{}/{}".format(self.context.work_dir, const.CTX_F)
-
-        core.dump_context(self.context)
-
-        mock_join.assert_called_once_with(self.context.work_dir, const.CTX_F)
-        self.context.dumps.assert_called_once_with()
-        mock_str2file.assert_called_once_with("dumps data", mock_join.return_value)
 
     @mock.patch('hb_report.core.crmutils.is_program')
     def test_pick_first_none(self, mock_is_program):

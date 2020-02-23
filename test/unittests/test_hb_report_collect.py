@@ -1201,3 +1201,56 @@ class TestCollect(unittest.TestCase):
         res = collect.find_files(self.context, "dir")
         self.assertEqual(res, ["data1", "data2"])
         mock_run.assert_called_once_with("find dir -type f -newer file1 ! -newer file2")
+
+    @mock.patch('hb_report.collect.crmutils.str2file')
+    @mock.patch('os.path.join')
+    def test_dump_context(self, mock_join, mock_str2file):
+        self.context.dumps.return_value = "dumps data"
+        mock_join.return_value = "{}/{}".format(self.context.work_dir, const.CTX_F)
+
+        collect.dump_context(self.context)
+
+        mock_join.assert_called_once_with(self.context.work_dir, const.CTX_F)
+        self.context.dumps.assert_called_once_with()
+        mock_str2file.assert_called_once_with("dumps data", mock_join.return_value)
+
+    @mock.patch('hb_report.core.dump_logset')
+    @mock.patch('os.path.isfile')
+    def test_get_extra_logs(self, mock_isfile, mock_dump):
+        self.context.extra_logs = ["file1", "file2"]
+        mock_isfile.side_effect = [True, False]
+
+        collect.get_extra_logs(self.context)
+
+        mock_isfile.assert_has_calls([mock.call("file1"), mock.call("file2")])
+        mock_dump.assert_called_once_with(self.context, "file1")
+
+    @mock.patch('hb_report.collect.corosync.get_value')
+    @mock.patch('os.path.isfile')
+    def test_dump_corosync_log_no_config(self, mock_isfile, mock_get_value):
+        mock_isfile.return_value = False
+        collect.dump_corosync_log(self.context)
+        mock_isfile.assert_called_once_with(const.CONF)
+        mock_get_value.assert_not_called()
+
+    @mock.patch('hb_report.core.dump_logset')
+    @mock.patch('hb_report.collect.corosync.get_value')
+    @mock.patch('os.path.isfile')
+    def test_dump_corosync_log_no_exist(self, mock_isfile, mock_get_value, mock_dump):
+        mock_isfile.side_effect = [True, False]
+        mock_get_value.return_value = "logfile"
+        collect.dump_corosync_log(self.context)
+        mock_isfile.assert_has_calls([mock.call(const.CONF), mock.call("logfile")])
+        mock_get_value.assert_called_once_with("logging.logfile")
+        mock_dump.assert_not_called()
+
+    @mock.patch('hb_report.core.dump_logset')
+    @mock.patch('hb_report.collect.corosync.get_value')
+    @mock.patch('os.path.isfile')
+    def test_dump_corosync_log(self, mock_isfile, mock_get_value, mock_dump):
+        mock_isfile.side_effect = [True, True]
+        mock_get_value.return_value = "logfile"
+        collect.dump_corosync_log(self.context)
+        mock_isfile.assert_has_calls([mock.call(const.CONF), mock.call("logfile")])
+        mock_get_value.assert_called_once_with("logging.logfile")
+        mock_dump.assert_called_once_with(self.context, "logfile")
