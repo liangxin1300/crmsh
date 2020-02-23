@@ -88,11 +88,11 @@ def get_ts(line):
     # rfc5424 format is like
     # 2003-10-11T22:14:15.003Z mymachine.example.com su
     if _type == "rfc5424":
-        ts = crmutils.parse_to_timestamp(line.split()[0])
+        ts = crmutils.parse_to_timestamp(line.split()[0], quiet=True)
     # syslog format is like
     # Feb 12 18:30:08 15sp1-1 kernel: e820: BIOS-provided physical RAM map:
     if _type == "syslog":
-        ts = crmutils.parse_to_timestamp(' '.join(line.split()[0:3]))
+        ts = crmutils.parse_to_timestamp(' '.join(line.split()[0:3]), quiet=True)
     return ts
 
 
