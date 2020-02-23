@@ -23,6 +23,13 @@ def get_all_files(archive_path):
         return all_files
 
 
+def file_in_archive(f, archive_path):
+    for item in get_all_files(archive_path):
+        if re.search(r'/{}$'.format(f), item):
+            return True
+    return False
+
+
 def me():
     return socket.gethostname()
 

@@ -17,6 +17,21 @@ Feature: hb_report functional test
     When    Remove default hb_report tar file
 
   @clean
+  Scenario: Verify hb_report handle files contain non-utf-8 characters
+    Given   Cluster service is "stopped" on "hanode1"
+    And     Cluster service is "stopped" on "hanode2"
+    When    Run "crm cluster init -y --no-overwrite-sshkey" on "hanode1"
+    Then    Cluster service is "started" on "hanode1"
+    When    Run "crm cluster join -c hanode1 -y" on "hanode2"
+    Then    Cluster service is "started" on "hanode2"
+    And     Online nodes are "hanode1 hanode2"
+
+    When    Run "iconv -f UTF-8 -t UTF-16 <(echo 'abc#$%%^') >> /opt/text_non_utf8" on "hanode1"
+    And     Run "hb_report -E /opt/text_non_utf8 report1" on "hanode1"
+    Then    File "text_non_utf8" in "report1.tar.bz2"
+    When    Run "rm -f report1.tar.bz2" on "hanode1"
+
+  @clean
   Scenario: Test hb_report options
     Given   Cluster service is "stopped" on "hanode1"
     And     Cluster service is "stopped" on "hanode2"

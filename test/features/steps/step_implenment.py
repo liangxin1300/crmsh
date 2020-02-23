@@ -5,7 +5,7 @@ import datetime
 from behave import given, when, then
 from crmsh import corosync, parallax
 from utils import check_cluster_state, check_service_state, online, run_command, me, \
-        run_command_local_or_remote, get_file_type, get_all_files
+        run_command_local_or_remote, get_file_type, get_all_files, file_in_archive
 import const
 
 
@@ -128,6 +128,11 @@ def step_impl(context, addr):
 @then('Cluster is using udpu transport mode')
 def step_impl(context):
     assert corosync.get_value('totem.transport') == 'udpu'
+
+
+@then('File "{f}" in "{archive}"')
+def step_impl(context, f, archive):
+    assert file_in_archive(f, archive) is True
 
 
 @then('Show cluster status on "{addr}"')
