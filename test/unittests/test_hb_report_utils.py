@@ -243,7 +243,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(res, mock_parse.return_value)
 
         mock_find_type.assert_called_once_with(line)
-        mock_parse.assert_called_once_with("2003-10-11T22:14:15.003Z")
+        mock_parse.assert_called_once_with("2003-10-11T22:14:15.003Z", quiet=True)
 
     @mock.patch('hb_report.utils.crmutils.parse_to_timestamp')
     @mock.patch('hb_report.utils.find_stamp_type')
@@ -258,7 +258,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(res, mock_parse.return_value)
 
         mock_find_type.assert_called_once_with(line)
-        mock_parse.assert_called_once_with("Feb 12 18:30:08")
+        mock_parse.assert_called_once_with("Feb 12 18:30:08", quiet=True)
 
     @mock.patch('hb_report.utils.is_rfc5424')
     @mock.patch('hb_report.utils.is_syslog')

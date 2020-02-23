@@ -1756,7 +1756,7 @@ class TestCore(unittest.TestCase):
         res = core.filter_log("logfile", "pattstr")
         self.assertEqual(res, "data1\n")
 
-        mock_open_file.assert_called_once_with("logfile")
+        mock_open_file.assert_called_once_with("logfile", encoding='utf-8', errors='replace')
         mock_search.assert_has_calls([
             mock.call("pattstr", "data1"),
             mock.call("pattstr", "data2")
