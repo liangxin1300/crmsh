@@ -729,7 +729,7 @@ def check_cores(context):
 
 def filter_log(log, patt):
     out = ""
-    with open(log) as fd:
+    with open(log, encoding='utf-8', errors='replace') as fd:
         data = fd.read()
     for line in data.split('\n'):
         if re.search(patt, line):
