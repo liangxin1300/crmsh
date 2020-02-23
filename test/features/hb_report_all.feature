@@ -11,8 +11,10 @@ Feature: hb_report functional test
     Then    Except "ERROR: hanode1#Master: Could not figure out a list of nodes; is this a cluster node?"
     When    Run "hb_report -n hanode1" on "hanode1"
     Then    Default hb_report tar file created
+    When    Remove default hb_report tar file
     When    Run "hb_report -n hanode2" on "hanode1"
     Then    Default hb_report tar file created
+    When    Remove default hb_report tar file
 
   @clean
   Scenario: Test hb_report options

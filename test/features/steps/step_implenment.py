@@ -204,6 +204,12 @@ def step_impl(context):
     assert os.path.exists(default_file_name) is True
 
 
+@when('Remove default hb_report tar file')
+def step_impl(context):
+    default_file_name = 'hb_report-{}.tar.bz2'.format(datetime.datetime.now().strftime("%a-%d-%b-%Y"))
+    os.remove(default_file_name)
+
+
 @then('Default hb_report directory created')
 def step_impl(context):
     default_file_name = 'hb_report-{}'.format(datetime.datetime.now().strftime("%a-%d-%b-%Y"))
