@@ -7,7 +7,7 @@ import pwd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from hb_report import const, utils, core
 from crmsh import utils as crmutils
-from crmsh import bootstrap
+from crmsh import bootstrap, corosync
 
 
 def distro():
@@ -419,3 +419,12 @@ def get_extra_logs(context):
 
 def dump_context(context):
     crmutils.str2file(context.dumps(), os.path.join(context.work_dir, const.CTX_F))
+
+
+def dump_corosync_log(context):
+    if not os.path.isfile(const.CONF):
+        return
+    logfile = corosync.get_value('logging.logfile')
+    if not logfile or not os.path.isfile(logfile):
+        return
+    core.dump_logset(context, logfile)
