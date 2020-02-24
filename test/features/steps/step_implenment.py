@@ -5,7 +5,8 @@ import datetime
 from behave import given, when, then
 from crmsh import corosync, parallax
 from utils import check_cluster_state, check_service_state, online, run_command, me, \
-        run_command_local_or_remote, get_file_type, get_all_files, file_in_archive
+        run_command_local_or_remote, get_file_type, get_all_files, file_in_archive, \
+        get_file_content
 import const
 
 
@@ -58,6 +59,11 @@ def step_impl(context, second):
 def step_impl(context, msg):
     assert context.stdout == msg
     context.stdout = None
+
+
+@when('Get "{file_name}" content from "{archive_name}"')
+def step_impl(context, file_name, archive_name):
+    context.stdout = get_file_content(archive_name, file_name)
 
 
 @then('Expected multiple lines')
