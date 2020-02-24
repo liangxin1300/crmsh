@@ -224,11 +224,11 @@ class TestUtils(unittest.TestCase):
     def test_tail(self):
         data1 = "line1\nline2\nline3\nline4\nline5"
         res1 = utils.tail(2, data1)
-        self.assertEqual(res1, ['line4', 'line5'])
+        self.assertEqual(list(res1), ['line5', 'line4'])
         
         data2 = "line1\nline2\nline3\nline4\nline5\n"
         res2 = utils.tail(2, data2)
-        self.assertEqual(res2, ['line5', ''])
+        self.assertEqual(list(res2), ['', 'line5'])
 
     @mock.patch('hb_report.utils.crmutils.parse_to_timestamp')
     @mock.patch('hb_report.utils.find_stamp_type')
