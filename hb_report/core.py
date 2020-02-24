@@ -63,16 +63,19 @@ class Context(object):
         return json.dumps(self.__dict__)
 
     def __setattr__(self, name, value):
-        if name in ["from_time", "to_time"]:
+        if name == "before_time" and value:
+            if not re.match('^[1-9][0-9]*[YmdHM]$', value):
+                utils.log_fatal("Wrong format of -b option ([1-9][0-9]*[YmdHM])")
+        if name in ["from_time", "to_time"] and value:
             value = utils.parse_to_timestamp(value)
         if name == "ssh_options" and value:
             value = utils.unzip_list(value)
             for item in value:
                 if not re.search('.*=.*', item):
                     utils.log_fatal("Wrong format of ssh option \"{}\"".format(item))
-        if name == "nodes":
+        if name == "nodes" and value:
             value = utils.unzip_list(value)
-        if name in ["extra_logs", "regex", "sensitive_regex"]:
+        if name in ["extra_logs", "regex", "sensitive_regex"] and value:
             value = utils.unzip_list(value) + self.__dict__[name]
         if isinstance(value, list):
             value = utils.unique(value)
@@ -142,6 +145,9 @@ def parse_argument(context):
 
 
 def process_some_arguments(context):
+    if context.before_time:
+        context.from_time = context.before_time
+
     if context.to_time <= context.from_time:
         utils.log_fatal("Start time must be before finish time")
 
