@@ -64,6 +64,7 @@ def step_impl(context, msg):
 @when('Get "{file_name}" content from "{archive_name}"')
 def step_impl(context, file_name, archive_name):
     context.stdout = get_file_content(archive_name, file_name)
+    context.logger.info("\n{}".format(context.stdout))
 
 
 @then('Expected multiple lines')
