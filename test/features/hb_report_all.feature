@@ -42,14 +42,11 @@ Feature: hb_report functional test
     Then    Cluster service is "started" on "hanode2"
     And     Online nodes are "hanode1 hanode2"
 
-    When    Write multi lines to file "/opt/text_time_span"
-      """
-      Feb 01 08:57:29 node1 line1
-      Feb 05 09:00:00 node1 line2
-      Feb 15 09:00:00 node1 line3
-      Feb 15 09:23:00 node1 line4
-      Feb 15 09:45:00 node1 line5
-      """
+    When    Run "echo "Feb 01 08:57:29 node1 line1" > /opt/text_time_span" on "hanode1"
+    When    Run "echo "Feb 05 09:00:00 node1 line2" >> /opt/text_time_span" on "hanode1"
+    When    Run "echo "Feb 15 09:00:00 node1 line3" >> /opt/text_time_span" on "hanode1"
+    When    Run "echo "Feb 15 09:23:00 node1 line4" >> /opt/text_time_span" on "hanode1"
+    When    Run "echo "Feb 15 09:45:00 node1 line5" >> /opt/text_time_span" on "hanode1"
     # file not in time span
     When     Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Jan31" report1" on "hanode1"
     Then    File "text_time_span" not in "report1.tar.bz2"
