@@ -50,10 +50,10 @@ Feature: hb_report functional test
       Feb 15 09:23:00 node1 line4
       Feb 15 09:45:00 node1 line5
       """
-    And     Run "hb_report -E /opt/text_time_span -f "Jan 0101" -t "Jan 0131" report1" on "hanode1"
+    And     Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Jan31" report1" on "hanode1"
     Then    File "text_time_span" not in "report1.tar.bz2"
     When    Run "rm -f report1.tar.bz2" on "hanode1"
-    And     Run "hb_report -E /opt/text_time_span -f "Jan 0101" -t "Feb 0216" report1" on "hanode1"
+    And     Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Feb16" report1" on "hanode1"
     Then    File "text_time_span" in "report1.tar.bz2"
     When    Get "text_time_span" content from "report1.tar.bz2"
     Then    Expected multiple lines
