@@ -50,10 +50,13 @@ Feature: hb_report functional test
       Feb 15 09:23:00 node1 line4
       Feb 15 09:45:00 node1 line5
       """
-    And     Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Jan31" report1" on "hanode1"
+    # file not in time span
+    When     Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Jan31" report1" on "hanode1"
     Then    File "text_time_span" not in "report1.tar.bz2"
     When    Run "rm -f report1.tar.bz2" on "hanode1"
-    And     Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Feb16" report1" on "hanode1"
+
+    # file content all in time span
+    When    Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Feb16" report1" on "hanode1"
     Then    File "text_time_span" in "report1.tar.bz2"
     When    Get "text_time_span" content from "report1.tar.bz2"
     Then    Expected multiple lines
@@ -63,6 +66,28 @@ Feature: hb_report functional test
       Feb 15 09:00:00 node1 line3
       Feb 15 09:23:00 node1 line4
       Feb 15 09:45:00 node1 line5
+      """
+    When    Run "rm -f report1.tar.bz2" on "hanode1"
+
+    # part of file content in time span
+    When    Run "hb_report -E /opt/text_time_span -f "Jan01" -t "Feb10" report1" on "hanode1"
+    Then    File "text_time_span" in "report1.tar.bz2"
+    When    Get "text_time_span" content from "report1.tar.bz2"
+    Then    Expected multiple lines
+      """
+      Feb 01 08:57:29 node1 line1
+      Feb 05 09:00:00 node1 line2
+      """
+    When    Run "rm -f report1.tar.bz2" on "hanode1"
+
+    # part of file content in time span
+    When    Run "hb_report -E /opt/text_time_span -f "Feb15 09:00" -t "Feb15 09:44" report1" on "hanode1"
+    Then    File "text_time_span" in "report1.tar.bz2"
+    When    Get "text_time_span" content from "report1.tar.bz2"
+    Then    Expected multiple lines
+      """
+      Feb 15 09:00:00 node1 line3
+      Feb 15 09:23:00 node1 line4
       """
     When    Run "rm -f report1.tar.bz2" on "hanode1"
     And     Run "rm -f /opt/text" on "hanode1"
