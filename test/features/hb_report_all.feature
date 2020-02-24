@@ -52,8 +52,11 @@ Feature: hb_report functional test
       """
     And     Run "hb_report -E /opt/text_time_span -f "Jan 0101" -t "Jan 0131" report1" on "hanode1"
     Then    File "text_time_span" not in "report1.tar.bz2"
-    When    Run "rm -f /opt/text" on "hanode1"
-    And     Run "rm -f report1.tar.bz2" on "hanode1"
+    When    Run "rm -f report1.tar.bz2" on "hanode1"
+    And     Run "hb_report -E /opt/text_time_span -f "Jan 0101" -t "Feb 0216" report1" on "hanode1"
+    Then    File "text_time_span" in "report1.tar.bz2"
+    When    Run "rm -f report1.tar.bz2" on "hanode1"
+    And     Run "rm -f /opt/text" on "hanode1"
 
   @clean
   Scenario: Verify hb_report options
