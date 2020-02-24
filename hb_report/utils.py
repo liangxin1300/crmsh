@@ -82,7 +82,7 @@ def find_stamp_type(line):
 
 def get_ts(line):
     ts = None
-    if not hasattr(core.ctx, "stamp_type"):
+    if not hasattr(core.ctx, "stamp_type") or not core.ctx.stamp_type:
         core.ctx.stamp_type = find_stamp_type(line)
     _type = core.ctx.stamp_type
     # rfc5424 format is like
@@ -149,6 +149,8 @@ def findln_by_time(data, ts):
 def find_first_ts(data):
     ts = None
     for line in data:
+        if not line:
+            continue
         ts = get_ts(line)
         if ts:
             break
@@ -160,7 +162,7 @@ def head(n, indata):
 
 
 def tail(n, indata):
-    return indata.split('\n')[-n:]
+    return reversed(indata.split('\n')[-n:])
 
 
 def parse_to_timestamp(time):

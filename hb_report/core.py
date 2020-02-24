@@ -233,6 +233,7 @@ def is_our_log(context, logf):
     '''
     data = utils.read_from_file(logf)
     if not data:
+        utils.log_debug2("Found empty file \"{}\"; exclude".format(logf))
         return 2
 
     # reset this attr to check file's format
@@ -244,14 +245,19 @@ def is_our_log(context, logf):
     to_time = context.to_time
 
     if (not first_time) or (not last_time):
+        utils.log_debug2("Found irregular file \"{}\"; include".format(logf))
         return 1
     if from_time > last_time:
+        utils.log_debug2("Found before timespan file \"{}\"; exclude".format(logf))
         return 3
     if from_time >= first_time:
+        utils.log_debug2("Found in timespan file \"{}\"; include".format(logf))
         return 0
     if to_time >= first_time:
+        utils.log_debug2("Found in timespan file \"{}\"; include".format(logf))
         return 0
     else:
+        utils.log_debug2("Found after timespan file \"{}\"; exclude".format(logf))
         return 4
 
 
@@ -281,7 +287,7 @@ def arch_logs(context, logf):
             _type = res
             ret.append(f)
     if ret:
-        utils.log_debug2("Found logs {} in timespan".format(ret))
+        utils.log_debug2("Found logs {}".format(ret))
     return _type, ret
 
 
