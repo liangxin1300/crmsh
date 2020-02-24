@@ -164,7 +164,7 @@ def tail(n, indata):
 
 
 def parse_to_timestamp(time):
-    res = re.match("^[-]([1-9][0-9]*)([YmdHM])$", time)
+    res = re.match("^-?([1-9][0-9]*)([YmdHM])$", time)
     if res:
         number_str, flag = res.groups()
         number = int(number_str)
