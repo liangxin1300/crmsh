@@ -417,7 +417,7 @@ class TestUtils(unittest.TestCase):
         with self.assertRaises(SystemExit):
             utils.parse_to_timestamp("20200202")
 
-        mock_match.assert_called_once_with("'^-?([1-9][0-9]*)([YmdHM])$", "20200202")
+        mock_match.assert_called_once_with('^-?([1-9][0-9]*)([YmdHM])$', "20200202")
         mock_parse.assert_called_once_with("20200202")
         mock_fatal.assert_called_once_with('Try these format like: 2pm; 1:00; "2019/9/5 12:30"; "09-Sep-07 2:00"')
 
