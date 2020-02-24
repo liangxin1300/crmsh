@@ -16,7 +16,7 @@ def get_file_content(archive_path, file_name):
                 content=f.read()
                 break
         tar.close()
-        return content
+        return utils.to_ascii(content)
     if archive_type == "directory":
         pass
 
