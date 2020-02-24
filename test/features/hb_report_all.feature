@@ -81,7 +81,7 @@ Feature: hb_report functional test
     When    Run "rm -f report1.tar.bz2" on "hanode1"
 
     # part of file content in time span
-    When    Run "hb_report -E /opt/text_time_span -f "Feb15 09:00" -t "Feb15 09:44" report1" on "hanode1"
+    When    Run "hb_report -E /opt/text_time_span -f "Feb15 09:00" -t "Feb15 09:43" report1" on "hanode1"
     Then    File "text_time_span" in "report1.tar.bz2"
     When    Get "text_time_span" content from "report1.tar.bz2"
     Then    Expected multiple lines
