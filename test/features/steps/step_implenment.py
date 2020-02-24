@@ -209,6 +209,11 @@ def step_impl(context):
     assert os.path.exists(default_file_name) is True
 
 
+@when('Write multi lines to file "{f}"')
+def step_impl(context, f):
+    context.logger.info("\n{}".format(context.text))
+
+
 @when('Remove default hb_report tar file')
 def step_impl(context):
     default_file_name = 'hb_report-{}.tar.bz2'.format(datetime.datetime.now().strftime("%a-%d-%b-%Y"))

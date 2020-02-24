@@ -32,6 +32,35 @@ Feature: hb_report functional test
     Then    File "text_non_utf8" in "report1.tar.bz2"
     When    Run "rm -f report1.tar.bz2" on "hanode1"
 
+  @clean
+  Scenario: Verify log file filter by time span
+    Given   Cluster service is "stopped" on "hanode1"
+    And     Cluster service is "stopped" on "hanode2"
+    When    Run "crm cluster init -y --no-overwrite-sshkey" on "hanode1"
+    Then    Cluster service is "started" on "hanode1"
+    When    Run "crm cluster join -c hanode1 -y" on "hanode2"
+    Then    Cluster service is "started" on "hanode2"
+    And     Online nodes are "hanode1 hanode2"
+
+    When    Write multi lines to file "/opt/text"
+      """
+      Feb 01 08:57:29 node1 line1
+      Feb 05 09:00:00 node1 line2
+      Feb 15 09:00:00 node1 line3
+      Feb 15 09:23:00 node1 line4
+      Feb 15 09:45:00 node1 line5
+      """
+
+  @clean
+  Scenario: Verify hb_report options
+    Given   Cluster service is "stopped" on "hanode1"
+    And     Cluster service is "stopped" on "hanode2"
+    When    Run "crm cluster init -y --no-overwrite-sshkey" on "hanode1"
+    Then    Cluster service is "started" on "hanode1"
+    When    Run "crm cluster join -c hanode1 -y" on "hanode2"
+    Then    Cluster service is "started" on "hanode2"
+    And     Online nodes are "hanode1 hanode2"
+
     # -f and -t option
     When    Run "hb_report -f 2019 /opt/report" on "hanode1"
     Then    "/opt/report.tar.bz2" created
