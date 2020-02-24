@@ -96,6 +96,8 @@ def parse_argument(context):
             help='time to start from (default: 12 hours before)')
     parser.add_argument('-t', dest='to_time', metavar='time',
             help='time to finish at (default: now)')
+    parser.add_argument('-b', dest='before_time', metavar='time',
+            help='how long time in the past, before now ([1-9][0-9]*[YmdHM])')
     parser.add_argument('-d', dest='no_compress', action='store_true',
             help="don't compress, but leave result in a directory")
     parser.add_argument('-n', dest='nodes', metavar='node', action="append", default=[],

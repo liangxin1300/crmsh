@@ -26,6 +26,7 @@ Feature: hb_report functional test
     Then    Cluster service is "started" on "hanode2"
     And     Online nodes are "hanode1 hanode2"
 
+    # touch file contain non utf-8 character
     When    Run "echo 'abc#$%%^' | iconv -f UTF-8 -t UTF-16 > /opt/text_non_utf8" on "hanode1"
     And     Run "hb_report -E /opt/text_non_utf8 report1" on "hanode1"
     Then    File "text_non_utf8" in "report1.tar.bz2"
