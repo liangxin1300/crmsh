@@ -292,7 +292,7 @@ class TestUtils(unittest.TestCase):
     @mock.patch('hb_report.utils.get_ts')
     def test_find_first_ts(self, mock_get_ts):
         mock_get_ts.side_effect = [None, 12345]
-        data = ["line1", "line2"]
+        data = ["line1", "line2", ""]
         res = utils.find_first_ts(data)
         self.assertEqual(res, 12345)
         mock_get_ts.assert_has_calls([
