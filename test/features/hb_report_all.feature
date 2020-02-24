@@ -42,7 +42,7 @@ Feature: hb_report functional test
     Then    Cluster service is "started" on "hanode2"
     And     Online nodes are "hanode1 hanode2"
 
-    When    Write multi lines to file "/opt/text"
+    When    Write multi lines to file "/opt/text_time_span"
       """
       Feb 01 08:57:29 node1 line1
       Feb 05 09:00:00 node1 line2
@@ -50,6 +50,10 @@ Feature: hb_report functional test
       Feb 15 09:23:00 node1 line4
       Feb 15 09:45:00 node1 line5
       """
+    And     Run "hb_report -E /opt/text_time_span -f "Jan 0101" -t "Jan 0131" report1" on "hanode1"
+    Then    File "text_time_span" not in "report1.tar.bz2"
+    When    Run "rm -f /opt/text" on "hanode1"
+    And     Run "rm -f report1.tar.bz2" on "hanode1"
 
   @clean
   Scenario: Verify hb_report options

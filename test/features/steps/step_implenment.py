@@ -135,6 +135,11 @@ def step_impl(context, f, archive):
     assert file_in_archive(f, archive) is True
 
 
+@then('File "{f}" not in "{archive}"')
+def step_impl(context, f, archive):
+    assert file_in_archive(f, archive) is False
+
+
 @then('Show cluster status on "{addr}"')
 def step_impl(context, addr):
     out = run_command_local_or_remote(context, 'crm_mon -1', addr)
@@ -211,7 +216,8 @@ def step_impl(context):
 
 @when('Write multi lines to file "{f}"')
 def step_impl(context, f):
-    context.logger.info("\n{}".format(context.text))
+    with open(f, 'w') as f:
+        f.write(context.text)
 
 
 @when('Remove default hb_report tar file')
