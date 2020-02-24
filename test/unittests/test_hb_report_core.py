@@ -79,7 +79,11 @@ class TestContext(unittest.TestCase):
     @mock.patch('hb_report.utils.log_fatal')
     def test_setattr_fatal(self, mock_fatal):
         self.context.ssh_options = ["test"]
-        mock_fatal.assert_called_once_with('Wrong format of ssh option "test"')
+        self.context.before_time = "test"
+        mock_fatal.assert_has_calls([
+            mock.call('Wrong format of ssh option "test"'),
+            mock.call('Wrong format of -b option ([1-9][0-9]*[YmdHM])')
+            ])
 
     def test_setitem(self):
         self.context['tmp_name'] = "tmp_name"
@@ -263,6 +267,7 @@ class TestCore(unittest.TestCase):
     @mock.patch('hb_report.utils.now')
     @mock.patch('hb_report.utils.log_fatal')
     def test_process_some_arguments(self, mock_fatal, mock_now, mock_ts_to_str, mock_tmpfiles):
+        self.context.before_time = 123
         mock_now.return_value = "Wed-05-Feb-2020"
         mock_ts_to_str.side_effect = ["time_str_from", "time_str_to"]
         mock_tmpfiles.side_effect = [(1, "/tmp/tmp1"), (2, "/tmp/tmp2")]
