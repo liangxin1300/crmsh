@@ -951,18 +951,21 @@ class TestCore(unittest.TestCase):
 
         mock_search.assert_called_once_with('name="test"', "data")
 
+    @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.utils.read_from_file')
-    def test_is_our_log_empty(self, mock_read):
+    def test_is_our_log_empty(self, mock_read, mock_debug2):
         mock_read.return_value = ''
         rc = core.is_our_log(self.context, "logfile")
         self.assertEqual(rc, 2)
         mock_read.assert_called_once_with("logfile")
+        mock_debug2.assert_called_once_with('Found empty file "logfile"; exclude')
 
+    @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.utils.find_first_ts')
     @mock.patch('hb_report.utils.tail')
     @mock.patch('hb_report.utils.head')
     @mock.patch('hb_report.utils.read_from_file')
-    def test_is_our_log_irregular(self, mock_read, mock_head, mock_tail, mock_first):
+    def test_is_our_log_irregular(self, mock_read, mock_head, mock_tail, mock_first, mock_debug2):
         mock_read.return_value = "data"
         mock_head.return_value = ["data", "data"]
         mock_tail.return_value = ["data", "data"]
@@ -978,12 +981,14 @@ class TestCore(unittest.TestCase):
             mock.call(mock_head.return_value),
             mock.call(mock_tail.return_value)
             ])
+        mock_debug2.assert_called_once_with('Found irregular file "logfile"; include')
 
+    @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.utils.find_first_ts')
     @mock.patch('hb_report.utils.tail')
     @mock.patch('hb_report.utils.head')
     @mock.patch('hb_report.utils.read_from_file')
-    def test_is_our_log_outdate_case1(self, mock_read, mock_head, mock_tail, mock_first):
+    def test_is_our_log_outdate_case1(self, mock_read, mock_head, mock_tail, mock_first, mock_debug2):
         mock_read.return_value = "data"
         mock_head.return_value = ["data", "data"]
         mock_tail.return_value = ["data", "data"]
@@ -999,12 +1004,14 @@ class TestCore(unittest.TestCase):
             mock.call(mock_head.return_value),
             mock.call(mock_tail.return_value)
             ])
+        mock_debug2.assert_called_once_with('Found before timespan file "logfile"; exclude')
 
+    @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.utils.find_first_ts')
     @mock.patch('hb_report.utils.tail')
     @mock.patch('hb_report.utils.head')
     @mock.patch('hb_report.utils.read_from_file')
-    def test_is_our_log_outdate_case2(self, mock_read, mock_head, mock_tail, mock_first):
+    def test_is_our_log_outdate_case2(self, mock_read, mock_head, mock_tail, mock_first, mock_debug2):
         mock_read.return_value = "data"
         mock_head.return_value = ["data", "data"]
         mock_tail.return_value = ["data", "data"]
@@ -1020,12 +1027,14 @@ class TestCore(unittest.TestCase):
             mock.call(mock_head.return_value),
             mock.call(mock_tail.return_value)
             ])
+        mock_debug2.assert_called_once_with('Found after timespan file "logfile"; exclude')
 
+    @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.utils.find_first_ts')
     @mock.patch('hb_report.utils.tail')
     @mock.patch('hb_report.utils.head')
     @mock.patch('hb_report.utils.read_from_file')
-    def test_is_our_log_case1(self, mock_read, mock_head, mock_tail, mock_first):
+    def test_is_our_log_case1(self, mock_read, mock_head, mock_tail, mock_first, mock_debug2):
         mock_read.return_value = "data"
         mock_head.return_value = ["data", "data"]
         mock_tail.return_value = ["data", "data"]
@@ -1041,12 +1050,14 @@ class TestCore(unittest.TestCase):
             mock.call(mock_head.return_value),
             mock.call(mock_tail.return_value)
             ])
+        mock_debug2.assert_called_once_with('Found in timespan file "logfile"; include')
 
+    @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.utils.find_first_ts')
     @mock.patch('hb_report.utils.tail')
     @mock.patch('hb_report.utils.head')
     @mock.patch('hb_report.utils.read_from_file')
-    def test_is_our_log_case2(self, mock_read, mock_head, mock_tail, mock_first):
+    def test_is_our_log_case2(self, mock_read, mock_head, mock_tail, mock_first, mock_debug2):
         mock_read.return_value = "data"
         mock_head.return_value = ["data", "data"]
         mock_tail.return_value = ["data", "data"]
@@ -1062,6 +1073,7 @@ class TestCore(unittest.TestCase):
             mock.call(mock_head.return_value),
             mock.call(mock_tail.return_value)
             ])
+        mock_debug2.assert_called_once_with('Found in timespan file "logfile"; include')
 
     @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.core.is_our_log')
@@ -1086,7 +1098,7 @@ class TestCore(unittest.TestCase):
             mock.call(self.context, "file1.gz"),
             mock.call(self.context, "file2.gz")
             ])
-        mock_debug2.assert_called_once_with("Found logs {} in timespan".format(res))
+        mock_debug2.assert_called_once_with("Found logs {}".format(res))
 
     @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.core.is_our_log')
