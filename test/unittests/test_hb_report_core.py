@@ -129,6 +129,7 @@ class TestCore(unittest.TestCase):
                 name = "hb_report",
                 work_dir="/tmp",
                 dest_path="/opt",
+                before_time=None,
                 from_time=1580859300.0,
                 to_time=1580902500.0,
                 from_time_str="2020-02-09 06:11",
