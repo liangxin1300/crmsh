@@ -32,16 +32,6 @@ Feature: hb_report functional test
     Then    File "text_non_utf8" in "report1.tar.bz2"
     When    Run "rm -f report1.tar.bz2" on "hanode1"
 
-  @clean
-  Scenario: Test hb_report options
-    Given   Cluster service is "stopped" on "hanode1"
-    And     Cluster service is "stopped" on "hanode2"
-    When    Run "crm cluster init -y --no-overwrite-sshkey" on "hanode1"
-    Then    Cluster service is "started" on "hanode1"
-    When    Run "crm cluster join -c hanode1 -y" on "hanode2"
-    Then    Cluster service is "started" on "hanode2"
-    And     Online nodes are "hanode1 hanode2"
-
     # -f and -t option
     When    Run "hb_report -f 2019 /opt/report" on "hanode1"
     Then    "/opt/report.tar.bz2" created
