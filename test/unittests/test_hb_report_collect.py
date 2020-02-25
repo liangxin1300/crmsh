@@ -572,26 +572,8 @@ class TestCollect(unittest.TestCase):
     @mock.patch('os.path.join')
     @mock.patch('hb_report.utils.me')
     @mock.patch('hb_report.collect.crmutils.get_dc')
-    def test_touch_dc_speed_up_true(self, mock_dc, mock_me, mock_join,
-            mock_touch, mock_debug):
-        self.context.speed_up = True
-
-        collect.touch_dc(self.context)
-
-        mock_debug.assert_called_once_with("Skip find DC node")
-        mock_dc.assert_not_called()
-        mock_me.assert_not_called()
-        mock_join.assert_not_called()
-        mock_touch.assert_not_called()
-
-    @mock.patch('hb_report.utils.log_debug1')
-    @mock.patch('hb_report.utils.touch_file')
-    @mock.patch('os.path.join')
-    @mock.patch('hb_report.utils.me')
-    @mock.patch('hb_report.collect.crmutils.get_dc')
     def test_touch_dc(self, mock_dc, mock_me, mock_join,
             mock_touch, mock_debug):
-        self.context.speed_up = False
         mock_dc.return_value = "node1"
         mock_me.return_value = "node1"
         mock_join.return_value = "{}/DC".format(self.context.work_dir)
@@ -1214,16 +1196,29 @@ class TestCollect(unittest.TestCase):
         self.context.dumps.assert_called_once_with()
         mock_str2file.assert_called_once_with("dumps data", mock_join.return_value)
 
+    @mock.patch('hb_report.collect.get_pcmk_log')
     @mock.patch('hb_report.core.dump_logset')
     @mock.patch('os.path.isfile')
-    def test_get_extra_logs(self, mock_isfile, mock_dump):
+    def test_get_extra_logs(self, mock_isfile, mock_dump, mock_pcmk_log):
+        self.context.no_extra = False
+        mock_pcmk_log.return_value = "pcmk.log"
         self.context.extra_logs = ["file1", "file2"]
-        mock_isfile.side_effect = [True, False]
+        mock_isfile.side_effect = [True, False, False]
 
         collect.get_extra_logs(self.context)
 
-        mock_isfile.assert_has_calls([mock.call("file1"), mock.call("file2")])
+        mock_isfile.assert_has_calls([
+            mock.call("file1"),
+            mock.call("file2"),
+            mock.call("pcmk.log")
+            ])
         mock_dump.assert_called_once_with(self.context, "file1")
+
+    @mock.patch('hb_report.utils.log_debug1')
+    def test_get_extra_logs_skip(self, mock_debug1):
+        self.context.no_extra = True
+        collect.get_extra_logs(self.context)
+        mock_debug1.assert_called_once_with("Skip collect extra logs")
 
     @mock.patch('hb_report.collect.corosync.get_value')
     @mock.patch('os.path.isfile')
@@ -1254,3 +1249,101 @@ class TestCollect(unittest.TestCase):
         mock_isfile.assert_has_calls([mock.call(const.CONF), mock.call("logfile")])
         mock_get_value.assert_called_once_with("logging.logfile")
         mock_dump.assert_called_once_with(self.context, "logfile")
+
+    @mock.patch("builtins.open", new_callable=mock.mock_open)
+    @mock.patch('os.path.isfile')
+    def test_get_pcmk_log_no_exist(self, mock_isfile, mock_open_file):
+        mock_isfile.return_value = False
+        collect.get_pcmk_log()
+        mock_isfile.assert_called_once_with("/etc/sysconfig/pacemaker")
+        mock_open_file.assert_not_called()
+
+    @mock.patch('re.search')
+    @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="")
+    @mock.patch('os.path.isfile')
+    def test_get_pcmk_log_no_data(self, mock_isfile, mock_open_file, mock_search):
+        mock_isfile.return_value = True
+        collect.get_pcmk_log()
+        mock_isfile.assert_called_once_with("/etc/sysconfig/pacemaker")
+        mock_open_file.assert_called_once_with("/etc/sysconfig/pacemaker")
+        mock_search.assert_not_called()
+
+    @mock.patch('re.search')
+    @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="data")
+    @mock.patch('os.path.isfile')
+    def test_get_pcmk_log_no_res(self, mock_isfile, mock_open_file, mock_search):
+        mock_isfile.return_value = True
+        mock_search.return_value = None
+        collect.get_pcmk_log()
+        mock_isfile.assert_called_once_with("/etc/sysconfig/pacemaker")
+        mock_open_file.assert_called_once_with("/etc/sysconfig/pacemaker")
+        mock_search.assert_called_once_with('PCMK_logfile *= *(.*)', "data")
+
+    @mock.patch('re.search')
+    @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="data")
+    @mock.patch('os.path.isfile')
+    def test_get_pcmk_log(self, mock_isfile, mock_open_file, mock_search):
+        mock_isfile.return_value = True
+        mock_search_inst = mock.Mock()
+        mock_search.return_value = mock_search_inst
+        mock_search_inst.group.return_value = "return data"
+        res = collect.get_pcmk_log()
+        self.assertEqual(res, "return data")
+        mock_isfile.assert_called_once_with("/etc/sysconfig/pacemaker")
+        mock_open_file.assert_called_once_with("/etc/sysconfig/pacemaker")
+        mock_search.assert_called_once_with('PCMK_logfile *= *(.*)', "data")
+        mock_search_inst.group.assert_called_once_with(1)
+
+    @mock.patch('hb_report.utils.is_log_empty')
+    @mock.patch('os.path.isfile')
+    @mock.patch('os.path.join')
+    def test_events_not_exist(self, mock_join, mock_isfile, mock_empty):
+        mock_join.return_value = "{}/{}".format(self.context.work_dir, const.HALOG_F)
+        mock_isfile.return_value = False
+        collect.events(self.context)
+        mock_join.assert_called_once_with(self.context.work_dir, const.HALOG_F)
+        mock_isfile.assert_called_once_with(mock_join.return_value)
+        mock_empty.assert_not_called()
+
+    @mock.patch('hb_report.utils.is_log_empty')
+    @mock.patch('os.path.isfile')
+    @mock.patch('os.path.join')
+    def test_events_empty(self, mock_join, mock_isfile, mock_empty):
+        mock_join.return_value = "{}/{}".format(self.context.work_dir, const.HALOG_F)
+        mock_isfile.return_value = True
+        mock_empty.return_value = True
+        collect.events(self.context)
+        mock_join.assert_called_once_with(self.context.work_dir, const.HALOG_F)
+        mock_isfile.assert_called_once_with(mock_join.return_value)
+        mock_empty.assert_called_once_with(mock_join.return_value)
+
+    @mock.patch('hb_report.utils.log_debug1')
+    @mock.patch('hb_report.collect.crmutils.str2file')
+    @mock.patch('re.search')
+    @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="data1\ndata2")
+    @mock.patch('hb_report.utils.is_log_empty')
+    @mock.patch('os.path.isfile')
+    @mock.patch('os.path.join')
+    def test_events(self, mock_join, mock_isfile, mock_empty, mock_open_file, mock_search,
+            mock_str2file, mock_debug1):
+        mock_join.side_effect = ["{}/{}".format(self.context.work_dir, const.HALOG_F),
+                "{}/{}".format(self.context.work_dir, const.EVENTS_F)]
+        mock_isfile.return_value = True
+        mock_empty.return_value = False
+        const.EVENT_PATTERNS = "patt1\npatt2"
+        mock_search.side_effect = [True, False]
+
+        collect.events(self.context)
+
+        mock_open_file.assert_called_once_with("{}/{}".format(self.context.work_dir, const.HALOG_F))
+        mock_search.assert_has_calls([
+            mock.call("patt1|patt2", "data1"),
+            mock.call("patt1|patt2", "data2")
+            ])
+        mock_join.assert_has_calls([
+            mock.call(self.context.work_dir, const.HALOG_F),
+            mock.call(self.context.work_dir, const.EVENTS_F)
+            ])
+        mock_str2file.assert_called_once_with("data1\n", "{}/{}".format(self.context.work_dir, const.EVENTS_F))
+        mock_isfile.assert_called_once_with("{}/{}".format(self.context.work_dir, const.HALOG_F))
+        mock_empty.assert_called_once_with("{}/{}".format(self.context.work_dir, const.HALOG_F))

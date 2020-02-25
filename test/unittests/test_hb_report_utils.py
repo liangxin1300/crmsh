@@ -17,10 +17,9 @@ class TestPackage(unittest.TestCase):
         Global setUp.
         """
 
-    @mock.patch('hb_report.utils.installed_pkgs')
     @mock.patch('hb_report.utils.log_warning')
     @mock.patch('hb_report.utils.get_pkg_mgr')
-    def setUp(self, mock_pkg_mgr, mock_warn, mock_installed):
+    def setUp(self, mock_pkg_mgr, mock_warn):
         """
         Test setUp.
         """
@@ -28,12 +27,10 @@ class TestPackage(unittest.TestCase):
         self.pkg_inst_err = utils.Package("pkg1 pkg2")
 
         mock_pkg_mgr.return_value = "rpm"
-        mock_installed.return_value = ["pkg1", "pkg2"]
         self.pkg_inst = utils.Package("pkg1 pkg2")
 
         mock_pkg_mgr.assert_has_calls([mock.call(), mock.call()])
         mock_warn.assert_called_once_with("The package manager is pkg_info, not support for now")
-        mock_installed.assert_called_once_with("pkg1 pkg2")
 
     def tearDown(self):
         """
@@ -55,7 +52,7 @@ class TestPackage(unittest.TestCase):
         mock_pkg_ver.return_value = "version1"
         res = self.pkg_inst.version()
         assert res == "version1"
-        mock_pkg_ver.assert_called_once_with(["pkg1", "pkg2"])
+        mock_pkg_ver.assert_called_once_with("pkg1 pkg2")
 
     def test_verify_empty(self):
         res = self.pkg_inst_err.verify()
@@ -66,7 +63,7 @@ class TestPackage(unittest.TestCase):
         mock_verify.return_value = "verify ok"
         res = self.pkg_inst.verify()
         assert res == "verify ok"
-        mock_verify.assert_called_once_with(["pkg1", "pkg2"])
+        mock_verify.assert_called_once_with("pkg1 pkg2")
 
 class TestUtils(unittest.TestCase):
 
@@ -463,55 +460,45 @@ class TestUtils(unittest.TestCase):
         mock_which.assert_called_once_with("rpm")
         mock_warn.assert_not_called()
 
+    @mock.patch('re.search')
     @mock.patch('hb_report.utils.crmutils.get_stdout')
-    def test_installed_pkgs(self, mock_run):
-        mock_run.side_effect = [(1, None), (0, None), (0, None)]
-        res = utils.installed_pkgs("pkg1 pkg2 pkg3")
-        self.assertEqual(res, ["pkg2", "pkg3"])
-        mock_run.assert_has_calls([
-            mock.call("rpm -q pkg1"),
-            mock.call("rpm -q pkg2"),
-            mock.call("rpm -q pkg3")
-            ])
-
-    @mock.patch('hb_report.utils.crmutils.get_stdout')
-    def test_pkg_ver_rpm(self, mock_run):
-        mock_run.side_effect = [(0, "data1"), (1, None)]
-        res = utils.pkg_ver_rpm(["pkg1", "pkg2"])
+    def test_pkg_ver_rpm(self, mock_run, mock_search):
+        mock_run.return_value = (0, "data1\nnot installed")
+        mock_search.side_effect = [False, True]
+        res = utils.pkg_ver_rpm("pkg1 pkg2")
         self.assertEqual(res, "Name | Version-Release | Distribution | Arch\n-----\ndata1\n")
-        cmd = "rpm -q --qf '%{name} | %{version}-%{release} | %{distribution} | %{arch}'"
-        mock_run.assert_has_calls([
-            mock.call("{} pkg1".format(cmd)),
-            mock.call("{} pkg2".format(cmd))
+        cmd = "rpm -q --qf '%{name} | %{version}-%{release} | %{distribution} | %{arch}\n'"
+        mock_run.assert_called_once_with("{} pkg1 pkg2".format(cmd))
+        mock_search.assert_has_calls([
+            mock.call('not installed', "data1"),
+            mock.call('not installed', "not installed")
             ])
 
     @mock.patch('hb_report.utils.log_debug2')
-    @mock.patch('hb_report.utils.log_warning')
-    @mock.patch('hb_report.utils.crmutils.get_stdout_stderr')
-    def test_verify_rpm_ok(self, mock_run, mock_warn, mock_debug2):
-        mock_run.side_effect = [(0, None, None), (0, None, None)]
-        res = utils.verify_rpm(["pkg1", "pkg2"])
-        self.assertEqual(res, "All packages verify successfully\n")
-        mock_run.assert_has_calls([
-            mock.call("rpm --verify pkg1"),
-            mock.call("rpm --verify pkg2")
-            ])
-        mock_debug2.assert_called_once_with("All packages verify successfully\n")
-        mock_warn.assert_not_called()
-
-    @mock.patch('hb_report.utils.log_debug2')
-    @mock.patch('hb_report.utils.log_warning')
-    @mock.patch('hb_report.utils.crmutils.get_stdout_stderr')
-    def test_verify_rpm(self, mock_run, mock_warn, mock_debug2):
-        mock_run.side_effect = [(1, None, "err data"), (0, None, None)]
-        res = utils.verify_rpm(["pkg1", "pkg2"])
-        self.assertEqual(res, "Verify pkg1 error: err data\n")
-        mock_run.assert_has_calls([
-            mock.call("rpm --verify pkg1"),
-            mock.call("rpm --verify pkg2")
+    @mock.patch('re.search')
+    @mock.patch('hb_report.utils.crmutils.get_stdout')
+    def test_verify_rpm(self, mock_run, mock_search, mock_debug2):
+        mock_run.return_value = (0, "data1\nnot installed")
+        mock_search.side_effect = [False, True]
+        res = utils.verify_rpm("pkg1 pkg2")
+        self.assertEqual(res, "data1\n")
+        mock_run.assert_called_once_with("rpm --verify pkg1 pkg2")
+        mock_search.assert_has_calls([
+            mock.call('not installed', "data1"),
+            mock.call('not installed', "not installed")
             ])
         mock_debug2.assert_not_called()
-        mock_warn.assert_called_once_with("err data")
+
+    @mock.patch('hb_report.utils.log_debug2')
+    @mock.patch('re.search')
+    @mock.patch('hb_report.utils.crmutils.get_stdout')
+    def test_verify_rpm_ok(self, mock_run, mock_search, mock_debug2):
+        mock_run.return_value = (0, None)
+        res = utils.verify_rpm("pkg1 pkg2")
+        self.assertEqual(res, "All packages verify successfully\n")
+        mock_run.assert_called_once_with("rpm --verify pkg1 pkg2")
+        mock_search.assert_not_called()
+        mock_debug2.assert_called_once_with("All packages verify successfully")
 
     @mock.patch("builtins.open", new_callable=mock.mock_open, create=True)
     def test_touch_file(self, mock_open_file):
@@ -605,3 +592,11 @@ class TestUtils(unittest.TestCase):
         a = [3,2,1,3,4,5]
         res = utils.unique(a)
         self.assertEqual(res, [3,2,1,4,5])
+
+    @mock.patch('os.stat')
+    def test_is_log_empty(self, mock_stat):
+        mock_stat_inst = mock.Mock(st_size=0)
+        mock_stat.return_value = mock_stat_inst
+        res = utils.is_log_empty("logf")
+        self.assertTrue(res)
+        mock_stat.assert_called_once_with("logf")

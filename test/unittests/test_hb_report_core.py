@@ -1220,6 +1220,7 @@ class TestCore(unittest.TestCase):
 
         mock_arch.assert_called_once_with(self.context, "/var/log/pacemaker.log")
         mock_printlog.assert_called_once_with("/var/log/pacemaker.log", 0, 0)
+        mock_debug2.assert_called_once_with("Including complete /var/log/pacemaker.log logfile")
         mock_basename.assert_has_calls([
             mock.call("/var/log/pacemaker.log"),
             mock.call("/var/log/pacemaker.log")
@@ -1279,6 +1280,7 @@ class TestCore(unittest.TestCase):
             mock.call("/var/log/pacemaker1.log", 0, 0),
             mock.call("/var/log/pacemaker.log", 0, self.context.to_time),
             ])
+        mock_debug2("Including complete /var/log/pacemaker1.log logfile")
         mock_basename.assert_has_calls([
             mock.call("/var/log/pacemaker.log"),
             mock.call("/var/log/pacemaker.log")
@@ -1405,42 +1407,40 @@ class TestCore(unittest.TestCase):
 
     @mock.patch('builtins.eval')
     @mock.patch('hb_report.core.crmutils.get_stdout_stderr')
-    @mock.patch('hb_report.core.crmutils.get_stdout')
     @mock.patch('hb_report.utils.me')
-    def test_start_slave_collector_local(self, mock_me, mock_stdout, mock_stdout_stderr, mock_eval):
+    def test_start_slave_collector_local(self, mock_me, mock_stdout_stderr, mock_eval):
         self.context.local_sudo = "sudo"
         mock_me.return_value = "node1"
-        mock_stdout.return_value = (0, "{}hb_report data\nlog1\nlog2".format(const.COMPRESS_DATA_FLAG))
+        mock_stdout_stderr.return_value = (0, "{}hb_report data\nlog1\nlog2".format(const.COMPRESS_DATA_FLAG), None)
         mock_eval.return_value = "hb_report data".encode('utf-8')
  
         core.start_slave_collector(self.context, "node1")
 
         mock_me.assert_called_once_with()
         cmd_slave = r"{} __slave '{}'".format(self.context.name, self.context)
-        cmd = r'{} {}'.format(self.context.local_sudo, cmd_slave)
-        mock_stdout.assert_called_once_with(cmd)
-        cmd = r"(cd {} && tar xf -)".format(self.context.work_dir)
-        mock_stdout_stderr.assert_called_once_with(cmd, input_s=mock_eval.return_value)
+        cmd1 = r'{} {}'.format(self.context.local_sudo, cmd_slave)
+        cmd2 = r"(cd {} && tar xf -)".format(self.context.work_dir)
+        mock_stdout_stderr.assert_has_calls([
+            mock.call(cmd1),
+            mock.call(cmd2, input_s=mock_eval.return_value)
+            ])
 
-    @mock.patch('builtins.eval')
+    @mock.patch('hb_report.utils.log_error')
     @mock.patch('hb_report.core.crmutils.get_stdout_stderr')
-    @mock.patch('hb_report.core.crmutils.get_stdout')
     @mock.patch('hb_report.utils.me')
-    def test_start_slave_collector(self, mock_me, mock_stdout, mock_stdout_stderr, mock_eval):
+    def test_start_slave_collector(self, mock_me, mock_stdout_stderr, mock_error):
         self.context.sudo = "sudo"
         self.context.ssh_options = ""
         mock_me.return_value = "node1"
-        mock_stdout.return_value = (0, "{}hb_report data\nlog1\nlog2".format(const.COMPRESS_DATA_FLAG))
-        mock_eval.return_value = "hb_report data".encode('utf-8')
+        mock_stdout_stderr.return_value = (255, None, "ssh error")
 
         core.start_slave_collector(self.context, "node2")
 
         mock_me.assert_called_once_with()
         cmd_slave = r"{} __slave '{}'".format(self.context.name, self.context)
         cmd = r'ssh -o {} {} "{} {}"'.format(' -o '.join(self.context.ssh_options), "node2", self.context.sudo, cmd_slave.replace('"', '\\"'))
-        mock_stdout.assert_called_once_with(cmd)
-        cmd = r"(cd {} && tar xf -)".format(self.context.work_dir)
-        mock_stdout_stderr.assert_called_once_with(cmd, input_s=mock_eval.return_value)
+        mock_stdout_stderr.assert_called_once_with(cmd)
+        mock_error.assert_called_once_with("ssh error")
 
     @mock.patch('hb_report.core.crmutils.is_program')
     def test_pick_first_none(self, mock_is_program):
@@ -1904,10 +1904,12 @@ class TestCore(unittest.TestCase):
 
         mock_parser_inst.print_help.assert_called_once_with()
 
+    @mock.patch('hb_report.core.check_exclusive_options')
+    @mock.patch('hb_report.core.crmutils.check_space_option_value')
     @mock.patch('hb_report.core.process_some_arguments')
     @mock.patch('argparse.HelpFormatter')
     @mock.patch('argparse.ArgumentParser')
-    def test_parse_argument(self, mock_parser, mock_formatter, mock_process):
+    def test_parse_argument(self, mock_parser, mock_formatter, mock_process, mock_space, mock_exclusive):
         mock_parser_inst = mock.Mock()
         mock_parser.return_value = mock_parser_inst
         mock_args_inst = mock.Mock(help=False)
@@ -1915,4 +1917,64 @@ class TestCore(unittest.TestCase):
 
         core.parse_argument(self.context)
 
+        mock_exclusive.assert_called_once_with(mock_args_inst)
+        mock_space.assert_called_once_with(mock_args_inst)
         mock_process.assert_called_once_with(self.context)
+
+    @mock.patch('hb_report.core.check_exclusive_options')
+    @mock.patch('hb_report.utils.log_fatal')
+    @mock.patch('hb_report.core.crmutils.check_space_option_value')
+    @mock.patch('hb_report.core.process_some_arguments')
+    @mock.patch('argparse.HelpFormatter')
+    @mock.patch('argparse.ArgumentParser')
+    def test_parse_argument_space(self, mock_parser, mock_formatter, mock_process,
+            mock_space, mock_fatal, mock_exclusive):
+        mock_parser_inst = mock.Mock()
+        mock_parser.return_value = mock_parser_inst
+        mock_args_inst = mock.Mock(help=False)
+        mock_parser_inst.parse_args.return_value = mock_args_inst
+        mock_space.side_effect = ValueError("error data")
+        mock_fatal.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            core.parse_argument(self.context)
+
+        mock_exclusive.assert_called_once_with(mock_args_inst)
+        mock_space.assert_called_once_with(mock_args_inst)
+        mock_process.assert_not_called()
+        mock_fatal.assert_called_once_with(mock_space.side_effect)
+
+    @mock.patch('hb_report.utils.log_fatal')
+    def test_check_exclusive_options_f_b(self, mock_fatal):
+        mock_args = mock.Mock(from_time=True, before_time=True, to_time=False, nodes=False,
+                extra_logs=False, speed_up=False)
+        core.check_exclusive_options(mock_args)
+        mock_fatal.assert_called_once_with("-f and -b options are exclusive")
+
+    @mock.patch('hb_report.utils.log_fatal')
+    def test_check_exclusive_options_t_b(self, mock_fatal):
+        mock_args = mock.Mock(to_time=True, before_time=True, from_time=False, nodes=False,
+                extra_logs=False, speed_up=False)
+        core.check_exclusive_options(mock_args)
+        mock_fatal.assert_called_once_with("-t and -b options are exclusive")
+
+    @mock.patch('hb_report.utils.log_fatal')
+    def test_check_exclusive_options_n_S(self, mock_fatal):
+        mock_args = mock.Mock(nodes=True, single=True, from_time=False, to_time=False,
+                extra_logs=False, speed_up=False)
+        core.check_exclusive_options(mock_args)
+        mock_fatal.assert_called_once_with("-n and -S options are exclusive")
+
+    @mock.patch('hb_report.utils.log_fatal')
+    def test_check_exclusive_options_E_M(self, mock_fatal):
+        mock_args = mock.Mock(extra_logs=True, no_extra=True, from_time=False,
+                to_time=False, nodes=False, speed_up=False)
+        core.check_exclusive_options(mock_args)
+        mock_fatal.assert_called_once_with("-E and -M options are exclusive")
+
+    @mock.patch('hb_report.utils.log_fatal')
+    def test_check_exclusive_options_s_Q(self, mock_fatal):
+        mock_args = mock.Mock(speed_up=True, sanitize=True, from_time=False,
+                to_time=False, nodes=False, extra_logs=False)
+        core.check_exclusive_options(mock_args)
+        mock_fatal.assert_called_once_with("-s and -Q options are exclusive")
