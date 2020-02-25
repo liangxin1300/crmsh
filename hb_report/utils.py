@@ -2,12 +2,8 @@ import socket
 import sys
 import re
 import datetime
-import string
-import random
 import os
-import tempfile
 import subprocess
-import threading
 import gzip
 import bz2
 import lzma

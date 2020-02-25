@@ -5,7 +5,6 @@ import datetime
 import shutil
 import time
 import glob
-import tarfile
 import re
 import json
 from multiprocessing import Process
