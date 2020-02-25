@@ -12,7 +12,7 @@ crmsh_hb_report - create report for CRM based clusters (Pacemaker)
 
 SYNOPSIS
 --------
-*crm report* [-f time] [-t time] [-u user] [-n node] [-E file] [-p patt]
+*crm report* [-f time] [-t time] [-b time] [-u user] [-n node] [-E file] [-p patt]
        [-L patt] [-X ssh-options] [-MQSZsvhd] [dest]
 
 
@@ -31,9 +31,8 @@ dest::
 	current directory named "hb_report-current_date", for instance
 	hb_report-Wed-03-Mar-2010.
 
-*-d*::
-	Don't create the compressed tar, but leave the result in a
-	directory.
+*-h*::
+	Show usage and some examples.
 
 *-f* time::
 	The start time from which to collect logs. 
@@ -42,39 +41,19 @@ dest::
 *-t* time::
 	The end time to which to collect logs. Defaults to now.
 
+*-b* time::
+	how long time in the past, before now ([1-9][0-9]*[YmdHM]).
+
+*-d*::
+	Don't create the compressed tar, but leave the result in a
+	directory.
+
 *-n* node::
 	A list of space separated hostnames (cluster members).
 	crm report may try to find out the set of nodes by itself, but
 	if it runs on the loghost which, as it is usually the case,
 	does not belong to the cluster, that may be difficult. This 
-        option is additive (use -n a -n b).
-
-*-E* file::
-        Extra logs to collect (default: /var/log/messages, 
-        /var/log/pacemaker/pacemaker.log, /var/log/pacemaker.log, 
-        /var/log/ha-cluster-bootstrap.log); this option is additive 
-        (use -E file1 -E file2)
-
-*-M*::
-	Don't collect extra log files, but only the file containing
-	messages from the cluster subsystems.
-
-*-L* patt::
-	A list of regular expressions to match in log files for
-	analysis. This option is additive 
-        (default: "CRIT:, ERROR:, error:, warning:, crit:").
-
-*-p* patt::
-	Additional patterns to match parameter name which contain
-	sensitive information. This option is additive (default: "passw.*").
-
-*-Q*::
-	Quick run. Gathering some system information can be expensive.
-	With this option, such operations are skipped and thus
-	information collecting sped up. The operations considered
-	I/O or CPU intensive: verifying installed packages content,
-	sanitizing files for sensitive information, and producing dot
-	files from PE inputs.
+        option is additive (use -n a -n b or -n "a b").
 
 *-u* user::
 	The ssh user. `crm report` will try to login to other nodes
@@ -86,53 +65,85 @@ dest::
 	Extra ssh options (default: StrictHostKeyChecking=no EscapeChar=none 
         ConnectTimeout=15). These will be added to every ssh invocation. 
         Alternatively, use `$HOME/.ssh/config` to setup desired ssh connection options.
+        This option is additive (use -X opt1 -X opt2 or -X "opt1 opt2").
 
+*-E* file::
+        Extra logs to collect (default: /var/log/messages, 
+        /var/log/pacemaker/pacemaker.log, /var/log/pacemaker.log, 
+        /var/log/ha-cluster-bootstrap.log); this option is additive 
+        (use -E file1 -E file2 or -E "file1 file2")
+
+*-s* ::
+        Replace sensitive info in PE or CIB files.
+
+*-p* patt::
+	Additional patterns to match parameter name which contain
+	sensitive information (default: "passw.*").
+        This option is additive (use -p patt1 -p patt2 or -p "patt1 patt2").
+
+*-L* patt::
+	A list of regular expressions to match in log files for
+	analysis (default: "CRIT:, ERROR:, error:, warning:, crit:").
+        This option is additive (use -L patt1 -L patt2 or -L "patt1 patt2").
+
+*-Q*::
+	Quick run. Gathering some system information can be expensive.
+	With this option, such operations are skipped and thus
+	information collecting sped up. The operations considered
+	I/O or CPU intensive: verifying installed packages content,
+	sanitizing files for sensitive information, and producing dot
+	files from PE inputs.
+
+*-M*::
+	Don't collect extra log files, but only the file containing
+	messages from the cluster subsystems.
+
+*-Z*::
+	If the destination directory exist, remove it instead of
+	exiting.
 *-S*::
 	Single node operation. Run `crm report` only on this node and
 	don't try to start slave collectors on other members of the
 	cluster. Under normal circumstances this option is not
 	needed. Use if ssh(1) does not work to other nodes.
 
-*-Z*::
-	If the destination directory exist, remove it instead of
-	exiting.
-
 *-v*::
 	Increase verbosity. Normally used to debug unexpected
 	behaviour.
 
-*-h*::
-	Show usage and some examples.
 
 EXAMPLES
 --------
-Last night during the backup there were several warnings
-encountered (logserver is the log host):
+Examples
+  # collect from 2pm, today
+  hb_report -f 2pm report_1
 
-	logserver# crm report -f 3:00 -t 4:00 -n "node1 node2" report
+  # collect from "2007/9/5 12:30" to "2007/9/5 14:00"
+  hb_report -f "2007/9/5 12:30" -t "2007/9/5 14:00" report_2
 
-collects everything from all nodes from 3am to 4am last night.
-The files are compressed to a tarball report.tar.bz2.
+  # collect from 1:00 to 3:00, today; include /var/log/cluster/ha-debug as extra log
+  hb_report -f 1:00 -t 3:00 -E /var/log/cluster/ha-debug report_3
 
-Just found a problem during testing:
+  # collect from "09sep07 2:00" and use 'hacluster' as ssh user
+  hb_report -f "09sep07 2:00" -u hacluster report_4
 
-	# note the current time
-	node1# date
-	Fri Sep 11 18:51:40 CEST 2009
-	node1# /etc/init.d/heartbeat start
-	node1# nasty-command-that-breaks-things
-	node1# sleep 120 #wait for the cluster to settle
-	node1# crm report -f 18:51 hb1
+  # collect from 18:00, today; replace sensitive message like "usern.*" or "admin.*"
+  hb_report -f 18:00 -p "usern.*" -p "admin.*" report_5
 
-	# if crm report can't figure out that this is corosync
-	node1# crm report -f 18:51 -A hb1
+  # collect from 1 mounth ago
+  hb_report -b 1m
 
-	# if crm report can't figure out the cluster members
-	node1# crm report -f 18:51 -n "node1 node2" hb1
+  # collect from 12 days ago
+  hb_report -b 12d
 
-The files are compressed to a tarball hb1.tar.bz2.
+  # collect from 75 hours ago
+  hb_report -b 75H
 
-INTERPRETING RESULTS
+  # collect from 10 minutes ago
+  hb_report -b 10M
+
+
+INTERPRETIN RESULTS
 --------------------
 The compressed tar archive is the final product of `crm report`.
 This is one example of its content, for a CTS test case on a
