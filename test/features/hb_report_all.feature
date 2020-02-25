@@ -103,20 +103,32 @@ Feature: hb_report functional test
     When    Run "hb_report -f 2019 /opt/report" on "hanode1"
     Then    "/opt/report.tar.bz2" created
     And     "/opt/report.tar.bz2" include essential files for "hanode1 hanode2"
+    When    Run "rm -f /opt/report.tar.bz2" on "hanode1"
+    # from time after to time
     When    Try "hb_report -f 2020 -t 2019"
     Then    Except "ERROR: hanode1#Master: Start time must be before finish time"
+    # wrong format of from time
     When    Try "hb_report -f xxxx"
     Then    Except multiline:
       """
       ERROR: parse_time xxxx: ('Unknown string format:', 'xxxx')
       ERROR: hanode1#Master: Try these format like: 2pm; 1:00; "2019/9/5 12:30"; "09-Sep-07 2:00"
       """
+    # wrong format of to time
     When    Try "hb_report -f 2020/01/01 -t wrong"
     Then    Except multiline:
       """
       ERROR: parse_time wrong: ('Unknown string format:', 'wrong')
       ERROR: hanode1#Master: Try these format like: 2pm; 1:00; "2019/9/5 12:30"; "09-Sep-07 2:00"
       """
+    # -b option
+    When    Run "hb_report -b 12d report" on "hanode1"
+    Then    "report.tar.bz2" created
+    And     "report.tar.bz2" include essential files for "hanode1 hanode2"
+    When    Run "rm -f report.tar.bz2" on "hanode1"
+    # wrong format of -b time
+    When    Try "hb_report -b 2019"
+    Then    Except "ERROR: hanode1#Master: Wrong format of -b option ([1-9][0-9]*[YmdHM])"
 
     # -d and -Z option
     When    Run "hb_report -d" on "hanode1"
@@ -128,8 +140,16 @@ Feature: hb_report functional test
     Then    Except "ERROR: hanode1#Master: Destination directory /opt/report exists, please cleanup or use -Z option"
     When    Run "hb_report -d -Z /opt/report" on "hanode1"
     Then    "/opt/report" created
+    When    Run "rm -rf /opt/report" on "hanode1"
 
     # -n option
     When    Run "hb_report -f 2019 -n hanode2 onenode" on "hanode1"
     Then    "onenode.tar.bz2" created
     And     "onenode.tar.bz2" include essential files for "hanode2"
+    When    Run "rm -f onenode.tar.bz2" on "hanode1"
+
+    # -S option
+    When    Run "hb_report -S onenode" on "hanode1"
+    Then    "onenode.tar.bz2" created
+    And     "onenode.tar.bz2" include essential files for "hanode1"
+    When    Run "rm -f onenode.tar.bz2" on "hanode1"
