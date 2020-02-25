@@ -7,6 +7,7 @@ import subprocess
 import gzip
 import bz2
 import lzma
+import logging
 from dateutil import tz
 
 import crmsh.config
@@ -16,20 +17,23 @@ from crmsh import msg as crmmsg
 from crmsh import utils as crmutils
 
 
+logger = logging.getLogger('report')
+
+
 def log_info(msg):
-    crmmsg.common_info("{}#{}: {}".format(me(), get_role(), msg))
+    logger.log(logging.INFO, msg)
 
 
 def log_warning(msg):
-    crmmsg.common_warn("{}#{}: {}".format(me(), get_role(), msg))
+    logger.log(logging.WARNING, msg)
 
 
 def log_error(msg):
-    crmmsg.common_err("{}#{}: {}".format(me(), get_role(), msg))
+    logger.log(logging.ERROR, msg)
 
 
 def log_fatal(msg):
-    crmmsg.common_err("{}#{}: {}".format(me(), get_role(), msg))
+    logger.log(logging.ERROR, msg)
     sys.exit(1)
 
 
@@ -41,15 +45,17 @@ def get_role():
 
 
 def log_debug1(msg):
-    if core.ctx.debug >= 1:
-        crmsh.config.core.debug = "yes"
-        crmmsg.common_debug("{}#{}: {}".format(me(), get_role(), msg))
+    logger.log(logging.DEBUG, msg)
+    #if core.ctx.debug >= 1:
+    #    crmsh.config.core.debug = "yes"
+    #    crmmsg.common_debug("{}#{}: {}".format(me(), get_role(), msg))
 
 
 def log_debug2(msg):
-    if core.ctx.debug > 1:
-        crmsh.config.core.debug = "yes"
-        crmmsg.common_debug("{}#{}: {}".format(me(), get_role(), msg))
+    logger.log(logging.DEBUG, msg)
+    #if core.ctx.debug > 1:
+    #    crmsh.config.core.debug = "yes"
+    #    crmmsg.common_debug("{}#{}: {}".format(me(), get_role(), msg))
 
 
 def parse_time(line, quiet=False):

@@ -7,6 +7,8 @@ import time
 import glob
 import re
 import json
+import logging
+import logging.config
 from multiprocessing import Process
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -816,6 +818,52 @@ def push_data(context):
         utils.log_fatal(err)
 
 
+class MyFormatter(logging.Formatter):
+    def __init__(self):
+        logging.Formatter.__init__(self, fmt="%(levelname)s: %(host)s#%(role)s: %(message)s")
+    def format(self, record):
+        record.host = utils.me()
+        record.role = utils.get_role()
+        return logging.Formatter.format(self, record)
+
+
+def setup_logging():
+    '''
+    setupt logging
+    '''
+    LOGGING_CFG = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'common_formatter': {
+                '()': 'hb_report.core.MyFormatter'
+            }
+        },
+        'handlers': {
+            'null': {
+                'class': 'logging.NullHandler'
+            },
+            'file': {
+                'class': 'logging.FileHandler',
+                'filename': const.HB_REPORT_F,
+                'formatter': 'common_formatter'
+            },
+            'stream': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'common_formatter'
+            }
+        },
+        'loggers': {
+            'report': {
+                'handlers': ['null', 'file', 'stream'],
+                'propagate': False,
+                'level': 'DEBUG'
+            }
+        }
+    }
+    logging.config.dictConfig(LOGGING_CFG)
+
+
 def run(context):
     '''
     Major work flow
@@ -823,6 +871,7 @@ def run(context):
     if is_collector():
         load_context(context)
     else:
+        setup_logging()
         parse_argument(context)
         load_from_config(context)
 
