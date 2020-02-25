@@ -524,7 +524,11 @@ def start_slave_collector(context, node):
     else:
         cmd = r'ssh -o {} {} "{} {}"'.format(' -o '.join(context.ssh_options), node, context.sudo, cmd_slave.replace('"', '\\"'))
 
-    _, out = crmutils.get_stdout(cmd)
+    rc, out, err = crmutils.get_stdout_stderr(cmd)
+    # maybe ssh error
+    if rc != 0:
+        utils.log_error(err)
+        return
     compress_data = ""
     for data in out.split('\n'):
         if data.startswith(const.COMPRESS_DATA_FLAG):
