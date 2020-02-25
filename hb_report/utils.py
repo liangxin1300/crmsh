@@ -2,12 +2,8 @@ import socket
 import sys
 import re
 import datetime
-import string
-import random
 import os
-import tempfile
 import subprocess
-import threading
 import gzip
 import bz2
 import lzma
@@ -201,7 +197,7 @@ class Package(object):
             self.for_rpm = False
             log_warning("The package manager is {}, not support for now".format(pkg_type))
         else:
-            self.pkgs = installed_pkgs(pkgs)
+            self.pkgs = pkgs
 
     def version(self):
         if not self.for_rpm:
@@ -222,37 +218,30 @@ def get_pkg_mgr():
     return None
 
 
-def installed_pkgs(packages):
-    res = []
-    for pkg in packages.split():
-        rc, _ = crmutils.get_stdout("rpm -q %s" % pkg)
-        if rc != 0:
-            continue
-        res.append(pkg)
-    return res
-
-
 def pkg_ver_rpm(packages):
     res = "Name | Version-Release | Distribution | Arch\n-----\n"
-    cmd = "rpm -q --qf '%{name} | %{version}-%{release} | %{distribution} | %{arch}'"
+    cmd = "rpm -q --qf '%{name} | %{version}-%{release} | %{distribution} | %{arch}\n'"
 
-    for pkg in packages:
-        rc, out = crmutils.get_stdout("{} {}".format(cmd, pkg))
-        if rc == 0 and out:
-            res += out + '\n'
+    rc, out = crmutils.get_stdout("{} {}".format(cmd, packages))
+    if out:
+        for line in out.split('\n'):
+            if re.search('not installed', line):
+                continue
+            res += line + '\n'
     return res
 
 
 def verify_rpm(packages):
     res = ""
-    for pkg in packages:
-        rc, _, err = crmutils.get_stdout_stderr("rpm --verify {}".format(pkg))
-        if rc != 0 and err:
-            log_warning(err)
-            res += "Verify {} error: {}\n".format(pkg, err)
+    rc, out = crmutils.get_stdout("rpm --verify {}".format(packages))
+    if out:
+        for line in out.split('\n'):
+            if re.search('not installed', line):
+                continue
+            res += line + '\n'
     if not res:
         res = "All packages verify successfully\n"
-        log_debug2(res)
+        log_debug2(res.strip('\n'))
     return res
 
 
@@ -368,3 +357,7 @@ def unzip_list(_list):
 def unique(sequence):
     seen = set()
     return [x for x in sequence if not (x in seen or seen.add(x))]
+
+
+def is_log_empty(logf):
+    return os.stat(logf).st_size == 0

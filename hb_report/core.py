@@ -5,7 +5,6 @@ import datetime
 import shutil
 import time
 import glob
-import tarfile
 import re
 import json
 from multiprocessing import Process
@@ -96,39 +95,39 @@ def parse_argument(context):
     parser.add_argument("-h", "--help", action="store_true", dest="help",
             help="Show this help message and exit")
     parser.add_argument('-f', dest='from_time', metavar='time',
-            help='time to start from (default: 12 hours before)')
+            help='Time to start from (default: 12 hours before)')
     parser.add_argument('-t', dest='to_time', metavar='time',
-            help='time to finish at (default: now)')
+            help='Time to finish at (default: now)')
     parser.add_argument('-b', dest='before_time', metavar='time',
-            help='how long time in the past, before now ([1-9][0-9]*[YmdHM])')
+            help='How long time in the past, before now ([1-9][0-9]*[YmdHM])')
     parser.add_argument('-d', dest='no_compress', action='store_true',
-            help="don't compress, but leave result in a directory")
+            help="Don't compress, but leave result in a directory")
     parser.add_argument('-n', dest='nodes', metavar='node', action="append", default=[],
-            help='node names for this cluster; this option is additive (use -n a -n b or -n "a b"); if you run report on the loghost or use autojoin, it is highly recommended to set this option''')
+            help='Node names for this cluster; this option is additive (use -n a -n b or -n "a b"); if you run report on the loghost or use autojoin, it is highly recommended to set this option''')
     parser.add_argument('-u', dest='ssh_user', metavar='user',
-            help='ssh user to access other nodes'),
+            help='SSH user to access other nodes'),
     parser.add_argument('-X', dest='ssh_options', metavar='ssh-options', action='append', default=[],
-            help='extra ssh(1) options (default: StrictHostKeyChecking=no EscapeChar=none ConnectTimeout=15); this option is additive (use -X opt1 -X opt2 or -X "opt1 opt2")'),
+            help='Extra ssh(1) options (default: StrictHostKeyChecking=no EscapeChar=none ConnectTimeout=15); this option is additive (use -X opt1 -X opt2 or -X "opt1 opt2")'),
     parser.add_argument('-E', dest='extra_logs', metavar='file', action='append', default=[],
-            help='extra logs to collect (default: /var/log/messages, /var/log/pacemaker/pacemaker.log, /var/log/pacemaker.log, /var/log/ha-cluster-bootstrap.log); this option is additive (use -E file1 -E file2 or -E "file1 file2")')
+            help='Extra logs to collect (default: /var/log/messages, /var/log/pacemaker/pacemaker.log, /var/log/pacemaker.log, /var/log/ha-cluster-bootstrap.log); this option is additive (use -E file1 -E file2 or -E "file1 file2")')
     parser.add_argument('-s', dest='sanitize', action='store_true',
-            help='replace sensitive info in PE or CIB files')
+            help='Replace sensitive info in PE or CIB files')
     parser.add_argument('-p', dest='sensitive_regex', metavar='patt', action='append', default=[],
-            help='regular expression to match variables containing sensitive data (default: passw.*); this option is additive (use -p patt1 -p patt2 or -p "patt1 patt2")')
+            help='Regular expression to match variables containing sensitive data (default: passw.*); this option is additive (use -p patt1 -p patt2 or -p "patt1 patt2")')
     parser.add_argument('-L', dest='regex', metavar='patt', action='append', default=[],
-            help='regular expression to match in log files for analysis (default: CRIT:, ERROR:, error:, warning:, crit:); this option is additive (use -L patt1 -L patt2 or -L "patt1 patt2")')
+            help='Regular expression to match in log files for analysis (default: CRIT:, ERROR:, error:, warning:, crit:); this option is additive (use -L patt1 -L patt2 or -L "patt1 patt2")')
     parser.add_argument('-Q', dest='speed_up', action='store_true',
-            help="don't run resource intensive operations (speed up)")
+            help="The quick mode, which skips producing dot files from PE inputs, verifying installed cluster stack rpms and sanitizing files for sensitive information")
     parser.add_argument('-M', dest='no_extra', action='store_true',
-            help="don't collect extra logs")
+            help="Don't collect extra logs, opposite option of -E")
     parser.add_argument('-Z', dest='rm_exist_dest', action='store_true',
-            help='if destination directories exist, remove them instead of exiting')
+            help='If destination directories exist, remove them instead of exiting')
     parser.add_argument('-S', dest='single', action='store_true',
-            help="single node operation; don't try to start report collectors on other nodes")
+            help="Single node operation; don't try to start report collectors on other nodes")
     parser.add_argument('-v', dest='debug', action='count', default=0,
-            help='increase verbosity')
+            help='Increase verbosity')
     parser.add_argument('dest', nargs='?',
-            help='report name (may include path where to store the report)')
+            help='Report name (may include path where to store the report)')
 
     args = parser.parse_args()
     if args.help:
@@ -136,12 +135,31 @@ def parse_argument(context):
         print(const.EXTRA_HELP)
         sys.exit(0)
 
+    check_exclusive_options(args)
+    try:
+        crmutils.check_space_option_value(args)
+    except ValueError as err:
+        utils.log_fatal(err)
+
     for arg in vars(args):
         value = getattr(args, arg)
         if value or not hasattr(context, arg):
             setattr(context, arg, value)
 
     process_some_arguments(context)
+
+
+def check_exclusive_options(args):
+    if args.from_time and args.before_time:
+        utils.log_fatal("-f and -b options are exclusive")
+    if args.to_time and args.before_time:
+        utils.log_fatal("-t and -b options are exclusive")
+    if args.nodes and args.single:
+        utils.log_fatal("-n and -S options are exclusive")
+    if args.extra_logs and args.no_extra:
+        utils.log_fatal("-E and -M options are exclusive")
+    if args.speed_up and args.sanitize:
+        utils.log_fatal("-s and -Q options are exclusive")
 
 
 def process_some_arguments(context):
@@ -330,6 +348,7 @@ def dump_logset(context, logf):
     if logf_type == 1:
         for f in logf_list:
             out_string += print_logseg(f, 0, 0)
+            utils.log_debug2("Including complete {} logfile".format(f))
     else:
         num_logs = len(logf_list)
         if num_logs == 1:
@@ -339,6 +358,7 @@ def dump_logset(context, logf):
             out_string += print_logseg(oldest, context.from_time, 0)
             for f in middles:
                 out_string += print_logseg(f, 0, 0)
+                utils.log_debug2("Including complete {} logfile".format(f))
             out_string += print_logseg(newest, 0, context.to_time)
 
     if out_string:
@@ -506,15 +526,17 @@ def collect_for_nodes(context):
     process_list = []
     for node in context.nodes:
         if node in context.ssh_askpw_nodes:
-            utils.log_info("Please provide password for {} at {}".format(say_ssh_user(context), node))
-            utils.log_info("Note that collecting data will take a while.")
-            start_slave_collector(context, node)
-        else:
-            p = Process(target=start_slave_collector, args=(context, node))
-            p.start()
-            process_list.append(p)
+            continue
+        p = Process(target=start_slave_collector, args=(context, node))
+        p.start()
+        process_list.append(p)
     for p in process_list:
         p.join()
+
+    for node in context.ssh_askpw_nodes:
+        utils.log_info("Please provide password for {} at {}".format(say_ssh_user(context), node))
+        utils.log_info("Note that collecting data will take a while.")
+        start_slave_collector(context, node)
 
 
 def start_slave_collector(context, node):
@@ -524,7 +546,12 @@ def start_slave_collector(context, node):
     else:
         cmd = r'ssh -o {} {} "{} {}"'.format(' -o '.join(context.ssh_options), node, context.sudo, cmd_slave.replace('"', '\\"'))
 
-    _, out = crmutils.get_stdout(cmd)
+    rc, out, err = crmutils.get_stdout_stderr(cmd)
+    # maybe ssh error
+    if rc != 0:
+        context.nodes.remove(node)
+        utils.log_error(err)
+        return
     compress_data = ""
     for data in out.split('\n'):
         if data.startswith(const.COMPRESS_DATA_FLAG):

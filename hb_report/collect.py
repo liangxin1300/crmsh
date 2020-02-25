@@ -203,9 +203,6 @@ def pe_to_dot(pe_file):
 
 
 def touch_dc(context):
-    if context.speed_up:
-        utils.log_debug1("Skip find DC node")
-        return
     node = crmutils.get_dc()
     if node and node == utils.me():
         utils.touch_file(os.path.join(context.work_dir, "DC"))
@@ -410,7 +407,27 @@ def find_files(context, find_dirs):
     return res
 
 
+def get_pcmk_log():
+    if not os.path.isfile("/etc/sysconfig/pacemaker"):
+        return
+    with open("/etc/sysconfig/pacemaker") as f:
+        data = f.read()
+    if not data:
+        return
+    res = re.search('PCMK_logfile *= *(.*)', data)
+    if not res:
+        return
+    return res.group(1)
+
+
 def get_extra_logs(context):
+    if context.no_extra:
+        utils.log_debug1("Skip collect extra logs")
+        return
+    pcmk_log = get_pcmk_log()
+    if pcmk_log and pcmk_log not in context.extra_logs:
+        context.extra_logs.append(pcmk_log)
+
     for l in context.extra_logs:
         if not os.path.isfile(l):
             continue
@@ -428,3 +445,20 @@ def dump_corosync_log(context):
     if not logfile or not os.path.isfile(logfile):
         return
     core.dump_logset(context, logfile)
+
+
+def events(context):
+    ha_log = os.path.join(context.work_dir, const.HALOG_F)
+    if not os.path.isfile(ha_log):
+        return
+    if utils.is_log_empty(ha_log):
+        return
+    patt_string = "|".join(const.EVENT_PATTERNS.split('\n'))
+    with open(ha_log) as f:
+        data = f.read()
+    out_string = ""
+    for line in data.split('\n'):
+        if re.search(patt_string, line):
+            out_string += line + '\n'
+    crmutils.str2file(out_string, os.path.join(context.work_dir, const.EVENTS_F))
+    utils.log_debug1("Dump events file into {}/{}".format(context.dest_path, const.EVENTS_F))
