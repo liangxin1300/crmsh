@@ -1405,32 +1405,32 @@ class TestCore(unittest.TestCase):
 
     @mock.patch('builtins.eval')
     @mock.patch('hb_report.core.crmutils.get_stdout_stderr')
-    @mock.patch('hb_report.core.crmutils.get_stdout')
     @mock.patch('hb_report.utils.me')
-    def test_start_slave_collector_local(self, mock_me, mock_stdout, mock_stdout_stderr, mock_eval):
+    def test_start_slave_collector_local(self, mock_me, mock_stdout_stderr, mock_eval):
         self.context.local_sudo = "sudo"
         mock_me.return_value = "node1"
-        mock_stdout.return_value = (0, "{}hb_report data\nlog1\nlog2".format(const.COMPRESS_DATA_FLAG))
+        mock_stdout_stderr.return_value = (0, "{}hb_report data\nlog1\nlog2".format(const.COMPRESS_DATA_FLAG), None)
         mock_eval.return_value = "hb_report data".encode('utf-8')
  
         core.start_slave_collector(self.context, "node1")
 
         mock_me.assert_called_once_with()
         cmd_slave = r"{} __slave '{}'".format(self.context.name, self.context)
-        cmd = r'{} {}'.format(self.context.local_sudo, cmd_slave)
-        mock_stdout.assert_called_once_with(cmd)
-        cmd = r"(cd {} && tar xf -)".format(self.context.work_dir)
-        mock_stdout_stderr.assert_called_once_with(cmd, input_s=mock_eval.return_value)
+        cmd1 = r'{} {}'.format(self.context.local_sudo, cmd_slave)
+        cmd2 = r"(cd {} && tar xf -)".format(self.context.work_dir)
+        mock_stdout_stderr.assert_has_calls([
+            mock.call(cmd1),
+            mock.call(cmd2, input_s=mock_eval.return_value)
+            ])
 
-    @mock.patch('builtins.eval')
+    @mock.patch('hb_report.utils.log_error')
     @mock.patch('hb_report.core.crmutils.get_stdout_stderr')
-    @mock.patch('hb_report.core.crmutils.get_stdout')
     @mock.patch('hb_report.utils.me')
-    def test_start_slave_collector(self, mock_me, mock_stdout, mock_stdout_stderr, mock_eval):
+    def test_start_slave_collector(self, mock_me, mock_stdout_stderr, mock_error):
         self.context.sudo = "sudo"
         self.context.ssh_options = ""
         mock_me.return_value = "node1"
-        mock_stdout.return_value = (0, "{}hb_report data\nlog1\nlog2".format(const.COMPRESS_DATA_FLAG))
+        mock_stdout_stderr.return_value = (255, None, "ssh error")
         mock_eval.return_value = "hb_report data".encode('utf-8')
 
         core.start_slave_collector(self.context, "node2")
@@ -1438,9 +1438,8 @@ class TestCore(unittest.TestCase):
         mock_me.assert_called_once_with()
         cmd_slave = r"{} __slave '{}'".format(self.context.name, self.context)
         cmd = r'ssh -o {} {} "{} {}"'.format(' -o '.join(self.context.ssh_options), "node2", self.context.sudo, cmd_slave.replace('"', '\\"'))
-        mock_stdout.assert_called_once_with(cmd)
-        cmd = r"(cd {} && tar xf -)".format(self.context.work_dir)
-        mock_stdout_stderr.assert_called_once_with(cmd, input_s=mock_eval.return_value)
+        mock_stdout_stderr.assert_called_once_with(cmd)
+        mock_error.assert_called_once_with("ssh error")
 
     @mock.patch('hb_report.core.crmutils.is_program')
     def test_pick_first_none(self, mock_is_program):
