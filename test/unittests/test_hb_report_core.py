@@ -1431,7 +1431,6 @@ class TestCore(unittest.TestCase):
         self.context.ssh_options = ""
         mock_me.return_value = "node1"
         mock_stdout_stderr.return_value = (255, None, "ssh error")
-        mock_eval.return_value = "hb_report data".encode('utf-8')
 
         core.start_slave_collector(self.context, "node2")
 
