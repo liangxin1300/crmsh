@@ -330,6 +330,7 @@ def dump_logset(context, logf):
     if logf_type == 1:
         for f in logf_list:
             out_string += print_logseg(f, 0, 0)
+            utils.log_debug2("Including complete {} logfile".format(f))
     else:
         num_logs = len(logf_list)
         if num_logs == 1:
@@ -339,6 +340,7 @@ def dump_logset(context, logf):
             out_string += print_logseg(oldest, context.from_time, 0)
             for f in middles:
                 out_string += print_logseg(f, 0, 0)
+                utils.log_debug2("Including complete {} logfile".format(f))
             out_string += print_logseg(newest, 0, context.to_time)
 
     if out_string:
