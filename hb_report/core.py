@@ -527,6 +527,7 @@ def start_slave_collector(context, node):
     rc, out, err = crmutils.get_stdout_stderr(cmd)
     # maybe ssh error
     if rc != 0:
+        context.nodes.remove(node)
         utils.log_error(err)
         return
     compress_data = ""
