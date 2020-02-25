@@ -507,15 +507,17 @@ def collect_for_nodes(context):
     process_list = []
     for node in context.nodes:
         if node in context.ssh_askpw_nodes:
-            utils.log_info("Please provide password for {} at {}".format(say_ssh_user(context), node))
-            utils.log_info("Note that collecting data will take a while.")
-            start_slave_collector(context, node)
-        else:
-            p = Process(target=start_slave_collector, args=(context, node))
-            p.start()
-            process_list.append(p)
+            continue
+        p = Process(target=start_slave_collector, args=(context, node))
+        p.start()
+        process_list.append(p)
     for p in process_list:
         p.join()
+
+    for node in context.ssh_askpw_nodes:
+        utils.log_info("Please provide password for {} at {}".format(say_ssh_user(context), node))
+        utils.log_info("Note that collecting data will take a while.")
+        start_slave_collector(context, node)
 
 
 def start_slave_collector(context, node):
