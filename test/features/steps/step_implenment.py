@@ -223,8 +223,8 @@ def step_impl(context):
 
 @when('Write multi lines to file "{f}"')
 def step_impl(context, f):
-    with open(f, 'w') as f:
-        f.write(context.text)
+    with open(f, 'w') as fd:
+        fd.write(context.text)
 
 
 @when('Remove default hb_report tar file')
