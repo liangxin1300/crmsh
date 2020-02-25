@@ -1220,6 +1220,7 @@ class TestCore(unittest.TestCase):
 
         mock_arch.assert_called_once_with(self.context, "/var/log/pacemaker.log")
         mock_printlog.assert_called_once_with("/var/log/pacemaker.log", 0, 0)
+        mock_debug2.assert_called_once_with("Including complete /var/log/pacemaker.log logfile")
         mock_basename.assert_has_calls([
             mock.call("/var/log/pacemaker.log"),
             mock.call("/var/log/pacemaker.log")
@@ -1279,6 +1280,7 @@ class TestCore(unittest.TestCase):
             mock.call("/var/log/pacemaker1.log", 0, 0),
             mock.call("/var/log/pacemaker.log", 0, self.context.to_time),
             ])
+        mock_debug2("Including complete /var/log/pacemaker1.log logfile")
         mock_basename.assert_has_calls([
             mock.call("/var/log/pacemaker.log"),
             mock.call("/var/log/pacemaker.log")
