@@ -1,8 +1,6 @@
 CIB_F = "cib.xml"
 HALOG_F = "ha-log.txt"
 JOURNAL_F = "journal.log"
-WORKDIR_PREFIX = ".hb_report.workdir"
-PCMK_LOG = "/var/log/pacemaker/pacemaker.log /var/log/pacemaker.log"
 TRY_SSH = "root hacluster"
 SSH_OPTS = "StrictHostKeyChecking=no EscapeChar=none ConnectTimeout=15"
 CIB_F = "cib.xml"
