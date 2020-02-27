@@ -414,20 +414,15 @@ def get_pcmk_log():
         data = f.read()
     if not data:
         return
-    res = re.search('PCMK_logfile *= *(.*)', data)
-    if not res:
-        return
-    return res.group(1)
+    res = re.search(r'^ *PCMK_logfile *= *(.*)', data, re.M)
+    if res:
+        return res.group(1)
 
 
 def get_extra_logs(context):
     if context.no_extra:
         utils.log_debug1("Skip collect extra logs")
         return
-    pcmk_log = get_pcmk_log()
-    if pcmk_log and pcmk_log not in context.extra_logs:
-        context.extra_logs.append(pcmk_log)
-
     for l in context.extra_logs:
         if not os.path.isfile(l):
             continue
@@ -438,13 +433,21 @@ def dump_context(context):
     crmutils.str2file(context.dumps(), os.path.join(context.work_dir, const.CTX_F))
 
 
+def dump_pcmk_log(context):
+    for pcmk_log in [get_pcmk_log(),
+            "/var/log/pacemaker/pacemaker.log",
+            "/var/log/pacemaker.log"]:
+        if pcmk_log and os.path.isfile(pcmk_log):
+            core.dump_logset(context, pcmk_log)
+            break
+
+
 def dump_corosync_log(context):
     if not os.path.isfile(const.CONF):
         return
     logfile = corosync.get_value('logging.logfile')
-    if not logfile or not os.path.isfile(logfile):
-        return
-    core.dump_logset(context, logfile)
+    if logfile and os.path.isfile(logfile):
+        core.dump_logset(context, logfile)
 
 
 def events(context):

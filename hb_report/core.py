@@ -109,9 +109,9 @@ def parse_argument(context):
     parser.add_argument('-X', dest='ssh_options', metavar='ssh-options', action='append', default=[],
             help='Extra ssh(1) options (default: StrictHostKeyChecking=no EscapeChar=none ConnectTimeout=15); this option is additive (use -X opt1 -X opt2 or -X "opt1 opt2")'),
     parser.add_argument('-E', dest='extra_logs', metavar='file', action='append', default=[],
-            help='Extra logs to collect (default: /var/log/messages, /var/log/pacemaker/pacemaker.log, /var/log/pacemaker.log, /var/log/ha-cluster-bootstrap.log); this option is additive (use -E file1 -E file2 or -E "file1 file2")')
+            help='Extra logs to collect (default: /var/log/messages, /var/log/ha-cluster-bootstrap.log); this option is additive (use -E file1 -E file2 or -E "file1 file2")')
     parser.add_argument('-s', dest='sanitize', action='store_true',
-            help='Replace sensitive info in PE or CIB files')
+            help='Replace sensitive info in PE or CIB or pacemaker log files')
     parser.add_argument('-p', dest='sensitive_regex', metavar='patt', action='append', default=[],
             help='Regular expression to match variables containing sensitive data (default: passw.*); this option is additive (use -p patt1 -p patt2 or -p "patt1 patt2")')
     parser.add_argument('-L', dest='regex', metavar='patt', action='append', default=[],
@@ -580,15 +580,21 @@ def sanitize(context):
     if context.speed_up:
         utils.log_debug1("Skip check sensitive info")
         return
-    utils.log_debug2("Check or replace sensitive info from cib and pe files")
+
+    utils.log_debug2("Check or replace sensitive info from cib, pe and log files")
     context.sanitize_pattern_string = '|'.join(context.sensitive_regex)
-    cib_xml = os.path.join(context.work_dir, const.CIB_F)
+
     pe_list = glob.glob(os.path.join(context.work_dir, "pengine", "*"))
-    file_list = [cib_xml] + pe_list
+
+    file_list = []
+    for f in [const.CIB_F, const.PCMK_LOG_F, const.CIB_TXT_F]:
+        file_list.append(os.path.join(context.work_dir, f))
+    file_list += pe_list
+
     for f in [item for item in file_list if os.path.isfile(item)]:
         rc = sanitize_one(context, f)
         if rc == 1:
-            utils.log_warning("Some PE or CIB files contain possibly sensitive data")
+            utils.log_warning("Some PE/CIB/log files contain possibly sensitive data")
             utils.log_warning("Using \"-s\" option can replace sensitive data")
             break
 
@@ -602,23 +608,31 @@ def sanitize_one(context, in_file):
     if not context.sanitize:
         return 1
     utils.log_debug2("Replace sensitive info for {}".format(in_file))
-    utils.write_to_file(in_file, sub_sensitive_string(context, data))
+    if os.path.basename(in_file) == const.CIB_TXT_F:
+        _type = "txt"
+    else:
+        _type = "xml"
+    utils.write_to_file(in_file, sub_sensitive_string(context, data, _type))
 
 
-def sub_sensitive_string(context, data):
-    sub_pattern= ' value=".*" '
-    replace_string = ' value="******" '
+def sub_sensitive_string(context, data, _type):
+    sub_pattern_dict = {"xml": ' value=".*" ', "txt": "(passw.*)=.*"}
+    replace_string_dict= {"xml": ' value="******" ', "txt": r"\1=******"}
     res_string = ""
     for line in data.strip('\n').split('\n'):
         if include_sensitive_data(context, line):
-            res_string += re.sub(sub_pattern, replace_string, line) + '\n'
+            res_string += re.sub(sub_pattern_dict[_type], replace_string_dict[_type], line) + '\n'
         else:
             res_string += line + '\n'
     return res_string
 
 
 def include_sensitive_data(context, data):
+    # for cib.xml and pe file
     if re.search('name="{}"'.format(context.sanitize_pattern_string), data):
+        return True
+    # for cib.txt
+    if re.search("({})=[^\"]".format(context.sanitize_pattern_string), data):
         return True
     return False
 

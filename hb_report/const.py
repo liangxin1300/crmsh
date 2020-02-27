@@ -23,6 +23,7 @@ CTX_F = "context.txt"
 ANALYSIS_F = "analysis.txt"
 OCFS2_F = "ocfs2.txt"
 EVENTS_F = "events.txt"
+PCMK_LOG_F = "pacemaker.log"
 OSRELEASE = "/etc/os-release"
 PTEST = "crm_simulate"
 COMPRESS_DATA_FLAG = "COMPRESS HB_REPORT DATA:::"
@@ -30,7 +31,7 @@ OTHER_CONFS = ("/etc/drbd.conf", "/etc/drbd.d", "/etc/booth/booth.conf")
 COLLECT_FUNCTIONS = ("sys_info", "sys_stats", "sbd_info", "get_config", "get_pe_inputs",
         "touch_dc", "get_core_files", "get_other_confs", "check_perms", "dlm_dump",
         "time_status", "corosync_blackbox", "get_ratraces", "dump_ocfs2", "get_extra_logs",
-        "dump_corosync_log", "dump_context", "events")
+        "dump_corosync_log", "dump_context", "events", "dump_pcmk_log")
 EVENT_PATTERNS = """pacemaker-controld.*(now lost|Quorum lost|is now member|Updating quorum status)
 pacemaker-controld.*Result of
 pacemaker-controld.*Stonith operation
@@ -82,8 +83,7 @@ We won't sanitize the CIB and the peinputs files, because that
 would make them useless when trying to reproduce the PE behaviour.
 You may still choose to obliterate sensitive information if you
 use the -s and -p options, but in that case the support may be
-lacking as well. The logs, crm_mon and crm_verify output are *not*
-sanitized.
+lacking as well.
 
 Additional system logs are collected in order to have a more
 complete report. If you don't want that specify -M.
