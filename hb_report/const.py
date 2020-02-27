@@ -64,7 +64,7 @@ Examples
   hb_report -f "09sep07 2:00" -u hacluster report_4
 
   # collect from 18:00, today; replace sensitive message like "usern.*" or "admin.*"
-  hb_report -f 18:00 -p "usern.*" -p "admin.*" report_5
+  hb_report -f 18:00 -s -p "usern.*" -p "admin.*" report_5
 
   # collect from 1 mounth ago
   hb_report -b 1m
