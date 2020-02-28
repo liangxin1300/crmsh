@@ -1196,21 +1196,18 @@ class TestCollect(unittest.TestCase):
         self.context.dumps.assert_called_once_with()
         mock_str2file.assert_called_once_with("dumps data", mock_join.return_value)
 
-    @mock.patch('hb_report.collect.get_pcmk_log')
     @mock.patch('hb_report.core.dump_logset')
     @mock.patch('os.path.isfile')
-    def test_get_extra_logs(self, mock_isfile, mock_dump, mock_pcmk_log):
+    def test_get_extra_logs(self, mock_isfile, mock_dump):
         self.context.no_extra = False
-        mock_pcmk_log.return_value = "pcmk.log"
         self.context.extra_logs = ["file1", "file2"]
-        mock_isfile.side_effect = [True, False, False]
+        mock_isfile.side_effect = [True, False]
 
         collect.get_extra_logs(self.context)
 
         mock_isfile.assert_has_calls([
             mock.call("file1"),
-            mock.call("file2"),
-            mock.call("pcmk.log")
+            mock.call("file2")
             ])
         mock_dump.assert_called_once_with(self.context, "file1")
 
@@ -1271,17 +1268,6 @@ class TestCollect(unittest.TestCase):
     @mock.patch('re.search')
     @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="data")
     @mock.patch('os.path.isfile')
-    def test_get_pcmk_log_no_res(self, mock_isfile, mock_open_file, mock_search):
-        mock_isfile.return_value = True
-        mock_search.return_value = None
-        collect.get_pcmk_log()
-        mock_isfile.assert_called_once_with("/etc/sysconfig/pacemaker")
-        mock_open_file.assert_called_once_with("/etc/sysconfig/pacemaker")
-        mock_search.assert_called_once_with('PCMK_logfile *= *(.*)', "data")
-
-    @mock.patch('re.search')
-    @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="data")
-    @mock.patch('os.path.isfile')
     def test_get_pcmk_log(self, mock_isfile, mock_open_file, mock_search):
         mock_isfile.return_value = True
         mock_search_inst = mock.Mock()
@@ -1291,7 +1277,7 @@ class TestCollect(unittest.TestCase):
         self.assertEqual(res, "return data")
         mock_isfile.assert_called_once_with("/etc/sysconfig/pacemaker")
         mock_open_file.assert_called_once_with("/etc/sysconfig/pacemaker")
-        mock_search.assert_called_once_with('PCMK_logfile *= *(.*)', "data")
+        mock_search.assert_called_once_with('^ *PCMK_logfile *= *(.*)', "data", re.M)
         mock_search_inst.group.assert_called_once_with(1)
 
     @mock.patch('hb_report.utils.is_log_empty')

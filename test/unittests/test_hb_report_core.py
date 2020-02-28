@@ -33,11 +33,7 @@ class TestContext(unittest.TestCase):
         self.expected_from_time = crmutils.parse_to_timestamp(from_time_dt.strftime("%Y-%m-%d %H:%M"))
         to_time_dt = datetime.datetime.now()
         self.expected_to_time = crmutils.parse_to_timestamp(to_time_dt.strftime("%Y-%m-%d %H:%M"))
-        self.expected_extra_logs = [
-                "/var/log/messages",
-                "/var/log/pacemaker/pacemaker.log",
-                "/var/log/pacemaker.log",
-                "/var/log/ha-cluster-bootstrap.log"]
+        self.expected_extra_logs = ["/var/log/messages", "/var/log/ha-cluster-bootstrap.log"]
 
     def tearDown(self):
         """
@@ -63,7 +59,7 @@ class TestContext(unittest.TestCase):
         self.assertFalse(self.context.single)
 
     def test_str(self):
-        self.assertEqual(str(self.context), '{{"from_time": {}, "no_compress": false, "speed_up": false, "extra_logs": ["/var/log/messages", "/var/log/pacemaker/pacemaker.log", "/var/log/pacemaker.log", "/var/log/ha-cluster-bootstrap.log"], "rm_exist_dest": false, "single": false, "to_time": {}, "sensitive_regex": ["passw.*"], "regex": ["CRIT:", "ERROR:", "error:", "warning:", "crit:"], "ssh_askpw_nodes": []}}'.format(self.expected_from_time, self.expected_to_time))
+        self.assertEqual(str(self.context), '{{"from_time": {}, "no_compress": false, "speed_up": false, "extra_logs": ["/var/log/messages", "/var/log/ha-cluster-bootstrap.log"], "rm_exist_dest": false, "single": false, "to_time": {}, "sensitive_regex": ["passw.*"], "regex": ["CRIT:", "ERROR:", "error:", "warning:", "crit:"], "ssh_askpw_nodes": []}}'.format(self.expected_from_time, self.expected_to_time))
 
     def test_setattr(self):
         self.context.tmp_file_name = "tmp_file"
@@ -95,8 +91,6 @@ class TestContext(unittest.TestCase):
   "speed_up": false,
   "extra_logs": [
     "/var/log/messages",
-    "/var/log/pacemaker/pacemaker.log",
-    "/var/log/pacemaker.log",
     "/var/log/ha-cluster-bootstrap.log"
   ],
   "rm_exist_dest": false,
@@ -830,8 +824,10 @@ class TestCore(unittest.TestCase):
         self.context.speed_up = False
         self.context.sensitive_regex = ["passw.*"]
         mock_join.side_effect = [
+                "{}/pengine/*".format(self.context.work_dir),
                 "{}/{}".format(self.context.work_dir, const.CIB_F),
-                "{}/pengine/*".format(self.context.work_dir)
+                "{}/{}".format(self.context.work_dir, const.PCMK_LOG_F),
+                "{}/{}".format(self.context.work_dir, const.CIB_TXT_F)
                 ]
         mock_glob.return_value = ["{}/pengine/pe{}".format(self.context.work_dir, x) for x in range(2)]
         mock_isfile.side_effect = [True, True, True]
@@ -839,21 +835,23 @@ class TestCore(unittest.TestCase):
 
         core.sanitize(self.context)
 
-        mock_debug2.assert_called_once_with("Check or replace sensitive info from cib and pe files")
+        mock_debug2.assert_called_once_with("Check or replace sensitive info from cib, pe and log files")
         mock_join.assert_has_calls([
+            mock.call(self.context.work_dir, "pengine", "*"),
             mock.call(self.context.work_dir, const.CIB_F),
-            mock.call(self.context.work_dir, "pengine", "*")
+            mock.call(self.context.work_dir, const.PCMK_LOG_F),
+            mock.call(self.context.work_dir, const.CIB_TXT_F)
             ])
         mock_glob.assert_called_once_with("{}/pengine/*".format(self.context.work_dir))
         mock_isfile.assert_has_calls([
             mock.call("{}/{}".format(self.context.work_dir, const.CIB_F)),
-            mock.call("{}/pengine/pe0".format(self.context.work_dir)),
-            mock.call("{}/pengine/pe1".format(self.context.work_dir)),
+            mock.call("{}/{}".format(self.context.work_dir, const.PCMK_LOG_F)),
+            mock.call("{}/{}".format(self.context.work_dir, const.CIB_TXT_F))
             ])
         mock_sanitize_one.assert_has_calls([
             mock.call(self.context, "{}/{}".format(self.context.work_dir, const.CIB_F)),
-            mock.call(self.context, "{}/pengine/pe0".format(self.context.work_dir)),
-            mock.call(self.context, "{}/pengine/pe1".format(self.context.work_dir))
+            mock.call(self.context, "{}/{}".format(self.context.work_dir, const.PCMK_LOG_F)),
+            mock.call(self.context, "{}/{}".format(self.context.work_dir, const.CIB_TXT_F))
             ])
         mock_warning.assert_has_calls([
             mock.call("Some PE or CIB files contain possibly sensitive data"),
@@ -897,14 +895,17 @@ class TestCore(unittest.TestCase):
         mock_debug2.assert_not_called()
 
     @mock.patch('hb_report.utils.write_to_file')
+    @mock.patch('os.path.basename')
     @mock.patch('hb_report.core.sub_sensitive_string')
     @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.core.include_sensitive_data')
     @mock.patch('hb_report.utils.read_from_file')
-    def test_sanitize_one(self, mock_read, mock_include, mock_debug2, mock_sub, mock_write):
+    def test_sanitize_one_txt(self, mock_read, mock_include, mock_debug2, mock_sub,
+            mock_basename, mock_write):
         self.context.sanitize = True
         mock_read.return_value = "data"
         mock_include.return_value = True
+        mock_basename.return_value = const.CIB_TXT_F
         mock_sub.return_value = "sub data"
 
         core.sanitize_one(self.context, "file")
@@ -912,17 +913,42 @@ class TestCore(unittest.TestCase):
         mock_read.assert_called_once_with("file")
         mock_include.assert_called_once_with(self.context, "data")
         mock_debug2.assert_called_once_with("Replace sensitive info for file")
-        mock_sub.assert_called_once_with(self.context, "data")
+        mock_basename.assert_called_once_with("file")
+        mock_sub.assert_called_once_with(self.context, "data", "txt")
+        mock_write.assert_called_once_with("file", mock_sub.return_value)
+
+    @mock.patch('hb_report.utils.write_to_file')
+    @mock.patch('os.path.basename')
+    @mock.patch('hb_report.core.sub_sensitive_string')
+    @mock.patch('hb_report.utils.log_debug2')
+    @mock.patch('hb_report.core.include_sensitive_data')
+    @mock.patch('hb_report.utils.read_from_file')
+    def test_sanitize_one_xml(self, mock_read, mock_include, mock_debug2, mock_sub,
+            mock_basename, mock_write):
+        self.context.sanitize = True
+        mock_read.return_value = "data"
+        mock_include.return_value = True
+        mock_basename.return_value = "xxx"
+        mock_sub.return_value = "sub data"
+
+        core.sanitize_one(self.context, "file")
+
+        mock_read.assert_called_once_with("file")
+        mock_include.assert_called_once_with(self.context, "data")
+        mock_debug2.assert_called_once_with("Replace sensitive info for file")
+        mock_basename.assert_called_once_with("file")
+        mock_sub.assert_called_once_with(self.context, "data", "xml")
         mock_write.assert_called_once_with("file", mock_sub.return_value)
 
     @mock.patch('re.sub')
     @mock.patch('hb_report.core.include_sensitive_data')
     def test_sub_sensitive_string(self, mock_include, mock_sub):
+        self.context.sanitize_pattern_string = "passw.*"
         mock_include.side_effect = [True, False]
         mock_sub.return_value = "sub data"
 
         data = "data1\ndata2\n"
-        res = core.sub_sensitive_string(self.context, data)
+        res = core.sub_sensitive_string(self.context, data, "xml")
         self.assertEqual(res, "sub data\ndata2\n")
 
         mock_include.assert_has_calls([
@@ -932,7 +958,7 @@ class TestCore(unittest.TestCase):
         mock_sub.assert_called_once_with(' value=".*" ', ' value="******" ', "data1")
 
     @mock.patch('re.search')
-    def test_include_sensitive_data_true(self, mock_search):
+    def test_include_sensitive_data_true_xml(self, mock_search):
         self.context.sanitize_pattern_string = "test"
         mock_search.return_value = True
 
@@ -940,16 +966,32 @@ class TestCore(unittest.TestCase):
         self.assertTrue(rc)
 
         mock_search.assert_called_once_with('name="test"', "data")
+    
+    @mock.patch('re.search')
+    def test_include_sensitive_data_true_txt(self, mock_search):
+        self.context.sanitize_pattern_string = "test"
+        mock_search.side_effect = [False, True]
+
+        rc = core.include_sensitive_data(self.context, "data")
+        self.assertTrue(rc)
+
+        mock_search.assert_has_calls([
+            mock.call('name="test"', "data"),
+            mock.call('(test)=[^\"]', "data")
+            ])
 
     @mock.patch('re.search')
     def test_include_sensitive_data_false(self, mock_search):
         self.context.sanitize_pattern_string = "test"
-        mock_search.return_value = False
+        mock_search.side_effect = [False, False]
 
         rc = core.include_sensitive_data(self.context, "data")
         self.assertFalse(rc)
 
-        mock_search.assert_called_once_with('name="test"', "data")
+        mock_search.assert_has_calls([
+            mock.call('name="test"', "data"),
+            mock.call('(test)=[^\"]', "data")
+            ])
 
     @mock.patch('hb_report.utils.log_debug2')
     @mock.patch('hb_report.utils.read_from_file')
