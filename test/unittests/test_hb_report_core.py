@@ -966,7 +966,7 @@ class TestCore(unittest.TestCase):
         self.assertTrue(rc)
 
         mock_search.assert_called_once_with('name="test"', "data")
-    
+
     @mock.patch('re.search')
     def test_include_sensitive_data_true_txt(self, mock_search):
         self.context.sanitize_pattern_string = "test"
