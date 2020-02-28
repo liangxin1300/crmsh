@@ -28,7 +28,7 @@ def step_impl(context, nodelist):
 @given('IP "{addr}" is belong to "{iface}"')
 def step_impl(context, addr, iface):
     cmd = 'ip address show dev {}'.format(iface)
-    res = re.search(r' {}/'.format(addr), run_command(context, cmd))
+    res = re.search(r' {}/'.format(addr), run_command(context, cmd)[1])
     assert bool(res) is True
 
 
@@ -47,7 +47,8 @@ def step_impl(context, cmd, addr):
 
 @when('Try "{cmd}"')
 def step_impl(context, cmd):
-    run_command(context, cmd, err_record=True)
+    rc, out = run_command(context, cmd, err_record=True)
+    context.return_code = rc
 
 
 @when('Wait "{second}" seconds')
@@ -73,10 +74,27 @@ def step_impl(context):
     context.stdout = None
 
 
+@then('Expected multiple lines in output')
+def step_impl(context):
+    assert context.text in context.stdout
+    context.stdout = None
+
+
+@then('Expected multiple lines not in output')
+def step_impl(context):
+    assert context.text not in context.stdout
+    context.stdout = None
+
+
 @then('Expected "{msg}" in stdout')
 def step_impl(context, msg):
     assert msg in context.stdout
     context.stdout = None
+
+
+@then('Expected return code is "{num}"')
+def step_impl(context, num):
+    assert context.return_code == int(num)
 
 
 @then('Except "{msg}"')
@@ -114,20 +132,20 @@ def step_impl(context, nodelist):
 
 @then('IP "{addr}" is used by corosync')
 def step_impl(context, addr):
-    out = run_command(context, 'corosync-cfgtool -s')
+    _, out = run_command(context, 'corosync-cfgtool -s')
     res = re.search(r' {}\n'.format(addr), out)
     assert bool(res) is True
 
 
 @then('Cluster name is "{name}"')
 def step_impl(context, name):
-    out = run_command(context, 'corosync-cmapctl -b totem.cluster_name')
+    _, out = run_command(context, 'corosync-cmapctl -b totem.cluster_name')
     assert out.split()[-1] == name
 
 
 @then('Cluster virtual IP is "{addr}"')
 def step_impl(context, addr):
-    out = run_command(context, 'crm configure show|grep -A1 IPaddr2')
+    _, out = run_command(context, 'crm configure show|grep -A1 IPaddr2')
     res = re.search(r' ip={}'.format(addr), out)
     assert bool(res) is True
 
@@ -156,21 +174,21 @@ def step_impl(context, addr):
 
 @then('Show corosync ring status')
 def step_impl(context):
-    out = run_command(context, 'crm corosync status ring')
+    _, out = run_command(context, 'crm corosync status ring')
     if out:
         context.logger.info("\n{}".format(out))
 
 
 @then('Show status from qnetd')
 def step_impl(context):
-    out = run_command(context, 'crm corosync status qnetd')
+    _, out = run_command(context, 'crm corosync status qnetd')
     if out:
         context.logger.info("\n{}".format(out))
 
 
 @then('Show corosync qdevice configuration')
 def step_impl(context):
-    out = run_command(context, "sed -n -e '/quorum/,/^}/ p' /etc/corosync/corosync.conf")
+    _, out = run_command(context, "sed -n -e '/quorum/,/^}/ p' /etc/corosync/corosync.conf")
     if out:
         context.logger.info("\n{}".format(out))
 
@@ -181,7 +199,7 @@ def step_impl(context, res, res_type, state):
     result = None
     while try_count < 5:
         time.sleep(1)
-        out = run_command(context, "crm_mon -1")
+        _, out = run_command(context, "crm_mon -1")
         if out:
             result = re.search(r'\s{}\s+.*:{}\):\s+{} '.format(res, res_type, state), out)
             if not result:
@@ -194,7 +212,7 @@ def step_impl(context, res, res_type, state):
 @then('Resource "{res}" failcount on "{node}" is "{number}"')
 def step_impl(context, res, node, number):
     cmd = "crm resource failcount {} show {}".format(res, node)
-    out = run_command(context, cmd)
+    _, out = run_command(context, cmd)
     if out:
         result = re.search(r'name=fail-count-{} value={}'.format(res, number), out)
         assert result is not None

@@ -153,3 +153,35 @@ Feature: hb_report functional test
     Then    "onenode.tar.bz2" created
     And     "onenode.tar.bz2" include essential files for "hanode1"
     When    Run "rm -f onenode.tar.bz2" on "hanode1"
+
+  @clean
+  Scenario: Verify hb_report replace sensitive info
+    Given   Cluster service is "stopped" on "hanode1"
+    And     Cluster service is "stopped" on "hanode2"
+    When    Run "crm cluster init -y --no-overwrite-sshkey" on "hanode1"
+    Then    Cluster service is "started" on "hanode1"
+    When    Run "crm cluster join -c hanode1 -y" on "hanode2"
+    Then    Cluster service is "started" on "hanode2"
+    And     Online nodes are "hanode1 hanode2"
+
+    When    Run "crm configure primitive id=d Dummy meta passwd="sdfgtie49382xxx"" on "hanode1"
+    And     Run "hb_report report" on "hanode1"
+    Then    Expected multiple lines in output
+      """
+      WARNING: hanode1#Collector: Some PE/CIB/log files contain possibly sensitive data
+      WARNING: hanode1#Collector: Using "-s" option can replace sensitive data
+      """
+    When    Run "tar jxf report.tar.bz2" on "hanode1"
+    And     Try "grep -R "sdfgtie49382xx" report"
+    Then    Expected return code is "0"
+
+    When    Run "rm -f report.tar.bz2" on "hanode1"
+    And     Run "hb_report -s report" on "hanode1"
+    Then    Expected multiple lines not in output
+      """
+      WARNING: hanode1#Collector: Some PE/CIB/log files contain possibly sensitive data
+      WARNING: hanode1#Collector: Using "-s" option can replace sensitive data
+      """
+    When    Run "tar jxf report.tar.bz2" on "hanode1"
+    And     Try "grep -R "sdfgtie49382xx" report"
+    Then    Expected return code is "1"
