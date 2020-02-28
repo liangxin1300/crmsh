@@ -830,7 +830,7 @@ class TestCore(unittest.TestCase):
                 "{}/{}".format(self.context.work_dir, const.CIB_TXT_F)
                 ]
         mock_glob.return_value = ["{}/pengine/pe{}".format(self.context.work_dir, x) for x in range(2)]
-        mock_isfile.side_effect = [True, True, True]
+        mock_isfile.side_effect = [True, True, True, True, True]
         mock_sanitize_one.side_effect = [0, 0, 1]
 
         core.sanitize(self.context)
@@ -846,7 +846,9 @@ class TestCore(unittest.TestCase):
         mock_isfile.assert_has_calls([
             mock.call("{}/{}".format(self.context.work_dir, const.CIB_F)),
             mock.call("{}/{}".format(self.context.work_dir, const.PCMK_LOG_F)),
-            mock.call("{}/{}".format(self.context.work_dir, const.CIB_TXT_F))
+            mock.call("{}/{}".format(self.context.work_dir, const.CIB_TXT_F)),
+            mock.call("{}/pengine/pe0".format(self.context.work_dir)),
+            mock.call("{}/pengine/pe1".format(self.context.work_dir))
             ])
         mock_sanitize_one.assert_has_calls([
             mock.call(self.context, "{}/{}".format(self.context.work_dir, const.CIB_F)),

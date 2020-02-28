@@ -1333,3 +1333,14 @@ class TestCollect(unittest.TestCase):
         mock_str2file.assert_called_once_with("data1\n", "{}/{}".format(self.context.work_dir, const.EVENTS_F))
         mock_isfile.assert_called_once_with("{}/{}".format(self.context.work_dir, const.HALOG_F))
         mock_empty.assert_called_once_with("{}/{}".format(self.context.work_dir, const.HALOG_F))
+
+    @mock.patch('hb_report.core.dump_logset')
+    @mock.patch('os.path.isfile')
+    @mock.patch('hb_report.collect.get_pcmk_log')
+    def test_dump_pcmk_log(self, mock_get_pcmk_log, mock_isfile, mock_dump):
+        mock_get_pcmk_log.return_value = "file"
+        mock_isfile.return_value = True
+        collect.dump_pcmk_log(self.context)
+        mock_get_pcmk_log.assert_called_once_with()
+        mock_isfile.assert_called_once_with("file")
+        mock_dump.assert_called_once_with(self.context, "file")
