@@ -856,7 +856,7 @@ class TestCore(unittest.TestCase):
             mock.call(self.context, "{}/{}".format(self.context.work_dir, const.CIB_TXT_F))
             ])
         mock_warning.assert_has_calls([
-            mock.call("Some PE or CIB files contain possibly sensitive data"),
+            mock.call("Some PE/CIB/log files contain possibly sensitive data"),
             mock.call('Using "-s" option can replace sensitive data')
             ])
 
