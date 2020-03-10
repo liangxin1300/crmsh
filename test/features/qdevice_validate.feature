@@ -51,12 +51,58 @@ Feature: corosync qdevice/qnetd options validate
     Then    Except "ERROR: cluster.init: command /bin/not_exists_cmd not exists"
 
   @clean
+  Scenario: Option "--qdevice-heuristics-mode" set wrong value
+    When    Try "crm cluster init --qnetd-hostname=qnetd-node --qdevice-heuristics='/usr/bin/ls' --qdevice-heuristics-mode="xxx""
+    Then    Except "ERROR: cluster.init: invalid heuristics mode(on/sync/off)"
+
+  @clean
+  Scenario: Option "--qnetd-hostname" is required by other qdevice options
+    When    Try "crm cluster init --qdevice-port=1234"
+    Then    Except multiple lines
+      """
+      usage: init [options] [STAGE]
+      crm: error: Option --qnetd-hostname is required if want to configure qdevice
+      """
+
+  @clean
+  Scenario: Option --qdevice-heuristics is required if want to configure heuristics mode
+    When    Try "crm cluster init --qnetd-hostname=qnetd-node --qdevice-heuristics-mode="on""
+    Then    Except multiple lines
+      """
+      usage: init [options] [STAGE]
+      crm: error: Option --qdevice-heuristics is required if want to configure heuristics mode
+      """
+
+  @clean
   Scenario: Node for qnetd is a cluster node
     Given   Cluster service is "stopped" on "hanode2"
     When    Run "crm cluster init -y --no-overwrite-sshkey" on "hanode2"
     Then    Cluster service is "started" on "hanode2"
     When    Try "crm cluster init --qnetd-hostname=hanode2 -y --no-overwrite-sshkey"
-    Then    Except "ERROR: cluster.init: host for qnetd must be a non-cluster node"
+    Then    Except multiple lines
+      """"
+      ERROR: cluster.init: host for qnetd must be a non-cluster node
+      Cluster service already successfully started on this node
+      If you still want to use qdevice, change another host or stop cluster service on hanode2
+      Then run command "crm cluster init qdevice --qnetd-hostname=hanode2"
+      This command will setup qdevice separately
+      """
+    And     Cluster service is "started" on "hanode1"
+    When    Run "crm cluster stop" on "hanode2"
+
+  @clean
+  Scenario: Node for qnetd not installed corosync-qnetd
+    Given   Cluster service is "stopped" on "hanode2"
+    When    Try "crm cluster init --qnetd-hostname=hanode2 -y --no-overwrite-sshkey"
+    Then    Except multiple lines
+      """"
+      ERROR: cluster.init: Package "corosync-qnetd" not installed on hanode2
+      Cluster service already successfully started on this node
+      If you still want to use qdevice, install "corosync-qnetd" on hanode2
+      Then run command "crm cluster init qdevice --qnetd-hostname=hanode2"
+      This command will setup qdevice separately
+      """
+    And     Cluster service is "started" on "hanode1"
 
   @clean
   Scenario: Run qdevice stage on inactive cluster node
