@@ -241,6 +241,14 @@ class TestQDevice(unittest.TestCase):
         Global tearDown.
         """
 
+    @mock.patch("crmsh.bootstrap.package_is_installed")
+    def test_valid_attr_not_installed(self, mock_installed):
+        mock_installed.return_value = False
+        with self.assertRaises(ValueError) as err:
+            self.qdevice_with_ip.valid_attr()
+        self.assertEqual("Package \"corosync-qdevice\" not installed on this node", str(err.exception))
+        mock_installed.assert_called_once_with("corosync-qdevice")
+
     @mock.patch("crmsh.utils.this_node")
     @mock.patch("crmsh.utils.ip_in_local")
     def test_valid_attr_remote_exception(self, mock_ip_in_local, mock_this_node):
@@ -391,10 +399,11 @@ class TestQDevice(unittest.TestCase):
     def test_valid_qnetd_exception(self):
         self.qdevice_with_ip.check_ssh_passwd_need = mock.Mock(return_value=True)
         self.qdevice_with_ip.remote_running_cluster = mock.Mock(return_value=True)
-
+        excepted_err_string = 'host for qnetd must be a non-cluster node\nCluster service already successfully started on this node\nIf you still want to use qdevice, change another host or stop cluster service on 10.10.10.123\nThen run command "crm cluster init qdevice --qnetd-hostname=10.10.10.123"\nThis command will setup qdevice separately'
+        self.maxDiff = None
         with self.assertRaises(ValueError) as err:
             self.qdevice_with_ip.valid_qnetd()
-        self.assertEqual("host for qnetd must be a non-cluster node", str(err.exception))
+        self.assertEqual(excepted_err_string, str(err.exception))
 
         self.qdevice_with_ip.check_ssh_passwd_need.assert_called_once_with()
         self.qdevice_with_ip.remote_running_cluster.assert_called_once_with()
@@ -416,6 +425,18 @@ class TestQDevice(unittest.TestCase):
         mock_call.return_value = ["10.10.10.123", (0, None, None)]
         self.assertTrue(self.qdevice_with_ip.remote_running_cluster())
         mock_call.assert_called_once_with(["10.10.10.123"], "systemctl -q is-active pacemaker", False)
+
+    @mock.patch("crmsh.parallax.parallax_call")
+    def test_qnetd_installed_false(self, mock_call):
+        mock_call.side_effect = ValueError(mock.Mock(), "Failed on 10.10.10.123: error happen")
+        self.assertFalse(self.qdevice_with_ip.qnetd_installed())
+        mock_call.assert_called_once_with(["10.10.10.123"], "rpm -q --quiet corosync-qnetd", False)
+
+    @mock.patch("crmsh.parallax.parallax_call")
+    def test_qnetd_installed_true(self, mock_call):
+        mock_call.return_value = ["10.10.10.123", (0, None, None)]
+        self.assertTrue(self.qdevice_with_ip.qnetd_installed())
+        mock_call.assert_called_once_with(["10.10.10.123"], "rpm -q --quiet corosync-qnetd", False)
 
     @mock.patch("crmsh.parallax.parallax_call")
     def test_manage_qnetd(self, mock_call):
