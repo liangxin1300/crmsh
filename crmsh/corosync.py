@@ -89,8 +89,8 @@ class QDevice(object):
     qdevice_path = "/etc/corosync/qdevice/net"
     qdevice_db_path = "/etc/corosync/qdevice/net/nssdb"
 
-    def __init__(self, ip, port=5403, algo="ffsplit",
-                 tie_breaker="lowest", tls="on", cluster_node=None, cmds=None):
+    def __init__(self, ip, port=5403, algo="ffsplit", tie_breaker="lowest",
+            tls="on", cluster_node=None, cmds=None, mode=None):
         self.ip = ip
         self.port = port
         self.algo = algo
@@ -99,6 +99,7 @@ class QDevice(object):
         self.cluster_node = cluster_node
         self.askpass = False
         self.cmds = cmds
+        self.mode = mode
 
     @property
     def qnetd_cacert_on_qnetd(self):
@@ -137,6 +138,8 @@ class QDevice(object):
         return "{}/{}/{}".format(self.qdevice_path, self.cluster_node, self.qdevice_p12_filename)
 
     def valid_attr(self):
+        if not bootstrap.package_is_installed("corosync-qdevice"):
+            raise ValueError("Package \"corosync-qdevice\" not installed on this node")
         if self.ip == utils.this_node() or self.ip in utils.ip_in_local():
             raise ValueError("host for qnetd must be a remote one")
         if not utils.resolve_hostnames([self.ip])[0]:
@@ -157,12 +160,25 @@ class QDevice(object):
                     raise ValueError("commands for heuristics should be absolute path")
                 if not os.path.exists(cmd.split()[0]):
                     raise ValueError("command {} not exists".format(cmd.split()[0]))
+            if self.mode and self.mode not in ["on", "sync", "off"]:
+                raise ValueError("invalid heuristics mode(on/sync/off)")
 
     def valid_qnetd(self):
         if self.check_ssh_passwd_need():
             self.askpass = True
+
+        exception_msg = ""
+        suggest = ""
         if self.remote_running_cluster():
-            raise ValueError("host for qnetd must be a non-cluster node")
+            exception_msg = "host for qnetd must be a non-cluster node"
+            suggest = "change another host or stop cluster service on {}".format(self.ip)
+        elif not self.qnetd_installed():
+            exception_msg = "Package \"corosync-qnetd\" not installed on {}".format(self.ip)
+            suggest = "install \"corosync-qnetd\" on {}".format(self.ip)
+
+        if exception_msg:
+            exception_msg += "\nCluster service already successfully started on this node\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init qdevice --qnetd-hostname={}\"\nThis command will setup qdevice separately".format(suggest, self.ip)
+            raise ValueError(exception_msg)
 
     def check_ssh_passwd_need(self):
         return utils.check_ssh_passwd_need([self.ip])
@@ -171,6 +187,17 @@ class QDevice(object):
         cmd = "systemctl -q is-active pacemaker"
         if self.askpass:
             print("Checking on QNetd node({})".format(self.ip))
+        try:
+            parallax.parallax_call([self.ip], cmd, self.askpass)
+        except ValueError:
+            return False
+        else:
+            return True
+
+    def qnetd_installed(self):
+        cmd = "rpm -q --quiet corosync-qnetd"
+        if self.askpass:
+            print("Checking whether corosync-qnetd installed on node({})".format(self.ip))
         try:
             parallax.parallax_call([self.ip], cmd, self.askpass)
         except ValueError:
@@ -460,9 +487,11 @@ class QDevice(object):
         p.set('quorum.device.net.tie_breaker', self.tie_breaker)
         if self.cmds:
             p.add('quorum.device', make_section('quorum.device.heuristics', []))
-            p.set('quorum.device.heuristics.mode', 'sync')
+            mode = self.mode if self.mode else 'sync'
+            p.set('quorum.device.heuristics.mode', mode)
             for i, cmd in enumerate(self.cmds.strip(';').split(';')):
-                exec_name = "exec_{}{}".format(os.path.basename(cmd.split()[0]), i)
+                cmd_name = re.sub("[.-]", "_", os.path.basename(cmd.split()[0]))
+                exec_name = "exec_{}{}".format(cmd_name, i)
                 p.set('quorum.device.heuristics.{}'.format(exec_name), cmd)
 
         f = open(conf(), 'w')
