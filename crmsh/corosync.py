@@ -187,16 +187,14 @@ class QDevice(object):
         return utils.check_ssh_passwd_need([self.ip])
 
     def qnetd_ip_in_local_network(self):
-        return False
-        """
-        if bootstrap.service_is_active("corosync.service"):
-            pass
+        qnetd_same_network_ip = None
+        corosync_iplist = utils.get_member_iplist()
         qnetd_ip = socket.gethostbyname(self.ip)
         for network in utils.network_all(with_mask=True):
             if utils.ip_in_network(qnetd_ip, network):
-                return True
-        return False
-        """
+                qnetd_same_network_ip = network.split('/')[0]
+                break
+        return qnetd_same_network_ip in corosync_iplist
 
     def remote_running_cluster(self):
         cmd = "systemctl -q is-active pacemaker"
