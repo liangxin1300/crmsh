@@ -399,7 +399,7 @@ class TestQDevice(unittest.TestCase):
     def test_valid_qnetd_exception(self):
         self.qdevice_with_ip.check_ssh_passwd_need = mock.Mock(return_value=True)
         self.qdevice_with_ip.remote_running_cluster = mock.Mock(return_value=True)
-        excepted_err_string = 'host for qnetd must be a non-cluster node\nCluster service already successfully started on this node\nIf you still want to use qdevice, change another host or stop cluster service on 10.10.10.123\nThen run command "crm cluster init qdevice --qnetd-hostname=10.10.10.123"\nThis command will setup qdevice separately'
+        excepted_err_string = 'host for qnetd must be a non-cluster node\nCluster service already successfully started on this node\nIf you still want to use qdevice, change another host or disable and stop cluster service on 10.10.10.123\nThen run command "crm cluster init qdevice --qnetd-hostname={qnetd_addr}"\nThis command will setup qdevice separately while keep cluster running'
         self.maxDiff = None
         with self.assertRaises(ValueError) as err:
             self.qdevice_with_ip.valid_qnetd()
