@@ -1626,7 +1626,7 @@ Configure Qdevice/Qnetd""")
     if _context.qdevice.check_ssh_passwd_need():
         copy_ssh_id_to_qnetd()
     try:
-        _context.qdevice.valid_qnetd()
+        _context.qdevice.valid_qnetd(_context.force)
     except ValueError as err:
         error(err)
 
@@ -2268,7 +2268,7 @@ def bootstrap_init(cluster_name="hacluster", ui_context=None, nic=None, ocfs2_de
             error("Invalid option: admin_ip")
         if _context.qdevice:
             try:
-                _context.qdevice.valid_attr(_context.force)
+                _context.qdevice.valid_attr()
             except ValueError as err:
                 error(err)
 

@@ -137,7 +137,7 @@ class QDevice(object):
     def qdevice_p12_on_cluster(self):
         return "{}/{}/{}".format(self.qdevice_path, self.cluster_node, self.qdevice_p12_filename)
 
-    def valid_attr(self, force=False):
+    def valid_attr(self):
         if not bootstrap.package_is_installed("corosync-qdevice"):
             raise ValueError("Package \"corosync-qdevice\" not installed on this node")
         if self.ip == utils.this_node() or self.ip in utils.ip_in_local():
@@ -146,8 +146,6 @@ class QDevice(object):
             raise ValueError("host \"{}\" is unreachable".format(self.ip))
         if not utils.check_port_open(self.ip, 22):
             raise ValueError("ssh service on \"{}\" not available".format(self.ip))
-        if self.qnetd_ip_in_local_network() and not force:
-            raise ValueError("qnetd's address shouldn't be in the same network with corosync's address(use '-f/--force' to skip)")
         if not utils.valid_port(self.port):
             raise ValueError("invalid qdevice port range(1024 - 65535)")
         if self.algo not in ["ffsplit", "lms"]:
@@ -165,13 +163,16 @@ class QDevice(object):
             if self.mode and self.mode not in ["on", "sync", "off"]:
                 raise ValueError("invalid heuristics mode(on/sync/off)")
 
-    def valid_qnetd(self):
+    def valid_qnetd(self, force=False):
         if self.check_ssh_passwd_need():
             self.askpass = True
 
         exception_msg = ""
         suggest = ""
-        if self.remote_running_cluster():
+        if self.qnetd_ip_in_local_network() and not force:
+            exception_msg = "qnetd's address shouldn't be in the same network with corosync's address"
+            suggest = "change address in different network or use '-f/--force' to skip"
+        elif self.remote_running_cluster():
             exception_msg = "host for qnetd must be a non-cluster node"
             suggest = "change another host or disable and stop cluster service on {}".format(self.ip)
         elif not self.qnetd_installed():
