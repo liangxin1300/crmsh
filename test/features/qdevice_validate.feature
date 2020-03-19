@@ -83,9 +83,9 @@ Feature: corosync qdevice/qnetd options validate
       """"
       ERROR: cluster.init: host for qnetd must be a non-cluster node
       Cluster service already successfully started on this node
-      If you still want to use qdevice, change another host or stop cluster service on hanode2
-      Then run command "crm cluster init qdevice --qnetd-hostname=hanode2"
-      This command will setup qdevice separately
+      If you still want to use qdevice, change another host or disable and stop cluster service on hanode2
+      Then run command "crm cluster init qdevice --qnetd-hostname={qnetd_addr}"
+      This command will setup qdevice separately while keep cluster running
       """
     And     Cluster service is "started" on "hanode1"
     When    Run "crm cluster stop" on "hanode2"
@@ -99,8 +99,8 @@ Feature: corosync qdevice/qnetd options validate
       ERROR: cluster.init: Package "corosync-qnetd" not installed on hanode2
       Cluster service already successfully started on this node
       If you still want to use qdevice, install "corosync-qnetd" on hanode2
-      Then run command "crm cluster init qdevice --qnetd-hostname=hanode2"
-      This command will setup qdevice separately
+      Then run command "crm cluster init qdevice --qnetd-hostname={qnetd_addr}"
+      This command will setup qdevice separately while keep cluster running
       """
     And     Cluster service is "started" on "hanode1"
 
