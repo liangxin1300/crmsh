@@ -137,7 +137,7 @@ class QDevice(object):
     def qdevice_p12_on_cluster(self):
         return "{}/{}/{}".format(self.qdevice_path, self.cluster_node, self.qdevice_p12_filename)
 
-    def valid_attr(self):
+    def valid_attr(self, force=False):
         if not bootstrap.package_is_installed("corosync-qdevice"):
             raise ValueError("Package \"corosync-qdevice\" not installed on this node")
         if self.ip == utils.this_node() or self.ip in utils.ip_in_local():
@@ -146,6 +146,8 @@ class QDevice(object):
             raise ValueError("host \"{}\" is unreachable".format(self.ip))
         if not utils.check_port_open(self.ip, 22):
             raise ValueError("ssh service on \"{}\" not available".format(self.ip))
+        if self.qnetd_ip_in_local_network() and not force:
+            raise ValueError("qnetd's address shouldn't be in the same network with corosync's address(use '-f/--force' to skip)")
         if not utils.valid_port(self.port):
             raise ValueError("invalid qdevice port range(1024 - 65535)")
         if self.algo not in ["ffsplit", "lms"]:
@@ -171,17 +173,29 @@ class QDevice(object):
         suggest = ""
         if self.remote_running_cluster():
             exception_msg = "host for qnetd must be a non-cluster node"
-            suggest = "change another host or stop cluster service on {}".format(self.ip)
+            suggest = "change another host or disable and stop cluster service on {}".format(self.ip)
         elif not self.qnetd_installed():
             exception_msg = "Package \"corosync-qnetd\" not installed on {}".format(self.ip)
             suggest = "install \"corosync-qnetd\" on {}".format(self.ip)
 
         if exception_msg:
-            exception_msg += "\nCluster service already successfully started on this node\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init qdevice --qnetd-hostname={}\"\nThis command will setup qdevice separately".format(suggest, self.ip)
+            exception_msg += "\nCluster service already successfully started on this node\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init qdevice --qnetd-hostname={qnetd_addr}\"\nThis command will setup qdevice separately while keep cluster running".format(suggest)
             raise ValueError(exception_msg)
 
     def check_ssh_passwd_need(self):
         return utils.check_ssh_passwd_need([self.ip])
+
+    def qnetd_ip_in_local_network(self):
+        return False
+        """
+        if bootstrap.service_is_active("corosync.service"):
+            pass
+        qnetd_ip = socket.gethostbyname(self.ip)
+        for network in utils.network_all(with_mask=True):
+            if utils.ip_in_network(qnetd_ip, network):
+                return True
+        return False
+        """
 
     def remote_running_cluster(self):
         cmd = "systemctl -q is-active pacemaker"

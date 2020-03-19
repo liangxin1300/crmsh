@@ -219,6 +219,8 @@ Note:
                             help="Use the given watchdog device")
         parser.add_argument("--no-overwrite-sshkey", action="store_true", dest="no_overwrite_sshkey",
                             help='Avoid "/root/.ssh/id_rsa" overwrite if "-y" option is used (False by default)')
+        parser.add_argument("-f", "--force", action="store_true", dest="force",
+                            help='Force to continue even has possible risk')
 
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_argument("-i", "--interface", dest="nic", metavar="IF",
@@ -308,6 +310,7 @@ Note:
             admin_ip=options.admin_ip,
             yes_to_all=options.yes_to_all,
             no_overwrite_sshkey=options.no_overwrite_sshkey,
+            force=options.force,
             unicast=options.unicast,
             second_hb=options.second_hb,
             ipv6=options.ipv6,

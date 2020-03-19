@@ -2217,7 +2217,7 @@ def remove_localhost_check():
 
 def bootstrap_init(cluster_name="hacluster", ui_context=None, nic=None, ocfs2_device=None,
                    shared_device=None, sbd_device=None, diskless_sbd=False, quiet=False,
-                   template=None, admin_ip=None, yes_to_all=False, no_overwrite_sshkey=False,
+                   template=None, admin_ip=None, yes_to_all=False, no_overwrite_sshkey=False, force=False,
                    unicast=False, second_hb=False, ipv6=False, watchdog=None, qdevice=None, stage=None, args=None):
     """
     -i <nic>
@@ -2261,13 +2261,14 @@ def bootstrap_init(cluster_name="hacluster", ui_context=None, nic=None, ocfs2_de
     _context.qdevice = qdevice
     _context.no_overwrite_sshkey = no_overwrite_sshkey
     _context.stage = stage
+    _context.force = force
 
     def check_option():
         if _context.admin_ip and not valid_adminIP(_context.admin_ip):
             error("Invalid option: admin_ip")
         if _context.qdevice:
             try:
-                _context.qdevice.valid_attr()
+                _context.qdevice.valid_attr(_context.force)
             except ValueError as err:
                 error(err)
 
