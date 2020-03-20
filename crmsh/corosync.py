@@ -187,10 +187,18 @@ class QDevice(object):
         return utils.check_ssh_passwd_need([self.ip])
 
     def qnetd_ip_in_local_network(self):
-        qnetd_same_network_ip = None
+        '''
+        Make sure the address of qnetd is not the same network with all corosync members
+        '''
+        all_networks = []
+        corosync_networks = []
+
         corosync_iplist = utils.get_member_iplist()
+        results = parallax.parallax_call(corosync_iplist, "ip -o route show")
+        for res in results:
+            all_networks += utils.network_all(True, utils.to_ascii(res[1][1]))
         qnetd_ip = socket.gethostbyname(self.ip)
-        for network in utils.network_all(with_mask=True):
+        for network in all_networks:
             if utils.ip_in_network(qnetd_ip, network):
                 qnetd_same_network_ip = network.split('/')[0]
                 break
