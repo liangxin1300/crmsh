@@ -26,6 +26,7 @@ from .msg import common_warn, common_info, common_debug, common_err, err_buf
 
 
 mcast_regrex = r'2(?:2[4-9]|3\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?|0)){3}'
+ipv4_regrex = r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'
 
 
 def to_ascii(input_str):
@@ -128,19 +129,24 @@ def network_defaults(interface=None):
     return tuple(info)
 
 
-def network_all(with_mask=False):
+def network_all(with_mask=False, input_outside=None):
     """
     returns all networks on local node
     """
-    all_networks = []
-    _, outp = get_stdout("/sbin/ip -o route show")
-    for l in outp.split('\n'):
-        if re.search(r'\.0/[0-9]+ ', l):
-            if with_mask:
-                all_networks.append(l.split()[0])
-            else:
-                all_networks.append(l.split('/')[0])
-    return all_networks
+    data = None
+    if input_outside:
+        data = input_outside
+    else:
+        _, data = get_stdout("/sbin/ip -o route show")
+
+    if not data:
+        raise ValueError("Can't get network information")
+
+    all_networks = re.findall(r'{}/[0-9]+'.format(ipv4_regrex), data)
+    if with_mask:
+        return all_networks
+    else:
+        return [x.split('/')[0] for x in all_networks]
 
 
 def network_v6_all():
