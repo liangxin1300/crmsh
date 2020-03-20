@@ -180,7 +180,7 @@ class QDevice(object):
             suggest = "install \"corosync-qnetd\" on {}".format(self.ip)
 
         if exception_msg:
-            exception_msg += "\nCluster service already successfully started on this node\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init qdevice --qnetd-hostname={qnetd_addr}\"\nThis command will setup qdevice separately while keep cluster running".format(suggest)
+            exception_msg += "\nCluster service already successfully started on this node\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init qdevice --qnetd-hostname=$qnetd_addr\"\nThis command will setup qdevice separately while keep cluster running".format(suggest)
             raise ValueError(exception_msg)
 
     def check_ssh_passwd_need(self):
