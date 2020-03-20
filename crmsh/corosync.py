@@ -197,12 +197,19 @@ class QDevice(object):
         results = parallax.parallax_call(corosync_iplist, "ip -o route show")
         for res in results:
             all_networks += utils.network_all(True, utils.to_ascii(res[1][1]))
+
+        for c_ip in corosync_iplist:
+            network = utils.get_ip_belonged_network(c_ip, all_networks)
+            if not network:
+                continue
+            corosync_networks.append(network)
+
         qnetd_ip = socket.gethostbyname(self.ip)
-        for network in all_networks:
-            if utils.ip_in_network(qnetd_ip, network):
-                qnetd_same_network_ip = network.split('/')[0]
-                break
-        return qnetd_same_network_ip in corosync_iplist
+        qnetd_network = utils.get_ip_belonged_network(qnetd_ip, all_networks)
+        if not qnetd_network:
+            raise ValueError("Can't get network of qnetd's address {}".format(qnetd_ip))
+
+        return qnetd_network in corosync_networks
 
     def remote_running_cluster(self):
         cmd = "systemctl -q is-active pacemaker"

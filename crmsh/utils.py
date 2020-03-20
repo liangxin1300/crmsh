@@ -149,6 +149,13 @@ def network_all(with_mask=False, input_outside=None):
         return [x.split('/')[0] for x in all_networks]
 
 
+def get_ip_belonged_network(ip, network_list):
+    for network in network_list:
+        if ip_in_network(ip, network):
+            return network
+    return None
+
+
 def network_v6_all():
     _, outp = get_stdout("/sbin/ip -6 -o addr show")
     dict_ = {}
