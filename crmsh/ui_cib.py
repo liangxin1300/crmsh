@@ -11,7 +11,7 @@ from . import ui_cibstatus
 from . import constants
 from . import config
 from . import options
-from .msg import no_prog_err
+from .log import no_prog_err
 from .cibstatus import cib_status
 from .cibconfig import cib_factory
 from . import tmpfiles

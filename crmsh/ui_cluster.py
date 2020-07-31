@@ -7,7 +7,7 @@ import re
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from . import command
 from . import utils
-from .msg import err_buf
+from .log import logger
 from . import scripts
 from . import completers as compl
 from . import bootstrap
@@ -94,12 +94,12 @@ class Cluster(command.UI):
         '''
         try:
             if utils.service_is_active("pacemaker.service"):
-                err_buf.info("Cluster services already started")
+                logger.info("Cluster services already started")
                 return
             utils.start_service("pacemaker")
             if utils.is_qdevice_configured():
                 utils.start_service("corosync-qdevice")
-            err_buf.info("Cluster services started")
+            logger.info("Cluster services started")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -112,12 +112,12 @@ class Cluster(command.UI):
         '''
         try:
             if not utils.service_is_active("corosync.service"):
-                err_buf.info("Cluster services already stopped")
+                logger.info("Cluster services already stopped")
                 return
             if utils.service_is_active("corosync-qdevice"):
                 utils.stop_service("corosync-qdevice")
             utils.stop_service("corosync")
-            err_buf.info("Cluster services stopped")
+            logger.info("Cluster services stopped")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -140,7 +140,7 @@ class Cluster(command.UI):
             utils.enable_service("pacemaker.service")
             if utils.is_qdevice_configured():
                 utils.enable_service("corosync-qdevice.service")
-            err_buf.info("Cluster services enabled")
+            logger.info("Cluster services enabled")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -155,7 +155,7 @@ class Cluster(command.UI):
             utils.disable_service("pacemaker.service")
             if utils.is_qdevice_configured():
                 utils.disable_service("corosync-qdevice.service")
-            err_buf.info("Cluster services disabled")
+            logger.info("Cluster services disabled")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -654,15 +654,15 @@ Cluster Description
                 break
         for host, result in parallax.call(hosts, cmd, opts).items():
             if isinstance(result, parallax.Error):
-                err_buf.error("[%s]: %s" % (host, result))
+                logger.error("[%s]: %s" % (host, result))
             else:
                 if result[0] != 0:
-                    err_buf.error("[%s]: rc=%s\n%s\n%s" % (host, result[0], utils.to_ascii(result[1]), utils.to_ascii(result[2])))
+                    logger.error("[%s]: rc=%s\n%s\n%s" % (host, result[0], utils.to_ascii(result[1]), utils.to_ascii(result[2])))
                 else:
                     if not result[1]:
-                        err_buf.ok("[%s]" % host)
+                        logger.ok("[%s]" % host)
                     else:
-                        err_buf.ok("[%s]\n%s" % (host, utils.to_ascii(result[1])))
+                        logger.ok("[%s]\n%s" % (host, utils.to_ascii(result[1])))
 
     def do_copy(self, context, local_file, *nodes):
         '''

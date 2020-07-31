@@ -5,7 +5,7 @@ import re
 from . import config
 from . import tmpfiles
 from . import utils
-from .msg import common_err
+from .log import logger
 from .ordereddict import odict
 
 # graphviz stuff
@@ -195,7 +195,7 @@ class GvDot(Gv):
 
     def display(self):
         if not config.core.dotty:
-            common_err("dotty not found")
+            logger.error("dotty not found")
             return False
         dotf = self.totmpf()
         if not dotf:
@@ -205,7 +205,7 @@ class GvDot(Gv):
 
     def image(self, img_type, outf):
         if not config.core.dot:
-            common_err("dot not found")
+            logger.error("dot not found")
             return False
         dotf = self.totmpf()
         if not dotf:
