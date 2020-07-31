@@ -38,7 +38,8 @@ def run_command(context, cmd, err_record=False):
     rc, out, err = utils.get_stdout_stderr(cmd)
     if rc != 0 and err:
         if err_record:
-            context.command_error_output = err
+            res = re.sub(r'\x1b\[[0-9]+m', '', err)
+            context.command_error_output = res
             return rc, out
         if out:
             context.logger.info("\n{}\n".format(out))
