@@ -14,8 +14,7 @@ from . import userdir
 from . import logtime
 from . import logparser
 from . import utils
-
-from .msg import common_debug, common_warn, common_err, common_error, common_info, warn_once
+from .log import logger
 
 
 _LOG_FILES = ("ha-log.txt", "messages", "ha-log", "cluster-log.txt", "journal.log", "pacemaker.log")
@@ -89,7 +88,7 @@ def append_newlogs(outdir, to_update):
             f.write("%s %d\n" % (logfile, newpos))
             f.close()
         except IOError as msg:
-            common_err("couldn't the update %s.info: %s" % (rptlog, msg))
+            logger.error("couldn't the update %s.info: %s" % (rptlog, msg))
 
 
 def rpt_pe2t_str(rpt_pe_file):
@@ -102,13 +101,13 @@ def mkarchive(idir):
     "Create an archive from a directory"
     home = userdir.gethomedir()
     if not home:
-        common_err("no home directory, nowhere to pack report")
+        logger.error("no home directory, nowhere to pack report")
         return False
     archive = '%s.tar.bz2' % os.path.join(home, os.path.basename(idir))
     cmd = "tar -C '%s/..' -cj -f '%s' %s" % \
         (idir, archive, os.path.basename(idir))
     if utils.pipe_cmd_nosudo(cmd) != 0:
-        common_err('could not pack report, command "%s" failed' % cmd)
+        logger.error('could not pack report, command "%s" failed' % cmd)
         return False
     else:
         print("Report saved in '%s'" % archive)
@@ -164,10 +163,10 @@ class Report(object):
         logtime.set_year()
 
     def error(self, s):
-        common_err("%s: %s" % (self.source, s))
+        logger.error("%s: %s" % (self.source, s))
 
     def warn(self, s):
-        common_warn("%s: %s" % (self.source, s))
+        logger.warning("%s: %s" % (self.source, s))
 
     def rsc_list(self):
         return self.cib.resources()
@@ -194,7 +193,7 @@ class Report(object):
         '''
         bfname = os.path.basename(tarball)
         parentdir = os.path.dirname(tarball)
-        common_debug("tarball: %s, in dir: %s" % (bfname, parentdir))
+        logger.debug("tarball: %s, in dir: %s" % (bfname, parentdir))
         if bfname.endswith(".tar.bz2"):
             loc = tarball.replace(".tar.bz2", "")
             tar_unpack_option = "j"
@@ -222,13 +221,13 @@ class Report(object):
         try:
             rc, tf_loc = utils.get_stdout("tar -t%s < %s 2> /dev/null | head -1" % (tar_unpack_option, utils.quote(bfname)))
             if os.path.abspath(tf_loc) != os.path.abspath(loc):
-                common_debug("top directory in tarball: %s, doesn't match the tarball name: %s" %
+                logger.debug("top directory in tarball: %s, doesn't match the tarball name: %s" %
                              (tf_loc, loc))
                 loc = os.path.join(os.path.dirname(loc), tf_loc)
         except Exception as msg:
-            common_err("%s: %s" % (tarball, msg))
+            logger.error("%s: %s" % (tarball, msg))
             return None
-        common_debug("tar -x%s < %s" % (tar_unpack_option, utils.quote(bfname)))
+        logger.debug("tar -x%s < %s" % (tar_unpack_option, utils.quote(bfname)))
         rc = utils.pipe_cmd_nosudo("tar -x%s < %s" % (tar_unpack_option, utils.quote(bfname)))
         if self.source == "live":
             os.remove(bfname)
@@ -357,7 +356,7 @@ class Report(object):
         try:
             f = open(fl[0])
         except IOError as msg:
-            common_err("open %s: %s" % (fl[0], msg))
+            logger.error("open %s: %s" % (fl[0], msg))
             return []
         return f.readlines()
 
@@ -369,17 +368,17 @@ class Report(object):
         - get new PE inputs
         TODO: FIXME: broken now
         '''
-        common_info("Fetching updated logs from cluster nodes. Please wait...")
-        common_debug("Candidate logs: %s" % (self.log_l))
+        logger.info("Fetching updated logs from cluster nodes. Please wait...")
+        logger.debug("Candidate logs: %s" % (self.log_l))
         to_update = []
         for rptlog in self.log_l:
             node = log2node(rptlog)
             logf, pos = read_log_info(rptlog)
             if logf:
-                common_debug("Updating %s : %s : %s : %s" % (node, rptlog, logf, pos))
+                logger.debug("Updating %s : %s : %s : %s" % (node, rptlog, logf, pos))
                 to_update.append([node, rptlog, logf, pos])
         if not to_update:
-            common_info("No updatable logs found (missing .info for logs)")
+            logger.info("No updatable logs found (missing .info for logs)")
             return False
 
         utils.rmdir_r(self.outdir)
@@ -448,7 +447,7 @@ class Report(object):
                     self.set_change_origin(CH_UPD)
                     return self._live_loc()
             else:
-                warn_once("parallax library not installed, slow live updates ahead")
+                logger.warning("parallax library not installed, slow live updates ahead")
         if not created_now:
             return self.get_live_report()
         return self.loc
@@ -475,7 +474,7 @@ class Report(object):
             nodes_option = "'-n %s'" % ' '.join(self.setnodes)
         if utils.pipe_cmd_nosudo("mkdir -p %s" % os.path.dirname(d)) != 0:
             return None
-        common_info("Retrieving information from cluster nodes, please wait...")
+        logger.info("Retrieving information from cluster nodes, please wait...")
         rc = utils.pipe_cmd_nosudo("%s -Z -Q -f '%s' %s %s %s %s" %
                                    (extcmd,
                                     self.from_dt.ctime(),
@@ -504,7 +503,7 @@ class Report(object):
         '''
         Set from/to_dt.
         '''
-        common_debug("setting report times: <%s> - <%s>" % (from_dt, to_dt))
+        logger.debug("setting report times: <%s> - <%s>" % (from_dt, to_dt))
         self.from_dt = from_dt
         self.to_dt = to_dt
 
@@ -562,7 +561,7 @@ class Report(object):
             self.desc = os.path.join(self.loc, descname)
             if os.path.isfile(self.desc):
                 yr = os.stat(self.desc).st_mtime
-                common_debug("Found %s, created %s" % (descname, yr))
+                logger.debug("Found %s, created %s" % (descname, yr))
                 self._creation_time = time.strftime("%a %d %b %H:%M:%S %Z %Y",
                                                     time.localtime(yr))
                 if descname == 'report.summary':
@@ -615,7 +614,7 @@ class Report(object):
         Parse the period.
         '''
         if not self.source:
-            common_error("no source set yet")
+            logger.error("no source set yet")
             return False
         if self.ready and (no_live_update or self.source != "live"):
             return True
@@ -691,7 +690,7 @@ class Report(object):
         try:
             f = open(self.desc)
         except IOError as msg:
-            common_err("open %s: %s" % (self.desc, msg))
+            logger.error("open %s: %s" % (self.desc, msg))
             return
         for s in f:
             if s.startswith("%s: " % fld):
@@ -740,9 +739,9 @@ class Report(object):
                 myts = max(logtime.syslog_ts(x) for x in (last_line(l) for l in self.logparser.fileobjs))
             if myts:
                 return utils.timestamp_to_datetime(myts)
-            common_debug("No log lines with timestamps found in report")
+            logger.debug("No log lines with timestamps found in report")
         except Exception as e:
-            common_debug("Error: %s" % (e))
+            logger.debug("Error: %s" % (e))
         return None
 
     def _str_dt(self, dt):
@@ -795,7 +794,7 @@ class Report(object):
             return False
         t_obj = self.find_transition(rpt_pe2t_str(rpt_pe_file))
         if not t_obj:
-            common_err("%s: transition not found" % rpt_pe_file)
+            logger.error("%s: transition not found" % rpt_pe_file)
             return False
         # limit the log scope temporarily
         self.logparser.set_timeframe(t_obj.start_ts, t_obj.end_ts)
@@ -813,7 +812,7 @@ class Report(object):
         '''
         t_obj = self.find_transition(rpt_pe2t_str(rpt_pe_file))
         if not t_obj:
-            common_err("%s: transition not found" % rpt_pe_file)
+            logger.error("%s: transition not found" % rpt_pe_file)
             return None
         return sorted(t_obj.tags)
 
@@ -924,7 +923,7 @@ class Report(object):
         try:
             f = open(fname, "wt")
         except IOError as msg:
-            common_err("Failed to save state: %s" % (msg))
+            logger.error("Failed to save state: %s" % (msg))
             return False
         p.write(f)
         f.close()
@@ -939,7 +938,7 @@ class Report(object):
         try:
             p.read(fname)
         except Exception as msg:
-            common_err("Failed to load state: %s" % (msg))
+            logger.error("Failed to load state: %s" % (msg))
             return False
         rc = True
         try:
@@ -947,7 +946,7 @@ class Report(object):
                 if n == 'dir':
                     self.set_source(v)
                     if not os.path.exists(v):
-                        common_err("session state file %s points to a non-existing directory: %s" %
+                        logger.error("session state file %s points to a non-existing directory: %s" %
                                    (fname, v))
                         rc = False
                 elif n == 'from_time':
@@ -957,14 +956,14 @@ class Report(object):
                 elif n == 'detail':
                     self.set_detail(v)
                 else:
-                    common_warn("unknown item %s in the session state file %s" %
+                    logger.warning("unknown item %s in the session state file %s" %
                                 (n, fname))
             rc |= self.manage_excludes("load", p)
         except configparser.NoSectionError as msg:
-            common_err("session state file %s: %s" % (fname, msg))
+            logger.error("session state file %s: %s" % (fname, msg))
             rc = False
         except Exception as msg:
-            common_err("%s: bad value '%s' for '%s' in session state file %s" %
+            logger.error("%s: bad value '%s' for '%s' in session state file %s" %
                        (msg, v, n, fname))
             rc = False
         if rc:
@@ -982,10 +981,10 @@ class Report(object):
     def manage_session(self, subcmd, name):
         session_dir = self.get_session_dir(name)
         if subcmd == "save" and os.path.exists(session_dir):
-            common_err("history session %s exists" % name)
+            logger.error("history session %s exists" % name)
             return False
         elif subcmd in ("load", "pack", "update", "delete") and not os.path.exists(session_dir):
-            common_err("history session %s does not exist" % name)
+            logger.error("history session %s does not exist" % name)
             return False
         if subcmd == "save":
             if utils.pipe_cmd_nosudo("mkdir -p %s" % session_dir) != 0:
@@ -1030,7 +1029,7 @@ class Report(object):
                 self.log_filter_out.append(arg)
                 self.log_filter_out_re.append(regex)
             except Exception as msg:
-                common_err("bad regex %s: %s" % (arg, msg))
+                logger.error("bad regex %s: %s" % (arg, msg))
                 rc = False
         elif cmd == "save" and self.log_filter_out:
             arg.add_section(self.log_section)
@@ -1044,7 +1043,7 @@ class Report(object):
                     if n.startswith('exclude_'):
                         rc |= self.manage_excludes("add", v)
                     else:
-                        common_warn("unknown item %s in the section %s" %
+                        logger.warning("unknown item %s in the section %s" %
                                     (n, self.log_section))
             except configparser.NoSectionError:
                 pass

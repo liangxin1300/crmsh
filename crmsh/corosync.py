@@ -12,7 +12,7 @@ from . import utils
 from . import tmpfiles
 from . import parallax
 from . import bootstrap
-from .msg import err_buf, common_debug
+from .log import logger, logger_bootstrap
 
 
 def conf():
@@ -333,8 +333,7 @@ class QDevice(object):
         self.manage_qnetd("stop")
 
     def debug_and_log_to_bootstrap(self, msg):
-        common_debug(msg)
-        bootstrap.log("# " + msg)
+        logger_bootstrap.debug(msg)
 
     def init_db_on_qnetd(self):
         """
@@ -823,7 +822,7 @@ class Parser(object):
 
     def add(self, path, tokens):
         """Adds tokens to a section"""
-        common_debug("corosync.add (%s) (%s)" % (path, tokens))
+        logger.debug("corosync.add (%s) (%s)" % (path, tokens))
         if not path:
             self._tokens += tokens
             return
@@ -1064,16 +1063,16 @@ def add_node(addr, name=None):
         nodes = []
     ipaddr = get_ip(addr)
     if addr in nodenames + coronodes or (ipaddr and ipaddr in coronodes):
-        err_buf.warning("%s already in corosync.conf" % (addr))
+        logger.warning("%s already in corosync.conf" % (addr))
         return
     if name and name in nodenames + coronodes:
-        err_buf.warning("%s already in corosync.conf" % (name))
+        logger.warning("%s already in corosync.conf" % (name))
         return
     if addr in nodes:
-        err_buf.warning("%s already in configuration" % (addr))
+        logger.warning("%s already in configuration" % (addr))
         return
     if name and name in nodes:
-        err_buf.warning("%s already in configuration" % (name))
+        logger.warning("%s already in configuration" % (name))
         return
 
     f = open(conf()).read()

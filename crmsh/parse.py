@@ -11,7 +11,7 @@ from .ra import disambiguate_ra_type, ra_type_validate
 from . import schema
 from .utils import keyword_cmp, verify_boolean, lines2cli
 from .utils import get_boolean, olist, canonical_boolean
-from .msg import common_err, syntax_err
+from .log import logger, syntax_err
 from . import xmlutil
 
 
@@ -1445,7 +1445,7 @@ def parse_xml(self, cmd):
     try:
         e = etree.fromstring(xml_data)
     except Exception as err:
-        common_err("Cannot parse XML data: %s" % xml_data)
+        logger.error("Cannot parse XML data: %s" % xml_data)
         self.err(err)
     if e.tag not in constants.cib_cli_map:
         self.err("Element %s not recognized" % (e.tag))
@@ -1706,7 +1706,7 @@ def parse(s, comments=None):
             s = s.encode('ascii', errors='xmlcharrefreplace')
             s = s.decode('utf-8')
         except Exception as e:
-            common_err(e)
+            logger.error(e)
             return False
     if isinstance(s, str):
         if s and s.startswith('#'):
@@ -1716,7 +1716,7 @@ def parse(s, comments=None):
             try:
                 s = [x for p in lines2cli(s) for x in p.split()]
             except ValueError as e:
-                common_err(e)
+                logger.error(e)
                 return False
         else:
             s = shlex.split(s)

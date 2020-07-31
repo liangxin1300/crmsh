@@ -7,7 +7,7 @@ from . import command
 from . import completers as compl
 from . import config
 from . import utils
-from .msg import no_prog_err
+from .log import no_prog_err
 
 _ticket_commands = {
     'grant': "%s -t '%s' -g",

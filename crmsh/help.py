@@ -28,7 +28,7 @@ Help for the level itself is like this:
 import os
 import re
 from .utils import page_string
-from .msg import common_err
+from .log import logger
 from . import config
 from . import clidisplay
 from .ordereddict import odict
@@ -417,6 +417,6 @@ def _load_help():
         fixup_help_aliases()
         fixup_topics()
     except IOError as msg:
-        common_err("Help text not found! %s" % (msg))
+        logger.error("Help text not found! %s" % (msg))
 
 # vim:ts=4:sw=4:et:

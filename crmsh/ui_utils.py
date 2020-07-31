@@ -4,7 +4,7 @@
 
 import re
 import inspect
-from .msg import bad_usage, common_err
+from .log import logger, bad_usage
 from . import utils
 
 
@@ -95,7 +95,7 @@ def graph_args(args):
     gtype, outf, ftype = None, None, None
     gtype = tryarg(0, "dot")
     if gtype not in gv_types:
-        common_err("graph type %s is not supported" % gtype)
+        logger.error("graph type %s is not supported" % gtype)
         return False, gtype, outf, ftype
     outf = tryarg(1, None)
     if outf is not None and not utils.is_path_sane(outf):
