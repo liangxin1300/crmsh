@@ -350,11 +350,19 @@ class TestSBDManager(unittest.TestCase):
         Global tearDown.
         """
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.warn')
     def test_get_sbd_device_interactive_yes_to_all(self, mock_warn):
         bootstrap._context = mock.Mock(yes_to_all=True)
         self.sbd_inst._get_sbd_device_interactive()
         mock_warn.assert_called_once_with("Not configuring SBD ({} left untouched).".format(bootstrap.SYSCONFIG_SBD))
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.bootstrap.check_watchdog')
+    def test_check_environment_no_watchdog(self, mock_watchdog, mock_error):
+        mock_watchdog.return_value = False
+        mock_error.side_effect = ValueError
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
 
     @mock.patch('crmsh.bootstrap.confirm')
     @mock.patch('crmsh.bootstrap.status')
@@ -385,6 +393,7 @@ class TestSBDManager(unittest.TestCase):
         mock_status.assert_called_once_with(bootstrap.SBDManager.SBD_STATUS_DESCRIPTION)
         mock_from_config.assert_called_once_with()
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.prompt_for_string')
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.bootstrap.confirm')
@@ -394,6 +403,15 @@ class TestSBDManager(unittest.TestCase):
         mock_confirm.return_value = True
         mock_from_config.return_value = None
         mock_prompt.return_value = "none"
+=======
+    @mock.patch('crmsh.utils.is_program')
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.bootstrap.check_watchdog')
+    def test_check_environment_no_sbd(self, mock_watchdog, mock_error, mock_is_program):
+        mock_watchdog.return_value = True
+        mock_is_program.return_value = False
+        mock_error.side_effect = ValueError
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
 
         self.sbd_inst._get_sbd_device_interactive()
 
@@ -507,7 +525,7 @@ class TestSBDManager(unittest.TestCase):
     def test_get_sbd_device_diskless(self):
         self.sbd_inst_diskless._get_sbd_device()
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
     def test_initialize_sbd(self, mock_invoke, mock_error):
         self.sbd_inst._sbd_devices = ["/dev/sdb1", "/dev/sdc1"]
@@ -629,8 +647,13 @@ class TestSBDManager(unittest.TestCase):
         self.sbd_inst.configure_sbd_resource()
         mock_package.assert_called_once_with("sbd")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
     @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.bootstrap.invoke')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('crmsh.utils.package_is_installed')
@@ -650,8 +673,13 @@ class TestSBDManager(unittest.TestCase):
         mock_invoke.assert_called_once_with("crm configure primitive stonith-sbd stonith:external/sbd pcmk_delay_max=30s")
         mock_error.assert_called_once_with("Can't create stonith-sbd primitive")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
     @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.bootstrap.invoke')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('crmsh.utils.package_is_installed')
@@ -674,8 +702,13 @@ class TestSBDManager(unittest.TestCase):
             ])
         mock_error.assert_called_once_with("Can't enable STONITH for SBD")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
     @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.bootstrap.invoke')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('crmsh.utils.package_is_installed')
@@ -996,7 +1029,7 @@ class TestBootstrap(unittest.TestCase):
         mock_check.assert_called_once_with("fromfile", "tofile")
         mock_append.assert_called_once_with("fromfile", "tofile")
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
     def test_append_to_remote_file(self, mock_invoke, mock_error):
         mock_invoke.return_value = (False, None, "error")
@@ -1036,14 +1069,19 @@ class TestBootstrap(unittest.TestCase):
         mock_invoke.assert_called_once_with("scp -oStrictHostKeyChecking=no root@node1:/root/.ssh/id_rsa.pub temp_file_name")
         mock_tmpfile.assert_called_once_with()
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     def test_join_ssh_no_seed_host(self, mock_error):
         mock_error.side_effect = ValueError
         with self.assertRaises(ValueError):
             bootstrap.join_ssh(None)
         mock_error.assert_called_once_with("No existing IP/hostname specified (use -c option)")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
+=======
+    @mock.patch('crmsh.bootstrap.setup_passwordless_with_other_nodes')
+    @mock.patch('crmsh.bootstrap.fatal')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.invoke')
     @mock.patch('crmsh.bootstrap.swap_public_ssh_key')
     @mock.patch('crmsh.bootstrap.configure_local_ssh_key')
@@ -1070,7 +1108,7 @@ class TestBootstrap(unittest.TestCase):
         bootstrap._context = mock.Mock(with_other_user=False)
         bootstrap.swap_public_ssh_key("node1", "hacluster")
 
-    @mock.patch('crmsh.bootstrap.warn')
+    @mock.patch('crmsh.log.logger_bootstrap.warning')
     @mock.patch('crmsh.bootstrap.fetch_public_key_from_remote_node')
     @mock.patch('crmsh.utils.check_ssh_passwd_need')
     @mock.patch('crmsh.bootstrap.key_files')
@@ -1102,11 +1140,29 @@ class TestBootstrap(unittest.TestCase):
         mock_key_files.assert_called_once_with("root")
         mock_check_passwd.assert_called_once_with("node1", "root")
         mock_status.assert_called_once_with("Configuring SSH passwordless with root@node1")
+<<<<<<< HEAD
         mock_append_remote.assert_called_once_with("/root/.ssh/id_rsa.pub", "node1", "/root/.ssh/authorized_keys")
         mock_fetch.assert_called_once_with("node1", "root")
         mock_append_unique.assert_called_once_with("file1", "/root/.ssh/authorized_keys")
+=======
+        mock_append_remote.assert_called_once_with(bootstrap.RSA_PUBLIC_KEY, "node1", bootstrap.AUTHORIZED_KEYS_FILE)
+        mock_fetch.assert_called_once_with("node1")
+        mock_append_unique.assert_called_once_with("file1", bootstrap.AUTHORIZED_KEYS_FILE)
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_setup_passwordless_with_other_nodes_cluster_inactive(self, mock_run, mock_error):
+        mock_run.return_value = (1, None, None)
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap.setup_passwordless_with_other_nodes("node1")
+
+        mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no root@node1 systemctl -q is-active pacemaker.service")
+        mock_error.assert_called_once_with("Cluster is inactive on node1")
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
+
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.utils.get_stdout_stderr')
     def test_setup_passwordless_with_other_nodes_failed_fetch_nodelist(self, mock_run, mock_error):
         mock_run.return_value = (1, None, None)
@@ -1118,7 +1174,7 @@ class TestBootstrap(unittest.TestCase):
         mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no root@node1 crm_node -l")
         mock_error.assert_called_once_with("Can't fetch cluster nodes list from node1: None")
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.utils.get_stdout_stderr')
     def test_setup_passwordless_with_other_nodes_failed_fetch_hostname(self, mock_run, mock_error):
         out_node_list = """1 node1 member
@@ -1241,8 +1297,13 @@ class TestBootstrap(unittest.TestCase):
         mock_get_peer.assert_called_once_with()
         mock_search.assert_called_once_with("Online: .* node1 ", "text")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
     @mock.patch('crmsh.utils.stop_service')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.bootstrap.stop_service')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.csync2_update')
     @mock.patch('crmsh.corosync.conf')
     @mock.patch('shutil.copy')
@@ -1275,8 +1336,13 @@ class TestBootstrap(unittest.TestCase):
         mock_stop_service.assert_called_once_with("corosync")
         mock_error.assert_called_once_with("Cannot see peer node \"node1\", please check the communication IP")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
     @mock.patch('crmsh.utils.stop_service')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.bootstrap.stop_service')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.csync2_update')
     @mock.patch('crmsh.corosync.conf')
     @mock.patch('shutil.copy')
@@ -1311,8 +1377,12 @@ class TestBootstrap(unittest.TestCase):
         mock_invoke.assert_called_once_with("csync2 -rm /etc/corosync.conf")
         mock_invokerc.assert_called_once_with("csync2 -rxv /etc/corosync.conf")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.warn')
     @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.log.logger_bootstrap.warning')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.invoke')
     def test_csync2_update(self, mock_invoke, mock_invokerc, mock_warn):
         mock_invokerc.side_effect = [False, False]
@@ -1349,7 +1419,7 @@ class TestBootstrap(unittest.TestCase):
         mock_status.assert_not_called()
         mock_disable.assert_called_once_with("corosync-qdevice.service")
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
     @mock.patch('crmsh.utils.check_ssh_passwd_need')
     @mock.patch('crmsh.bootstrap.status')
@@ -1556,7 +1626,7 @@ class TestBootstrap(unittest.TestCase):
         mock_cluster_run.assert_called_once_with("crm corosync reload")
         mock_status_done.assert_called_once_with()
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.utils.is_qdevice_configured')
     def test_remove_qdevice_no_configured(self, mock_qdevice_configured, mock_error):
         mock_qdevice_configured.return_value = False

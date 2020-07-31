@@ -161,13 +161,13 @@ def test_check_ssh_passwd_need(mock_run):
     mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no -o EscapeChar=none -o ConnectTimeout=15 -T -o Batchmode=yes node1 true")
 
 
-@mock.patch('crmsh.utils.common_debug')
+@mock.patch('crmsh.log.logger.debug')
 @mock.patch('crmsh.utils.get_stdout_stderr')
-def test_get_member_iplist_None(mock_get_stdout_stderr, mock_common_debug):
+def test_get_member_iplist_None(mock_get_stdout_stderr, mock_logger_debug):
     mock_get_stdout_stderr.return_value = (1, None, "Failed to initialize the cmap API. Error CS_ERR_LIBRARY")
     assert utils.get_member_iplist() is None
     mock_get_stdout_stderr.assert_called_once_with('corosync-cmapctl -b runtime.totem.pg.mrp.srp.members')
-    mock_common_debug.assert_called_once_with('Failed to initialize the cmap API. Error CS_ERR_LIBRARY')
+    mock_logger_debug.assert_called_once_with('Failed to initialize the cmap API. Error CS_ERR_LIBRARY')
 
 
 def test_get_member_iplist():
@@ -971,7 +971,7 @@ class TestInterfacesInfo(unittest.TestCase):
         self.assertEqual(res, "10.10.10.1")
 
     @mock.patch('crmsh.utils.InterfacesInfo.nic_list', new_callable=mock.PropertyMock)
-    @mock.patch('crmsh.utils.common_warn')
+    @mock.patch('crmsh.log.logger.warning')
     @mock.patch('crmsh.utils.InterfacesInfo.get_interfaces_info')
     @mock.patch('crmsh.utils.get_stdout_stderr')
     def test_get_default_nic_list_from_route_no_default(self, mock_run, mock_get_interfaces_info, mock_warn, mock_nic_list):
