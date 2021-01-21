@@ -26,6 +26,10 @@ from . import parallax
 from .msg import common_warn, common_info, common_debug, common_err, err_buf
 
 
+class TerminateSubCommand(Exception):
+    pass
+
+
 def to_ascii(input_str):
     """Convert the bytes string to a ASCII string
     Usefull to remove accent (diacritics)"""

@@ -83,7 +83,7 @@ def correct_sbd(context, can):
         task_inst.verify()
     except task.TaskError as err:
         task_inst.error(str(err))
-        sys.exit(1)
+        raise crmshutils.TerminateSubCommand
 
 
 def check(context):

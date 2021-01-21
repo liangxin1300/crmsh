@@ -8,6 +8,7 @@ from argparse import RawTextHelpFormatter
 from . import check
 from . import utils
 from . import task
+from crmsh import utils as crmshutils
 
 
 logger = logging.getLogger('cpc')
@@ -113,7 +114,7 @@ def kill_process(context):
         task_inst.wait()
     except task.TaskError as err:
         task_inst.error(str(err))
-        sys.exit(1)
+        raise crmshutils.TerminateSubCommand
 
 
 def split_brain(context):
@@ -132,7 +133,7 @@ def split_brain(context):
             task_inst.wait()
     except task.TaskError as err:
         task_inst.error(str(err))
-        sys.exit(1)
+        raise crmshutils.TerminateSubCommand
 
 
 def fence_node(context):
@@ -150,7 +151,7 @@ def fence_node(context):
         task_inst.wait()
     except task.TaskError as err:
         task_inst.error(str(err))
-        sys.exit(1)
+        raise crmshutils.TerminateSubCommand
 
 
 class MyArgParseFormatter(RawTextHelpFormatter):
@@ -199,7 +200,7 @@ For each --kill-* testcase, report directory: {}'''.format(context.logfile,
     args = parser.parse_args()
     if args.help:
         parser.print_help()
-        sys.exit(0)
+        raise crmshutils.TerminateSubCommand
 
     for arg in vars(args):
         setattr(context, arg, getattr(args, arg))
@@ -220,11 +221,11 @@ def setup_basic_context(context):
     """
     Setup basic context
     """
-    var_dir = "/var/lib/{}".format(context.process_name)
+    var_dir = "/var/lib/crmsh/{}".format(context.process_name)
     context.var_dir = var_dir
     context.report_path = var_dir
     context.jsonfile = "{}/{}.json".format(var_dir, context.process_name)
-    context.logfile = "/var/log/{}.log".format(context.process_name)
+    context.logfile = "/var/log/crmsh/{}.log".format(context.process_name)
 
 
 def run(context):
@@ -235,7 +236,7 @@ def run(context):
     parse_argument(context)
     if not utils.is_root():
         logging.fatal("{} can only be executed as user root!".format(context.process_name))
-        sys.exit(1)
+        raise crmshutils.TerminateSubCommand
     if not os.path.exists(context.var_dir):
         os.makedirs(context.var_dir, exist_ok=True)
     setup_logging(context)
@@ -249,5 +250,4 @@ def run(context):
 
     except KeyboardInterrupt:
         utils.json_dumps()
-        print("\nCtrl-C, leaving")
-        sys.exit(1)
+        raise
