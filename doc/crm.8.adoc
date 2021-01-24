@@ -932,6 +932,42 @@ Usage:
 verify [scores]
 ...............
 
+[[cmdhelp_insight,Cluster insight]]
+=== `insight` - Cluster insight
+
+Cluster insight help details
+
+[[cmdhelp_insight_preflight_check,Cluster preflight check tool set]]
+==== `preflight_check` - Cluster preflight check tool set
+
+To trigger cluster failures and verify some key configuration 
+right before it goes to production. Cluster failure simulation 
+by different people can go wild and the results can be different, 
+even wrongly interpreted. This tool standardizes the steps as the simple CLI. 
+It is carefully designed and must not change any configuration to harm the production.
+
+usage: preflight_check [-c]
+                       [--kill-sbd | --kill-corosync | --kill-pacemakerd | --fence-node NODE | --split-brain-iptables]
+                       [-l] [-y] [-h]
+
+Cluster preflight check tool set
+
+optional arguments:
+  -c, --check-conf        Valid the configurations
+  --kill-sbd              Kill sbd daemon
+  --kill-corosync         Kill corosync daemon
+  --kill-pacemakerd       Kill pacemakerd daemon
+  --fence-node NODE       Fence specific node
+  --split-brain-iptables  Make split brain by blocking corosync ports
+  -l, --kill-loop         Kill process in loop
+
+other options:
+  -y, --yes               Answer "yes" if asked to run the test
+  -h, --help              Show this help message and exit
+
+Log: /var/log/crmsh/preflight_check.log
+Json results: /var/lib/crmsh/preflight_check/preflight_check.json
+For each --kill-* testcase, report directory: /var/lib/crmsh/preflight_check
 
 [[cmdhelp_cluster,Cluster setup and management]]
 === `cluster` - Cluster setup and management
