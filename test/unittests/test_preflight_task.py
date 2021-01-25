@@ -9,6 +9,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from preflight_check import utils, main, config, task
+from crmsh import utils as crmshutils
 
 
 class TestTaskKill(TestCase):
@@ -711,20 +712,17 @@ class TestTask(TestCase):
         }
         self.assertDictEqual(expected_result, self.task_inst.result)
 
-    @mock.patch('sys.exit')
     @mock.patch('preflight_check.task.crmshutils.ask')
-    def test_print_header(self, mock_ask, mock_exit):
+    def test_print_header(self, mock_ask):
         self.task_inst.header = mock.Mock()
         self.task_inst.info = mock.Mock()
         mock_ask.return_value = False
-        mock_exit.side_effect = SystemExit
 
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(task.crmshutils.TerminateSubCommand) as err:
             self.task_inst.print_header()
 
         self.task_inst.header.assert_called_once_with()
         mock_ask.assert_called_once_with("Run?")
-        mock_exit.assert_called_once_with()
         self.task_inst.info.assert_called_once_with("Testcase cancelled")
 
     @mock.patch('preflight_check.utils.str_to_datetime')
