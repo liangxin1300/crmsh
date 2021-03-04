@@ -247,11 +247,11 @@ class LoggerConfig(object):
 
 # Below is a set of wrapped log message for specific scenarios
 def no_prog_err(name):
-    logger.error("{} not available, check your installation".format(name))
+    logger.error("%s not available, check your installation", name)
 
 
 def unsupported_err(name):
-    logger.error("{} is not supported".format(name))
+    logger.error("%s is not supported", name)
 
 
 def missing_obj_err(node):
