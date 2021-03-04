@@ -277,8 +277,7 @@ def id_used_err(node_id):
 def syntax_err(s, token='', context='', msg=''):
     err = "syntax"
     if context:
-        err += " in "
-        err += context
+        err += " in {}".format(context)
     if msg:
         err += ": {}".format(msg)
     if isinstance(s, str):
