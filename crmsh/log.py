@@ -54,7 +54,7 @@ class ConsoleFormatter(logging.Formatter):
 
     def __init__(self, lineno=-1):
         self.lineno = lineno
-        logging.Formatter.__init__(self, fmt=self.FORMAT)
+        super().__init__(fmt=self.FORMAT)
 
     def format(self, record):
         levelname = record.levelname
@@ -66,7 +66,7 @@ class ConsoleFormatter(logging.Formatter):
             msg = record.msg
             record.msg = "{}: {}".format(self.lineno, msg)
             record.levelname = levelname
-        return logging.Formatter.format(self, record)
+        return super().format(record)
 
 
 class FileFormatter(logging.Formatter):
@@ -77,12 +77,12 @@ class FileFormatter(logging.Formatter):
     DATEFMT = "%b %d %H:%M:%S"
 
     def __init__(self):
-        logging.Formatter.__init__(self, fmt=self.FORMAT, datefmt=self.DATEFMT)
+        super().__init__(fmt=self.FORMAT, datefmt=self.DATEFMT)
 
     def format(self, record):
         # join multi line record into one line
         record.msg = "\\n".join(record.msg.split('\n'))
-        return logging.Formatter.format(self, record)
+        return super().format(record)
 
 
 class DebugFilter(logging.Filter):
