@@ -311,14 +311,8 @@ def cib_ver_unsupported_err(validator, rel):
 
 
 def update_err(obj_id, cibadm_opt, xml, rc):
-    if cibadm_opt == '-U':
-        task = "update"
-    elif cibadm_opt == '-D':
-        task = "delete"
-    elif cibadm_opt == '-P':
-        task = "patch"
-    else:
-        task = "replace"
+    task_table = {"-U": "update", "-D": "delete", "-P": "patch"}
+    task = task_table.get(cibadmin_opt, "replace")
     logger.error("could not {} {} (rc={})".format(task, obj_id, rc))
     if rc == 54:
         logger.info("Permission denied.")
