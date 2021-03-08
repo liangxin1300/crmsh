@@ -192,7 +192,7 @@ class Watchdog(object):
             if ignore_error:
                 return False
             else:
-                error("Invalid watchdog device {}: {}".format(dev, err))
+                fatal("Invalid watchdog device {}: {}".format(dev, err))
         return True
 
     @staticmethod
@@ -230,7 +230,7 @@ class Watchdog(object):
             #   [1] /dev/watchdog\nIdentity: Software Watchdog\nDriver: softdog\n
             self._watchdog_info_dict = dict(re.findall(self.DEVICE_FIND_REGREX, out))
         else:
-            error("Failed to run {}: {}".format(self.QUERY_CMD, err))
+            fatal("Failed to run {}: {}".format(self.QUERY_CMD, err))
 
     def _get_device_through_driver(self, driver_name):
         """
@@ -256,7 +256,7 @@ class Watchdog(object):
             else:
                 return None
         else:
-            error("Failed to run {} remotely: {}".format(self.QUERY_CMD, err))
+            fatal("Failed to run {} remotely: {}".format(self.QUERY_CMD, err))
 
     def _get_first_unused_device(self):
         """
@@ -299,7 +299,7 @@ class Watchdog(object):
 
         res = self._get_watchdog_device_from_sbd_config()
         if not res:
-            error("Failed to get watchdog device from {}".format(SYSCONFIG_SBD))
+            fatal("Failed to get watchdog device from {}".format(SYSCONFIG_SBD))
         self._input = res
 
         if not self._valid_device(self._input):
@@ -320,7 +320,7 @@ class Watchdog(object):
 
         # self._input is invalid, exit
         if not invokerc("modinfo {}".format(self._input)):
-            error("Should provide valid watchdog device or driver name by -w option")
+            fatal("Should provide valid watchdog device or driver name by -w option")
 
         # self._input is a driver name, load it if it was unloaded
         if not self._driver_is_loaded(self._input):
@@ -1167,7 +1167,7 @@ def configure_local_ssh_key(user="root"):
         cmd = utils.add_su(cmd, user)
         rc, _, err = invoke(cmd)
         if not rc:
-            error("Failed to generate ssh key for {}: {}".format(user, err))
+            fatal("Failed to generate ssh key for {}: {}".format(user, err))
 
     if not os.path.exists(authorized_file):
         open(authorized_file, 'w').close()
@@ -1922,7 +1922,7 @@ def start_qdevice_service():
         utils.cluster_run_cmd("crm cluster restart")
         wait_for_cluster()
     else:
-        warn("To use qdevice service, need to restart cluster service manually on each node")
+        logger.warning("To use qdevice service, need to restart cluster service manually on each node")
 
     status("Enable corosync-qnetd.service on {}".format(qnetd_addr))
     qdevice_inst.enable_qnetd()
@@ -2567,7 +2567,7 @@ def bootstrap_init(context):
                 init_admin()
                 init_qdevice()
         except lock.ClaimLockError as err:
-            error(err)
+            fatal(err)
 
     status("Done (log saved to %s)" % (LOG_FILE))
 
@@ -2611,7 +2611,7 @@ def bootstrap_join(context):
         join_ssh(cluster_node)
 
         if not utils.service_is_active("pacemaker.service", cluster_node):
-            error("Cluster is inactive on {}".format(cluster_node))
+            fatal("Cluster is inactive on {}".format(cluster_node))
 
         lock_inst = lock.RemoteLock(cluster_node)
         try:
@@ -2622,7 +2622,7 @@ def bootstrap_join(context):
                 join_ssh_merge(cluster_node)
                 join_cluster(cluster_node)
         except (lock.SSHError, lock.ClaimLockError) as err:
-            error(err)
+            fatal(err)
 
     status("Done (log saved to %s)" % (LOG_FILE))
 
@@ -2667,7 +2667,7 @@ def remove_qdevice():
         utils.cluster_run_cmd("crm cluster restart")
         wait_for_cluster()
     else:
-        warn("To remove qdevice service, need to restart cluster service manually on each node")
+        logger.warning("To remove qdevice service, need to restart cluster service manually on each node")
 
 
 def bootstrap_remove(context):
@@ -2681,10 +2681,10 @@ def bootstrap_remove(context):
     init()
 
     if not utils.service_is_active("corosync.service"):
-        error("Cluster is not active - can't execute removing action")
+        fatal("Cluster is not active - can't execute removing action")
 
     if _context.qdevice_rm_flag and _context.cluster_node:
-        error("Either remove node or qdevice")
+        fatal("Either remove node or qdevice")
 
     if _context.qdevice_rm_flag:
         remove_qdevice()
@@ -2699,7 +2699,7 @@ def bootstrap_remove(context):
         _context.cluster_node = prompt_for_string("IP address or hostname of cluster node (e.g.: 192.168.1.1)", ".+")
 
     if not _context.cluster_node:
-        error("No existing IP/hostname specified (use -c option)")
+        fatal("No existing IP/hostname specified (use -c option)")
 
     _context.cluster_node = get_cluster_node_hostname()
 
@@ -2715,7 +2715,7 @@ def bootstrap_remove(context):
     if _context.cluster_node in xmlutil.listnodes():
         remove_node_from_cluster()
     else:
-        error("Specified node {} is not configured in cluster! Unable to remove.".format(_context.cluster_node))
+        fatal("Specified node {} is not configured in cluster! Unable to remove.".format(_context.cluster_node))
 
 
 def remove_self():
@@ -2728,14 +2728,14 @@ def remove_self():
         cmd = "crm cluster remove{} -c {}".format(" -y" if yes_to_all else "", me)
         rc = utils.ext_cmd_nosudo("ssh{} -o StrictHostKeyChecking=no {} '{}'".format("" if yes_to_all else " -t", othernode, cmd))
         if rc != 0:
-            error("Failed to remove this node from {}".format(othernode))
+            fatal("Failed to remove this node from {}".format(othernode))
     else:
         # disable and stop cluster
         stop_services(SERVICES_STOP_LIST)
         # remove all trace of cluster from this node
         # delete configuration files from the node to be removed
         if not invokerc('bash -c "rm -f {}"'.format(" ".join(_context.rm_list))):
-            error("Deleting the configuration files failed")
+            fatal("Deleting the configuration files failed")
 
 
 def init_common_geo():
