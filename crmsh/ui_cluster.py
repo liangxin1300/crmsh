@@ -94,7 +94,7 @@ class Cluster(command.UI):
         '''
         try:
             if utils.service_is_active("pacemaker.service"):
-                err_buf.info("Cluster services already started")
+                logger.info("Cluster services already started")
                 return
             utils.start_service("pacemaker")
             if utils.is_qdevice_configured():
@@ -112,7 +112,7 @@ class Cluster(command.UI):
         '''
         try:
             if not utils.service_is_active("corosync.service"):
-                err_buf.info("Cluster services already stopped")
+                logger.info("Cluster services already stopped")
                 return
             if utils.service_is_active("corosync-qdevice"):
                 utils.stop_service("corosync-qdevice")
