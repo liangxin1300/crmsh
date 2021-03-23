@@ -40,12 +40,12 @@ def run_command(context, cmd, err_record=False):
         if err_record:
             res = re.sub(r'\x1b\[[0-9]+m', '', err)
             context.command_error_output = res
-            return rc, out
+            return rc, re.sub(r'\x1b\[[0-9]+m', '', out)
         if out:
             context.logger.info("\n{}\n".format(out))
         context.logger.error("\n{}\n".format(err))
         context.failed = True
-    return rc, out
+    return rc, re.sub(r'\x1b\[[0-9]+m', '', out)
 
 
 def run_command_local_or_remote(context, cmd, addr, err_record=False):
@@ -57,7 +57,7 @@ def run_command_local_or_remote(context, cmd, addr, err_record=False):
             results = parallax.parallax_call(addr.split(','), cmd)
         except ValueError as err:
             if err_record:
-                context.command_error_output = str(err)
+                context.command_error_output = re.sub(r'\x1b\[[0-9]+m', '', str(err))
                 return
             context.logger.error("\n{}\n".format(err))
             context.failed = True
