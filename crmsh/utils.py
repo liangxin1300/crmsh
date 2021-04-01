@@ -1739,14 +1739,14 @@ def list_cluster_nodes():
         raise ValueError("Error listing cluster nodes: %s" % (msg))
 
 
-def cluster_run_cmd(cmd):
+def cluster_run_cmd(cmd, node_list=[]):
     """
     Run cmd in cluster nodes
     """
-    node_list = list_cluster_nodes()
-    if not node_list:
+    nodelist = node_list or list_cluster_nodes()
+    if not nodelist:
         raise ValueError("Failed to get node list from cluster")
-    parallax.parallax_call(node_list, cmd)
+    return parallax.parallax_call(nodelist, cmd)
 
 
 def list_cluster_nodes_except_me():
@@ -2506,7 +2506,7 @@ class ServiceManager(object):
             raise ValueError("status_type should be {}".format('/'.join(list(self.ACTION_MAP.values()))))
 
         cmd = "systemctl {} {}".format(action_type, self.service_name)
-        if self.remote_addr:
+        if self.remote_addr and self.remote_addr != this_node():
             prompt_msg = "Run \"{}\" on {}".format(cmd, self.remote_addr)
             rc, output, err = run_cmd_on_remote(cmd, self.remote_addr, prompt_msg)
         else:

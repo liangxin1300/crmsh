@@ -15,6 +15,8 @@ from .cliformat import cli_nvpairs, nvpairs2list
 from . import term
 from .cibconfig import cib_factory
 from .ui_resource import rm_meta_attribute
+from .ui_cluster import parse_option_for_nodes
+
 
 def remove_redundant_attrs(objs, attributes_tag, attr, conflicting_attr = None):
     """
@@ -286,35 +288,25 @@ class NodeMgmt(command.UI):
     @command.completers(compl.nodes)
     def do_standby(self, context, *args):
         'usage: standby [<node>] [<lifetime>]'
-        argl = list(args)
-        node = None
-        lifetime = utils.fetch_lifetime_opt(argl, iso8601=False)
-        if not argl:
-            node = utils.this_node()
-        elif len(argl) == 1:
-            node = args[0]
-            if not xmlutil.is_our_node(node):
-                common_err("%s: node name not recognized" % node)
-                return False
-        else:
-            syntax_err(args, context=context.get_command_name())
-            return False
+        node_list = parse_option_for_nodes("standby", context, *args)
+        lifetime = utils.fetch_lifetime_opt(list(args), iso8601=False)
         opts = ''
         if lifetime:
             opts = "--lifetime='%s'" % lifetime
         else:
             opts = "--lifetime='forever'"
-        return utils.ext_cmd(self.node_standby % (node, "on", opts)) == 0
+        for node in node_list:
+            cmd = self.node_standby % (node, "on", opts)
+            utils.get_stdout_or_raise_error(cmd)
 
     @command.wait
     @command.completers(compl.nodes)
-    def do_online(self, context, node=None):
+    def do_online(self, context, *args):
         'usage: online [<node>]'
-        if not node:
-            node = utils.this_node()
-        if not utils.is_name_sane(node):
-            return False
-        return utils.ext_cmd(self.node_standby % (node, "off", "--lifetime='forever'")) == 0
+        node_list = parse_option_for_nodes("online", context, *args)
+        for node in node_list:
+            cmd = self.node_standby % (node, "off", "--lifetime='forever'")
+            utils.get_stdout_or_raise_error(cmd)
 
     @command.wait
     @command.completers(compl.nodes)

@@ -26,11 +26,52 @@ def parse_options(parser, args):
         options, args = parser.parse_known_args(list(args))
     except:
         return None, None
-    if options.help:
+    if hasattr(options, 'help') and options.help:
         parser.print_help()
         return None, None
     utils.check_space_option_value(options)
     return options, args
+
+
+def parse_option_for_nodes(action_type, context, *args):
+    """
+    Parse option for nodes
+    """
+    action_target = "cluster service"
+    if action_type in ["standby", "online"]:
+        action_target = "node"
+    action = "{} {}".format(action_type, action_target)
+    usage_template = """
+Specify node(s) on which to {action}.
+If no nodes are specified, {action} on the local node.
+If --all is specified, {action} on all nodes."""
+
+    parser = ArgParser(description=usage_template.format(action=action),
+            usage="{} [--all | <node>... ]".format(action_type),
+            add_help=False,
+            formatter_class=RawDescriptionHelpFormatter)
+    parser.add_argument("-h", "--help", action="store_true", dest="help", help="Show this help message")
+    parser.add_argument("--all", help="To {} on all nodes".format(action), action="store_true", dest="all")
+
+    options, args = parse_options(parser, args)
+    if options is None or args is None:
+        raise utils.TerminateSubCommand
+    if options.all and args:
+        context.fatal_error("Should either use --all or specific node")
+
+    # return local node
+    if not options.all and not args:
+        return [utils.this_node()]
+
+    member_list = utils.list_cluster_nodes()
+    if not member_list:
+        context.fatal_error("Cannot get the node list from cluster")
+    for node in args:
+        if node not in member_list:
+            context.fatal_error("Node \"{}\" is not a cluster node".format(node))
+
+    # return node list
+    return member_list if options.all else args
 
 
 def _remove_completer(args):
@@ -88,78 +129,77 @@ class Cluster(command.UI):
         self._inventory_target = None
 
     @command.skill_level('administrator')
-    def do_start(self, context):
+    def do_start(self, context, *args):
         '''
-        Starts the cluster services on this node
+        Starts the cluster services on all nodes or specific node
         '''
-        try:
-            if utils.service_is_active("pacemaker.service"):
-                err_buf.info("Cluster services already started")
-                return
-            utils.start_service("pacemaker")
-            if utils.is_qdevice_configured():
-                utils.start_service("corosync-qdevice")
-            err_buf.info("Cluster services started")
-        except IOError as err:
-            context.fatal_error(str(err))
-
-        # TODO: optionally start services on all nodes or specific node
-
-    @command.skill_level('administrator')
-    def do_stop(self, context):
-        '''
-        Stops the cluster services on this node
-        '''
-        try:
-            if not utils.service_is_active("corosync.service"):
-                err_buf.info("Cluster services already stopped")
-                return
-            if utils.service_is_active("corosync-qdevice"):
-                utils.stop_service("corosync-qdevice")
-            utils.stop_service("corosync")
-            err_buf.info("Cluster services stopped")
-        except IOError as err:
-            context.fatal_error(str(err))
-
-        # TODO: optionally stop services on all nodes or specific node
+        node_list = parse_option_for_nodes("start", context, *args)
+        for node in node_list[:]:
+            if utils.service_is_active("pacemaker.service", remote_addr=node):
+                err_buf.info("Cluster services already started on {}".format(node))
+                node_list.remove(node)
+        if not node_list:
+            return
+        utils.cluster_run_cmd("systemctl start pacemaker.service", node_list)
+        if utils.is_qdevice_configured():
+            utils.cluster_run_cmd("systemctl start corosync-qdevice.service", node_list)
+        for node in node_list:
+            err_buf.info("Cluster services started on {}".format(node))
 
     @command.skill_level('administrator')
-    def do_restart(self, context):
+    def do_stop(self, context, *args):
         '''
-        Restarts the cluster services on this node
+        Stops the cluster services on all nodes or specific node
         '''
-        self.do_stop(context)
-        self.do_start(context)
+        node_list = parse_option_for_nodes("stop", context, *args)
+        for node in node_list[:]:
+            if not utils.service_is_active("corosync.service", remote_addr=node):
+                err_buf.info("Cluster services already stopped on {}".format(node))
+                node_list.remove(node)
+        if not node_list:
+            return
+        # first, stop pacemaker since it can make sure cluster has quorum until stop corosync
+        utils.cluster_run_cmd("systemctl stop pacemaker.service", node_list)
+        # then, stop qdevice if exists
+        qdevice_cmd = "systemctl is-active --quiet {qs} && systemctl stop {qs} || echo 0".format(qs="corosync-qdevice.service")
+        utils.cluster_run_cmd(qdevice_cmd, node_list)
+        # last, stop corosync
+        utils.cluster_run_cmd("systemctl stop corosync.service", node_list)
+        for node in node_list:
+            err_buf.info("Cluster services stopped on {}".format(node))
 
     @command.skill_level('administrator')
-    def do_enable(self, context):
+    def do_restart(self, context, *args):
+        '''
+        Restarts the cluster services on all nodes or specific node
+        '''
+        parse_option_for_nodes("restart", context, *args)
+        self.do_stop(context, *args)
+        self.do_start(context, *args)
+
+    @command.skill_level('administrator')
+    def do_enable(self, context, *args):
         '''
         Enable the cluster services on this node
         '''
-        try:
-            utils.enable_service("pacemaker.service")
-            if utils.is_qdevice_configured():
-                utils.enable_service("corosync-qdevice.service")
-            err_buf.info("Cluster services enabled")
-        except IOError as err:
-            context.fatal_error(str(err))
-
-        # TODO: optionally enable services on all nodes or specific node
+        node_list = parse_option_for_nodes("enable", context, *args)
+        utils.cluster_run_cmd("systemctl enable pacemaker.service", node_list)
+        if utils.is_qdevice_configured():
+            utils.cluster_run_cmd("systemctl enable corosync-qdevice.service", node_list)
+        for node in node_list:
+            err_buf.info("Cluster services enabled on {}".format(node))
 
     @command.skill_level('administrator')
-    def do_disable(self, context):
+    def do_disable(self, context, *args):
         '''
         Disable the cluster services on this node
         '''
-        try:
-            utils.disable_service("pacemaker.service")
-            if utils.is_qdevice_configured():
-                utils.disable_service("corosync-qdevice.service")
-            err_buf.info("Cluster services disabled")
-        except IOError as err:
-            context.fatal_error(str(err))
-
-        # TODO: optionally disable services on all nodes or specific node
+        node_list = parse_option_for_nodes("disable", context, *args)
+        utils.cluster_run_cmd("systemctl disable pacemaker.service", node_list)
+        if utils.is_qdevice_configured():
+            utils.cluster_run_cmd("systemctl disable corosync-qdevice.service", node_list)
+        for node in node_list:
+            err_buf.info("Cluster services disabled on {}".format(node))
 
     def _args_implicit(self, context, args, name):
         '''
