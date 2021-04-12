@@ -9,7 +9,7 @@ import re
 import time
 import datetime
 from . import utils
-from . import msg as crmlog
+from .log import logger
 
 
 YEAR = None
@@ -23,7 +23,7 @@ def set_year(ts=None):
     year = time.strftime("%Y", time.localtime(ts))
     if YEAR is not None:
         t = (" (ts: %s)" % (ts)) if ts is not None else ""
-        crmlog.common_debug("history: setting year to %s%s" % (year, t))
+        logger.debug("history: setting year to %s%s" % (year, t))
     YEAR = year
 
 
@@ -110,7 +110,7 @@ def syslog_ts(s):
         _syslog_ts_prev = utils.parse_to_timestamp(tstr)
         return _syslog_ts_prev
 
-    crmlog.common_debug("malformed line: %s" % s)
+    logger.debug("malformed line: %s" % s)
     return _syslog_ts_prev
 
 
@@ -214,5 +214,5 @@ def syslog_ts_node(s):
         _syslog_ts_prev = utils.parse_to_timestamp(tstr)
         return _syslog_ts_prev, _syslog_node_prev
 
-    crmlog.common_debug("malformed line: %s" % s)
+    logger.debug("malformed line: %s" % s)
     return _syslog_ts_prev, _syslog_node_prev

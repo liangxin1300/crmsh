@@ -27,10 +27,10 @@ case "$1" in
 		configure
 		make_install
 		exit $?;;
-	bootstrap|qdevice|hb_report|resource|geo|configure)
+	bootstrap|qdevice|hb_report|resource|geo|configure|constraints)
 		functional_tests $1 $2
 		exit $?;;
-	*)
+	*|original)
 		configure
 		make_install
 		regression_tests;;

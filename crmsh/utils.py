@@ -23,7 +23,13 @@ from . import constants
 from . import options
 from . import term
 from . import parallax
-from .msg import common_warn, common_info, common_debug, common_err, err_buf
+from .log import logger, logger_config
+
+
+class TerminateSubCommand(Exception):
+    """
+    This is an exception to jump out of subcommand when meeting errors while staying interactive shell
+    """
 
 
 def to_ascii(input_str):
@@ -201,7 +207,7 @@ def ask(msg):
     If not interactive and core.force is false, always return false.
     """
     if config.core.force:
-        common_info("%s [YES]" % (msg))
+        logger.info("%s [YES]" % (msg))
         return True
     if not can_ask():
         return False
@@ -243,7 +249,7 @@ def multi_input(prompt=''):
             text = input(prompt)
         except EOFError:
             return None
-        err_buf.incr_lineno()
+        logger_config.incr_lineno()
         if options.regression_tests:
             print(".INP:", text)
             sys.stdout.flush()
@@ -344,6 +350,15 @@ def add_sudo(cmd):
     return cmd
 
 
+def add_su(cmd, user):
+    """
+    Wrapped cmd with su -c "<cmd>" <user>
+    """
+    if user == "root":
+        return cmd
+    return "su -c \"{}\" {}".format(cmd, user)
+
+
 def chown(path, user, group):
     if isinstance(user, int):
         uid = user
@@ -366,7 +381,7 @@ def ensure_sudo_readable(f):
         try:
             os.chown(f, uid, -1)
         except os.error as err:
-            common_err('Failed setting temporary file permissions: %s' % (err))
+            logger.error('Failed setting temporary file permissions: %s' % (err))
             return False
     return True
 
@@ -374,7 +389,7 @@ def ensure_sudo_readable(f):
 def pipe_string(cmd, s):
     rc = -1  # command failed
     cmd = add_sudo(cmd)
-    common_debug("piping string to %s" % cmd)
+    logger.debug("piping string to %s" % cmd)
     if options.regression_tests:
         print(".EXT", cmd)
     p = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
@@ -387,7 +402,7 @@ def pipe_string(cmd, s):
         rc = p.returncode
     except IOError as msg:
         if "Broken pipe" not in str(msg):
-            common_err(msg)
+            logger.error(msg)
     return rc
 
 
@@ -399,7 +414,7 @@ def filter_string(cmd, s, stderr_on=True, shell=True):
     else:
         stderr = subprocess.PIPE
     cmd = add_sudo(cmd)
-    common_debug("pipe through %s" % cmd)
+    logger.debug("pipe through %s" % cmd)
     if options.regression_tests:
         print(".EXT", cmd)
     p = subprocess.Popen(cmd,
@@ -420,11 +435,11 @@ def filter_string(cmd, s, stderr_on=True, shell=True):
         rc = p.returncode
     except OSError as err:
         if err.errno != os.errno.EPIPE:
-            common_err(err.strerror)
-        common_info("from: %s" % cmd)
+            logger.error(err.strerror)
+        logger.info("from: %s" % cmd)
     except Exception as msg:
-        common_err(msg)
-        common_info("from: %s" % cmd)
+        logger.error(msg)
+        logger.info("from: %s" % cmd)
     return rc, to_ascii(outp)
 
 
@@ -438,7 +453,7 @@ def str2tmp(_str, suffix=".pcmk"):
     try:
         f = os.fdopen(fd, "w")
     except IOError as msg:
-        common_err(msg)
+        logger.error(msg)
         return
     f.write(s)
     if not s.endswith('\n'):
@@ -508,15 +523,16 @@ def open_atomic(filepath, mode="r", buffering=-1, fsync=False, encoding=None):
         os.rename(tmppath, filepath)
 
 
-def str2file(s, fname):
+def str2file(s, fname, mod=0o644):
     '''
     Write a string to a file.
     '''
     try:
         with open_atomic(fname, 'w', encoding='utf-8') as dst:
             dst.write(to_ascii(s))
+        os.chmod(fname, mod)
     except IOError as msg:
-        common_err(msg)
+        logger.error(msg)
         return False
     return True
 
@@ -529,7 +545,7 @@ def file2str(fname, noerr=True):
         f = open(fname, "r")
     except IOError as msg:
         if not noerr:
-            common_err(msg)
+            logger.error(msg)
         return None
     s = f.readline()
     f.close()
@@ -543,7 +559,7 @@ def file2list(fname):
     try:
         return open(fname).read().split('\n')
     except IOError as msg:
-        common_err(msg)
+        logger.error(msg)
         return None
 
 
@@ -557,7 +573,7 @@ def safe_open_w(fname):
         try:
             f = open(fname, "w")
         except IOError as msg:
-            common_err(msg)
+            logger.error(msg)
             return None
     return f
 
@@ -569,21 +585,21 @@ def safe_close_w(f):
 
 def is_path_sane(name):
     if re.search(r"['`#*?$\[\]]", name):
-        common_err("%s: bad path" % name)
+        logger.error("%s: bad path" % name)
         return False
     return True
 
 
 def is_filename_sane(name):
     if re.search(r"['`/#*?$\[\]]", name):
-        common_err("%s: bad filename" % name)
+        logger.error("%s: bad filename" % name)
         return False
     return True
 
 
 def is_name_sane(name):
     if re.search("[']", name):
-        common_err("%s: bad name" % name)
+        logger.error("%s: bad name" % name)
         return False
     return True
 
@@ -596,14 +612,14 @@ def show_dot_graph(dotfile, keep_file=False, desc="transition graph"):
         print(".EXT", cmd)
     subprocess.Popen(cmd, shell=True, bufsize=0,
                      stdin=None, stdout=None, stderr=None, close_fds=True)
-    common_info("starting %s to show %s" % (config.core.dotty, desc))
+    logger.info("starting %s to show %s" % (config.core.dotty, desc))
 
 
 def ext_cmd(cmd, shell=True):
     cmd = add_sudo(cmd)
     if options.regression_tests:
         print(".EXT", cmd)
-    common_debug("invoke: %s" % cmd)
+    logger.debug("invoke: %s" % cmd)
     return subprocess.call(cmd, shell=shell)
 
 
@@ -660,17 +676,17 @@ def check_locker(lockdir):
     s = file2str(os.path.join(lockdir, _LOCKDIR, _PIDF))
     pid = convert2ints(s)
     if not isinstance(pid, int):
-        common_warn("history: removing malformed lock")
+        logger.warning("history: removing malformed lock")
         rmdir_r(os.path.join(lockdir, _LOCKDIR))
         return
     try:
         os.kill(pid, 0)
     except OSError as err:
         if err.errno == os.errno.ESRCH:
-            common_info("history: removing stale lock")
+            logger.info("history: removing stale lock")
             rmdir_r(os.path.join(lockdir, _LOCKDIR))
         else:
-            common_err("%s: %s" % (_LOCKDIR, err.strerror))
+            logger.error("%s: %s" % (_LOCKDIR, err.strerror))
 
 
 @contextmanager
@@ -689,7 +705,7 @@ def lock(lockdir):
                 return True
             except OSError as err:
                 if err.errno != os.errno.EEXIST:
-                    common_err("Failed to acquire lock to %s: %s" % (lockdir, err.strerror))
+                    logger.error("Failed to acquire lock to %s: %s" % (lockdir, err.strerror))
                     return False
                 time.sleep(0.1)
                 continue
@@ -806,7 +822,7 @@ def append_file(dest, src):
         open(dest, "a").write(open(src).read())
         return True
     except IOError as msg:
-        common_err("append %s to %s: %s" % (src, dest, msg))
+        logger.error("append %s to %s: %s" % (src, dest, msg))
         return False
 
 
@@ -845,14 +861,14 @@ def wait4dc(what="", show_progress=True):
     '''
     dc = get_dc()
     if not dc:
-        common_warn("can't find DC")
+        logger.warning("can't find DC")
         return False
     cmd = "crm_attribute -Gq -t crm_config -n crmd-transition-delay 2> /dev/null"
     delay = get_stdout(add_sudo(cmd))[1]
     if delay:
         delaymsec = crm_msec(delay)
         if delaymsec > 0:
-            common_info("The crmd-transition-delay is configured. Waiting %d msec before check DC status." % delaymsec)
+            logger.info("The crmd-transition-delay is configured. Waiting %d msec before check DC status." % delaymsec)
             time.sleep(delaymsec // 1000)
     cnt = 0
     output_started = 0
@@ -862,18 +878,18 @@ def wait4dc(what="", show_progress=True):
     while True:
         dc = get_dc()
         if not dc:
-            common_warn("DC lost during wait")
+            logger.warning("DC lost during wait")
             return False
         cmd = "crmadmin -S %s" % dc
         rc, s = get_stdout(add_sudo(cmd))
         if not s.startswith("Status"):
-            common_warn("%s unexpected output: %s (exit code: %d)" %
+            logger.warning("%s unexpected output: %s (exit code: %d)" %
                         (cmd, s, rc))
             return False
         try:
             dc_status = s.split()[-2]
         except:
-            common_warn("%s unexpected output: %s" % (cmd, s))
+            logger.warning("%s unexpected output: %s" % (cmd, s))
             return False
         if dc_status == "S_IDLE":
             if output_started:
@@ -918,22 +934,22 @@ def run_ptest(graph_s, nograph, scores, utilization, actions, verbosity):
         ptest = "%s | %s" % (ptest, actions_filter)
     if options.regression_tests:
         ptest = ">/dev/null %s" % ptest
-    common_debug("invoke: %s" % ptest)
+    logger.debug("invoke: %s" % ptest)
     rc, s = get_stdout(ptest, input_s=graph_s)
     if rc != 0:
-        common_debug("'%s' exited with (rc=%d)" % (ptest, rc))
+        logger.debug("'%s' exited with (rc=%d)" % (ptest, rc))
         if actions and rc == 1:
-            common_warn("No actions found.")
+            logger.warning("No actions found.")
         else:
-            common_warn("Simulation was unsuccessful (RC=%d)." % (rc))
+            logger.warning("Simulation was unsuccessful (RC=%d)." % (rc))
     if dotfile:
         if os.path.getsize(dotfile) > 0:
             show_dot_graph(dotfile)
         else:
-            common_warn("ptest produced empty dot file")
+            logger.warning("ptest produced empty dot file")
     else:
         if not nograph:
-            common_info("install graphviz to see a transition graph")
+            logger.info("install graphviz to see a transition graph")
     if s:
         page_string(s)
     return True
@@ -1085,17 +1101,6 @@ def print_stacktrace():
     import inspect
     sf = inspect.currentframe().f_back.f_back
     traceback.print_stack(sf)
-
-
-@memoize
-def cluster_stack():
-    if is_process("heartbeat:.[m]aster"):
-        return "heartbeat"
-    elif is_process("[a]isexec"):
-        return "openais"
-    elif os.path.exists("/etc/corosync/corosync.conf") or is_program('corosync-cfgtool'):
-        return "corosync"
-    return ""
 
 
 def edit_file(fname):
@@ -1318,7 +1323,7 @@ def datetime_to_timestamp(dt):
     try:
         return total_seconds(make_datetime_naive(dt) - datetime.datetime(1970, 1, 1))
     except Exception as e:
-        common_err("datetime_to_timestamp error: %s" % (e))
+        logger.error("datetime_to_timestamp error: %s" % (e))
         return None
 
 
@@ -1355,14 +1360,14 @@ def parse_time(t):
             # convert to UTC from local time
             dt = dt - tz.tzlocal().utcoffset(dt)
     except ValueError as msg:
-        common_err("parse_time %s: %s" % (t, msg))
+        logger.error("parse_time %s: %s" % (t, msg))
         return None
     except ImportError as msg:
         try:
             tm = time.strptime(t)
             dt = datetime.datetime(*tm[0:7])
         except ValueError as msg:
-            common_err("no dateutil, please provide times as printed by date(1)")
+            logger.error("no dateutil, please provide times as printed by date(1)")
             return None
     return dt
 
@@ -1383,7 +1388,7 @@ def parse_to_timestamp(t):
         # convert to UTC from local time
         return total_seconds(dt - tz.tzlocal().utcoffset(dt) - datetime.datetime(1970, 1, 1))
     except ValueError as msg:
-        common_err("parse_time %s: %s" % (t, msg))
+        logger.error("parse_time %s: %s" % (t, msg))
         return None
     except ImportError as msg:
         try:
@@ -1391,7 +1396,7 @@ def parse_to_timestamp(t):
             dt = datetime.datetime(*tm[0:7])
             return datetime_to_timestamp(dt)
         except ValueError as msg:
-            common_err("no dateutil, please provide times as printed by date(1)")
+            logger.error("no dateutil, please provide times as printed by date(1)")
             return None
 
 
@@ -1400,12 +1405,12 @@ def save_graphviz_file(ini_f, attr_d):
     Save graphviz settings to an ini file, if it does not exist.
     '''
     if os.path.isfile(ini_f):
-        common_err("%s exists, please remove it first" % ini_f)
+        logger.error("%s exists, please remove it first" % ini_f)
         return False
     try:
         f = open(ini_f, "wb")
     except IOError as msg:
-        common_err(msg)
+        logger.error(msg)
         return False
     import configparser
     p = configparser.ConfigParser()
@@ -1416,10 +1421,10 @@ def save_graphviz_file(ini_f, attr_d):
     try:
         p.write(f)
     except IOError as msg:
-        common_err(msg)
+        logger.error(msg)
         return False
     f.close()
-    common_info("graphviz attributes saved to %s" % ini_f)
+    logger.info("graphviz attributes saved to %s" % ini_f)
     return True
 
 
@@ -1434,7 +1439,7 @@ def load_graphviz_file(ini_f):
     try:
         p.read(ini_f)
     except Exception as msg:
-        common_err(msg)
+        logger.error(msg)
         return False, None
     _graph_d = {}
     for section in p.sections():
@@ -1457,17 +1462,17 @@ def get_pcmk_version(dflt):
     try:
         rc, s, err = get_stdout_stderr("%s version" % (cmd))
         if rc != 0:
-            common_err("%s exited with %d [err: %s][out: %s]" % (cmd, rc, err, s))
+            logger.error("%s exited with %d [err: %s][out: %s]" % (cmd, rc, err, s))
         else:
-            common_debug("pacemaker version: [err: %s][out: %s]" % (err, s))
+            logger.debug("pacemaker version: [err: %s][out: %s]" % (err, s))
             if err.startswith("CRM Version:"):
                 version = s.split()[0]
             else:
                 version = s.split()[2]
-            common_debug("found pacemaker version: %s" % version)
+            logger.debug("found pacemaker version: %s" % version)
     except Exception as msg:
-        common_warn("could not get the pacemaker version, bad installation?")
-        common_warn(msg)
+        logger.warning("could not get the pacemaker version, bad installation?")
+        logger.warning(msg)
     return version
 
 
@@ -1484,7 +1489,7 @@ def get_cib_property(cib_f, attr, dflt):
     try:
         f = open(cib_f, "r")
     except IOError as msg:
-        common_err(msg)
+        logger.error(msg)
         return ver
     state = 0
     for s in f:
@@ -1514,7 +1519,7 @@ def get_cib_attributes(cib_f, tag, attr_l, dflt_l):
     try:
         f = open(cib_f, "rb").read()
     except IOError as msg:
-        common_err(msg)
+        logger.error(msg)
         return dflt_l
     if os.path.splitext(cib_f)[-1] == '.bz2':
         cib_bits = bz2.decompress(f)
@@ -1536,7 +1541,7 @@ def is_min_pcmk_ver(min_ver, cib_f=None):
     if not constants.pcmk_version:
         if cib_f:
             constants.pcmk_version = get_cib_property(cib_f, "dc-version", "1.1.11")
-            common_debug("found pacemaker version: %s in cib: %s" %
+            logger.debug("found pacemaker version: %s in cib: %s" %
                          (constants.pcmk_version, cib_f))
         else:
             constants.pcmk_version = get_pcmk_version("1.1.11")
@@ -1779,45 +1784,6 @@ def service_info(name):
     return None
 
 
-def start_service(service, enable=False, start=True):
-    """
-    Start (and optionally enable) systemd service
-    TODO: support other init systems
-    """
-    if enable:
-        _rc, _out, _err = get_stdout_stderr("systemctl -q enable {}".format(service))
-    if start:
-        rc, _out, _err = get_stdout_stderr("systemctl -q is-active {}".format(service))
-        if rc != 0:
-            rc, _out, err = get_stdout_stderr("systemctl -q start {}".format(service))
-            if rc != 0:
-                raise IOError("systemd failed to start {}: {}".format(service, err))
-
-
-def stop_service(service, disable=False, stop=True):
-    """
-    Stop (and optionally disable) systemd service
-    TODO: support other init systems
-    """
-    rc, err = 0, ""
-    if stop:
-        rc, _out, err = get_stdout_stderr("systemctl -q stop {}".format(service))
-    if disable:
-        _rc, _out, _err = get_stdout_stderr("systemctl -q disable {}".format(service))
-    if rc != 0:
-        raise IOError("systemd failed to stop {}: {}".format(service, err))
-
-
-def enable_service(service, start=False):
-    "Enable (and optionally start) system service"
-    start_service(service, enable=True, start=start)
-
-
-def disable_service(service, stop=False):
-    "Enable (and optionally stop) system service"
-    stop_service(service, disable=True, stop=stop)
-
-
 def running_on(resource):
     "returns list of node names where the given resource is running"
     rsc_locate = "crm_resource --resource '%s' --locate"
@@ -1831,7 +1797,7 @@ def running_on(resource):
             w = line[len(head):].split()
             if w:
                 nodes.append(w[0])
-    common_debug("%s running on: %s" % (resource, nodes))
+    logger.debug("%s running on: %s" % (resource, nodes))
     return nodes
 
 
@@ -1988,10 +1954,10 @@ def cluster_copy_file(local_path, nodes=None):
                                       local_path,
                                       local_path, opts).items():
         if isinstance(result, parallax.Error):
-            err_buf.error("Failed to push %s to %s: %s" % (local_path, host, result))
+            logger.error("Failed to push %s to %s: %s" % (local_path, host, result))
             ok = False
         else:
-            err_buf.ok(host)
+            logger.ok(host)
     return ok
 
 
@@ -2102,7 +2068,7 @@ def debug_timestamp():
 def get_member_iplist():
     rc, out, err= get_stdout_stderr("corosync-cmapctl -b runtime.totem.pg.mrp.srp.members")
     if rc != 0:
-        common_debug(err)
+        logger.debug(err)
         return None
 
     ip_list = []
@@ -2123,12 +2089,13 @@ def get_iplist_corosync_using():
     return re.findall(r'id\s*=\s*(.*)', out)
 
 
-def check_ssh_passwd_need(host):
+def check_ssh_passwd_need(host, user="root"):
     """
     Check whether access to host need password
     """
     ssh_options = "-o StrictHostKeyChecking=no -o EscapeChar=none -o ConnectTimeout=15"
     ssh_cmd = "ssh {} -T -o Batchmode=yes {} true".format(ssh_options, host)
+    ssh_cmd = add_su(ssh_cmd, user)
     rc, _, _ = get_stdout_stderr(ssh_cmd)
     return rc != 0
 
@@ -2171,6 +2138,21 @@ def get_nodeinfo_from_cmaptool():
             iplist = re.findall(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}', line)
             nodeid_ip_dict[node_id] = iplist
     return nodeid_ip_dict
+
+
+def get_iplist_from_name(name):
+    """
+    Given node host name, return this host's ip list in corosync cmap
+    """
+    ip_list = []
+    nodeid = get_nodeid_from_name(name)
+    if not nodeid:
+        return ip_list
+    nodeinfo = {}
+    nodeinfo = get_nodeinfo_from_cmaptool()
+    if not nodeinfo:
+        return ip_list
+    return nodeinfo[nodeid]
 
 
 def valid_nodeid(nodeid):
@@ -2354,6 +2336,9 @@ class InterfacesInfo(object):
         # 2: enp1s0    inet 192.168.122.241/24 brd 192.168.122.255 scope global enp1s0\       valid_lft forever preferred_lft forever
         for line in out.splitlines():
             _, nic, _, ip_with_mask, *_ = line.split()
+            # maybe from tun interface
+            if not '/' in ip_with_mask:
+                continue
             #TODO change this condition when corosync support link-local address
             interface_inst = Interface(ip_with_mask)
             if interface_inst.is_loopback or interface_inst.is_link_local:
@@ -2441,7 +2426,7 @@ class InterfacesInfo(object):
         else:
             if not self.nic_list:
                 self.get_interfaces_info()
-            common_warn("No default route configured. Using the first found nic")
+            logger.warning("No default route configured. Using the first found nic")
             self._default_nic_list = [self.nic_list[0]]
         return self._default_nic_list
 
@@ -2497,34 +2482,138 @@ def check_file_content_included(source_file, target_file):
     return source_data in target_data
 
 
-def service_is_enabled(service, remote_addr=None):
+class ServiceManager(object):
     """
-    Check if service is enabled
+    Class to manage systemctl services
     """
-    cmd = "systemctl is-enabled {}".format(service)
-    if remote_addr:
-        # check on remote
-        prompt_msg = "Check whether {} is enabled on {}".format(service, remote_addr)
-        rc, _, _ = run_cmd_on_remote(cmd, remote_addr, prompt_msg)
-    else:
-        # check on local
-        rc, _ = get_stdout(cmd)
-    return rc == 0
+    ACTION_MAP = {
+            "enable": "enable",
+            "disable": "disable",
+            "start": "start",
+            "stop": "stop",
+            "is_enabled": "is-enabled",
+            "is_active": "is-active",
+            "is_available": "list-unit-files"
+            }
+
+    def __init__(self, service_name, remote_addr=None):
+        """
+        Init function
+        """
+        self.service_name = service_name
+        self.remote_addr = remote_addr
+
+    def _do_action(self, action_type):
+        """
+        Actual do actions to manage service
+        """
+        if action_type not in self.ACTION_MAP.values():
+            raise ValueError("status_type should be {}".format('/'.join(list(self.ACTION_MAP.values()))))
+
+        cmd = "systemctl {} {}".format(action_type, self.service_name)
+        if self.remote_addr:
+            prompt_msg = "Run \"{}\" on {}".format(cmd, self.remote_addr)
+            rc, output, err = run_cmd_on_remote(cmd, self.remote_addr, prompt_msg)
+        else:
+            rc, output, err = get_stdout_stderr(cmd)
+        if rc != 0 and err:
+            raise ValueError("Run \"{}\" error: {}".format(cmd, err))
+        return rc == 0, output
+
+    @property
+    def is_available(self):
+        return self.service_name in self._do_action(self.ACTION_MAP["is_available"])[1]
+
+    @property
+    def is_enabled(self):
+        return self._do_action(self.ACTION_MAP["is_enabled"])[0]
+
+    @property
+    def is_active(self):
+        return self._do_action(self.ACTION_MAP["is_active"])[0]
+
+    def start(self):
+        self._do_action(self.ACTION_MAP["start"])
+
+    def stop(self):
+        self._do_action(self.ACTION_MAP["stop"])
+
+    def enable(self):
+        self._do_action(self.ACTION_MAP["enable"])
+
+    def disable(self):
+        self._do_action(self.ACTION_MAP["disable"])
+
+    @classmethod
+    def service_is_available(cls, name, remote_addr=None):
+        """
+        Check whether service is available
+        """
+        inst = cls(name, remote_addr)
+        return inst.is_available
+
+    @classmethod
+    def service_is_enabled(cls, name, remote_addr=None):
+        """
+        Check whether service is enabled
+        """
+        inst = cls(name, remote_addr)
+        return inst.is_enabled
+
+    @classmethod
+    def service_is_active(cls, name, remote_addr=None):
+        """
+        Check whether service is active
+        """
+        inst = cls(name, remote_addr)
+        return inst.is_active
+
+    @classmethod
+    def start_service(cls, name, enable=False, remote_addr=None):
+        """
+        Start service
+        """
+        inst = cls(name, remote_addr)
+        if enable:
+            inst.enable()
+        inst.start()
+
+    @classmethod
+    def stop_service(cls, name, disable=False, remote_addr=None):
+        """
+        Stop service
+        """
+        inst = cls(name, remote_addr)
+        if disable:
+            inst.disable()
+        inst.stop()
+
+    @classmethod
+    def enable_service(cls, name, remote_addr=None):
+        """
+        Enable service
+        """
+        inst = cls(name, remote_addr)
+        if inst.is_available and not inst.is_enabled:
+            inst.enable()
+
+    @classmethod
+    def disable_service(cls, name, remote_addr=None):
+        """
+        Disable service
+        """
+        inst = cls(name, remote_addr)
+        if inst.is_available and inst.is_enabled:
+            inst.disable()
 
 
-def service_is_active(service, remote_addr=None):
-    """
-    Check if service is active
-    """
-    cmd = "systemctl -q is-active {}".format(service)
-    if remote_addr:
-        # check on remote
-        prompt_msg = "Check whether {} is active on {}".format(service, remote_addr)
-        rc, _, _ = run_cmd_on_remote(cmd, remote_addr, prompt_msg)
-    else:
-        # check on local
-        rc, _ = get_stdout(cmd)
-    return rc == 0
+service_is_available = ServiceManager.service_is_available
+service_is_enabled = ServiceManager.service_is_enabled
+service_is_active = ServiceManager.service_is_active
+start_service = ServiceManager.start_service
+stop_service = ServiceManager.stop_service
+enable_service = ServiceManager.enable_service
+disable_service = ServiceManager.disable_service
 
 
 def package_is_installed(pkg, remote_addr=None):
@@ -2542,13 +2631,62 @@ def package_is_installed(pkg, remote_addr=None):
     return rc == 0
 
 
-@contextmanager
-def disable_exception_traceback():
+def ping_node(node):
     """
-    All traceback information is suppressed and only the exception type and value are printed
+    Check if the remote node is reachable
     """
-    default_value = getattr(sys, "tracebacklimit", 1000)  # `1000` is a Python's default value
-    sys.tracebacklimit = 0
-    yield
-    sys.tracebacklimit = default_value  # revert changes
+    rc, _, err = get_stdout_stderr("ping -c 1 {}".format(node))
+    if rc != 0:
+        raise ValueError("host \"{}\" is unreachable: {}".format(node, err))
+
+
+def is_quorate(expected_votes, actual_votes):
+    """
+    Given expected votes and actual votes, calculate if is quorated
+    """
+    return int(actual_votes)/int(expected_votes) > 0.5
+
+
+def get_stdout_or_raise_error(cmd, remote=None, success_val=0):
+    """
+    Common function to get stdout from cmd or raise exception
+    """
+    if remote:
+        cmd = "ssh -o StrictHostKeyChecking=no root@{} \"{}\"".format(remote, cmd)
+    rc, out, err = get_stdout_stderr(cmd)
+    if rc != success_val:
+        raise ValueError("Failed to run \"{}\": {}".format(cmd, err))
+    return out
+
+
+def get_quorum_votes_dict(remote=None):
+    """
+    Return a dictionary which contain expect votes and total votes
+    """
+    out = get_stdout_or_raise_error("corosync-quorumtool -s", remote=remote)
+    return dict(re.findall("(Expected|Total) votes:\s+(\d+)", out))
+
+
+def has_resource_running():
+    """
+    Check if any RA is running
+    """
+    out = get_stdout_or_raise_error("crm_mon -1")
+    return re.search("No active resources", out) is None
+
+
+def check_all_nodes_reachable():
+    """
+    Check if all cluster nodes are reachable
+    """
+    out = get_stdout_or_raise_error("crm_node -l")
+    for node in re.findall("\d+ (.*) \w+", out):
+        ping_node(node)
+
+
+def re_split_string(reg, string):
+    """
+    Split a string by a regrex, filter out empty items
+    """
+    return [x for x in re.split(reg, string) if x]
 # vim:ts=4:sw=4:et:

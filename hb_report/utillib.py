@@ -25,8 +25,9 @@ from threading import Timer
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 import constants
 import crmsh.config
-from crmsh import msg as crmmsg
+from crmsh.log import logger
 from crmsh import utils as crmutils
+from crmsh import corosync
 
 
 class Tempfile(object):
@@ -311,10 +312,14 @@ def collect_info():
 
     for p in process_list:
         p.join()
-    if not constants.SKIP_LVL:
-        sanitize()
 
-    for l in constants.EXTRA_LOGS.split():
+    logfile_list = []
+    corosync_log = corosync.get_value('logging.logfile')
+    if corosync_log:
+        logfile_list.append(corosync_log)
+    logfile_list += constants.EXTRA_LOGS.split()
+
+    for l in logfile_list:
         if not os.path.isfile(l):
             continue
         if l == constants.HA_LOG and l != constants.HALOG_F:
@@ -1220,15 +1225,15 @@ def load_ocf_dirs():
 
 def log_debug(msg):
     if constants.VERBOSITY > 0 or crmsh.config.core.debug:
-        crmmsg.common_info("%s# %s" % (constants.WE, msg))
+        logger.info("%s# %s" % (constants.WE, msg))
 
 
 def log_info(msg):
-    crmmsg.common_info("%s# %s" % (constants.WE, msg))
+    logger.info("%s# %s" % (constants.WE, msg))
 
 
 def log_fatal(msg):
-    crmmsg.common_err("%s# %s" % (constants.WE, msg))
+    logger.error("%s# %s" % (constants.WE, msg))
     sys.exit(1)
 
 
@@ -1239,7 +1244,7 @@ def log_size(logf, outf):
 
 
 def log_warning(msg):
-    crmmsg.common_warn("%s# %s" % (constants.WE, msg))
+    logger.warning("%s# %s" % (constants.WE, msg))
 
 
 def make_temp_dir():
@@ -1407,48 +1412,48 @@ def sanitize():
     """
     replace sensitive info with '****'
     """
-    workdir = constants.WORKDIR
-    conf = os.path.join(workdir, constants.B_CONF)
-    if os.path.isfile(conf):
-        sanitize_one(conf)
-    cib_f = os.path.join(workdir, constants.CIB_F)
-    rc = 0
-    for f in [cib_f] + glob.glob(os.path.join(workdir, "pengine", "*")):
-        if os.path.isfile(f):
-            if constants.DO_SANITIZE == 1:
-                sanitize_one(f)
-            else:
-                rc = sanitize_one(f, "test")
-    if rc != 0:
-        log_warning("some PE or CIB files contain possibly sensitive data")
-        log_warning("you may not want to send this report to a public mailing list")
+    log_debug("Check or replace sensitive info from cib, pe and log files")
+
+    get_sensitive_key_value_list()
+
+    work_dir = constants.WORKDIR
+    file_list = []
+    for (dirpath, dirnames, filenames) in os.walk(work_dir):
+        for _file in filenames:
+            file_list.append(os.path.join(dirpath, _file))
+
+    for f in [item for item in file_list if os.path.isfile(item)]:
+        rc = sanitize_one(f)
+        if rc == 1:
+            log_warning("Some PE/CIB/log files contain possibly sensitive data")
+            log_warning("Using \"-s\" option can replace sensitive data")
+            break
 
 
-def sanitize_one(in_file, mode=None):
-    open_ = None
-    if re.search("gz$", in_file):
-        open_ = gzip.open
-    elif re.search("bz2$", in_file):
-        open_ = bz2.BZ2File
-    else:
-        open_ = open
-    with open_(in_file, 'r') as f:
-        data = f.read()
+def sanitize_one(in_file):
+    """
+    Open the file, replace sensitive string and write back
+    """
+    data = read_from_file(in_file)
+    if not data:
+        return
+    if not include_sensitive_data(data):
+        return
+    if not constants.DO_SANITIZE:
+        return 1
+    log_debug("Replace sensitive info for {}".format(in_file))
+    write_to_file(in_file, sub_sensitive_string(data))
 
-    if mode == "test":
-        if sub_string_test(data):
-            return 1
+
+def parse_sanitize_rule(rule_string):
+    for rule in rule_string.split():
+        if ':' in rule:
+            key, value = rule.split(':')
+            if value != "raw":
+                log_fatal("For sanitize_pattern {}, option should be \"raw\"".format(key))
+            constants.SANITIZE_RULE_DICT[key] = value
         else:
-            return 0
-
-    ref = create_tempfile()
-    add_tempfiles(ref)
-    touch_r(in_file, ref)
-
-    with open_(in_file, 'w') as f:
-        f.write(sub_string(data))
-
-    touch_r(ref, in_file)
+            constants.SANITIZE_RULE_DICT[rule] = None
 
 
 def say_ssh_user():
@@ -1516,14 +1521,12 @@ def stdchannel_redirected(stdchannel, dest_filename):
 
 def start_slave_collector(node, arg_str):
     if node == constants.WE:
-        cmd = r"hb_report __slave".format(os.getcwd())
+        cmd = r"/usr/sbin/hb_report __slave".format(os.getcwd())
         for item in arg_str.split():
             cmd += " {}".format(str(item))
         _, out = crmutils.get_stdout(cmd)
     else:
-        cmd = r'ssh {} {} "{} hb_report __slave"'.\
-              format(constants.SSH_OPTS, node,
-                     constants.SUDO, os.getcwd())
+        cmd = r'ssh {} {} "/usr/sbin/hb_report __slave"'.format(constants.SSH_OPTS, node, os.getcwd())
         for item in arg_str.split():
             cmd += " {}".format(str(item))
         code, out, err = crmutils.get_stdout_stderr(cmd)
@@ -1552,28 +1555,6 @@ def start_slave_collector(node, arg_str):
 
 def str_to_bool(v):
     return v.lower() in ["true"]
-
-
-def sub_string(in_string,
-               pattern=constants.SANITIZE,
-               sub_pattern=' value=".*" ',
-               repl=' value="******" '):
-    res_string = ""
-    pattern_string = re.sub(" ", "|", pattern)
-    for line in in_string.split('\n')[:-1]:
-        if re.search('name="%s"' % pattern_string, line):
-            res_string += re.sub(sub_pattern, repl, line) + '\n'
-        else:
-            res_string += line + '\n'
-    return res_string
-
-
-def sub_string_test(in_string, pattern=constants.SANITIZE):
-    pattern_string = re.sub(" ", "|", pattern)
-    for line in crmutils.to_ascii(in_string).split('\n'):
-        if re.search('name="%s"' % pattern_string, line):
-            return True
-    return False
 
 
 def sys_info():
@@ -1660,12 +1641,39 @@ def dump_D_process():
     return out_string
 
 
+def lsof_ocfs2_device():
+    """
+    List open files for OCFS2 device
+    """
+    out_string = ""
+    _, out, _ = crmutils.get_stdout_stderr("mount")
+    dev_list = re.findall("\n(.*) on .* type ocfs2 ", out)
+    for dev in dev_list:
+        cmd = "lsof {}".format(dev)
+        out_string += "\n\n#=====[ Command ] ==========================#\n"
+        out_string += "# {}\n".format(cmd)
+        _, cmd_out, _ = crmutils.get_stdout_stderr(cmd)
+        if cmd_out:
+            out_string += cmd_out
+    return out_string
+
+
 def dump_ocfs2():
     ocfs2_f = os.path.join(constants.WORKDIR, constants.OCFS2_F)
     with open(ocfs2_f, "w") as f:
-        f.write(dump_D_process())
+        rc, out, err = crmutils.get_stdout_stderr("mounted.ocfs2 -d")
+        if rc != 0:
+            f.write("Failed to run \"mounted.ocfs2 -d\": {}".format(err))
+            return
+        # No ocfs2 device, just header line printed
+        elif len(out.split('\n')) == 1:
+            f.write("No ocfs2 partitions found")
+            return
 
-        cmds = [ "dmesg",  "ps -efL", "lsof",
+        f.write(dump_D_process())
+        f.write(lsof_ocfs2_device())
+
+        cmds = [ "dmesg",  "ps -efL",
                 "lsblk -o 'NAME,KNAME,MAJ:MIN,FSTYPE,LABEL,RO,RM,MODEL,SIZE,OWNER,GROUP,MODE,ALIGNMENT,MIN-IO,OPT-IO,PHY-SEC,LOG-SEC,ROTA,SCHED,MOUNTPOINT'",
                 "mounted.ocfs2 -f", "findmnt", "mount",
                 "cat /sys/fs/ocfs2/cluster_stack"
@@ -1786,4 +1794,60 @@ def write_to_file(tofile, data):
             f.write(data)
         else:
             f.write(data.encode('utf-8'))
+
+
+def get_sensitive_key_value_list():
+    """
+    For each defined sanitize rule, get the sensitive value or key list
+    """
+    for key, value in constants.SANITIZE_RULE_DICT.items():
+        try:
+            if value == "raw":
+                constants.SANITIZE_VALUE_RAW += extract_sensitive_value_list(key)
+            else:
+                constants.SANITIZE_VALUE_CIB += extract_sensitive_value_list(key)
+                constants.SANITIZE_KEY_CIB.append(key.strip('.*?')+'.*?')
+        except (FileNotFoundError, EOFError) as e:
+            log_warning(e)
+
+
+def extract_sensitive_value_list(rule):
+    """
+    Extract sensitive value from cib.xml
+    """
+    cib_file = os.path.join(constants.WORKDIR, constants.WE, constants.CIB_F)
+    if not os.path.exists(cib_file):
+        raise FileNotFoundError("File {} was not collected".format(constants.CIB_F))
+
+    with open(cib_file) as fd:
+        data = fd.read()
+    if not data:
+        raise EOFError("File {} is empty".format(cib_file))
+
+    value_list = re.findall(r'name="({})" value="(.*?)"'.format(rule.strip('?')+'?'), data)
+    return [value[1] for value in value_list]
+
+
+def include_sensitive_data(data):
+    """
+    Check whether contain sensitive data
+    """
+    if constants.SANITIZE_VALUE_RAW or constants.SANITIZE_VALUE_CIB:
+        return True
+    return False
+
+
+def sub_sensitive_string(data):
+    """
+    Do the replace job
+
+    For the raw sanitize_pattern option, replace exactly the value
+    For the key:value nvpair sanitize_pattern, replace the value in which line contain the key
+    """
+    result = data
+    if constants.SANITIZE_VALUE_RAW:
+        result = re.sub(r'\b({})\b'.format('|'.join(constants.SANITIZE_VALUE_RAW)), "******", data)
+    if constants.SANITIZE_VALUE_CIB:
+        result = re.sub('({})({})'.format('|'.join(constants.SANITIZE_KEY_CIB), '|'.join(constants.SANITIZE_VALUE_CIB)), '\\1******', result)
+    return result
 # vim:ts=4:sw=4:et:

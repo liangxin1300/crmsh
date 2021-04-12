@@ -22,6 +22,303 @@ from crmsh import bootstrap
 from crmsh import corosync
 
 
+class TestWatchdog(unittest.TestCase):
+    """
+    Unitary tests for crmsh.bootstrap.Watchdog
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """
+        Global setUp.
+        """
+
+    def setUp(self):
+        """
+        Test setUp.
+        """
+        self.watchdog_inst = bootstrap.Watchdog()
+        self.watchdog_join_inst = bootstrap.Watchdog(peer_host="node1")
+
+    def tearDown(self):
+        """
+        Test tearDown.
+        """
+
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Global tearDown.
+        """
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_verify_watchdog_device_ignore_error(self, mock_run):
+        mock_run.return_value = (1, None, "error")
+        res = self.watchdog_inst._verify_watchdog_device("/dev/watchdog", True)
+        self.assertEqual(res, False)
+        mock_run.assert_called_once_with("wdctl /dev/watchdog")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_verify_watchdog_device_error(self, mock_run, mock_error):
+        mock_run.return_value = (1, None, "error")
+        mock_error.side_effect = ValueError
+        with self.assertRaises(ValueError) as err:
+            self.watchdog_inst._verify_watchdog_device("/dev/watchdog")
+        mock_error.assert_called_once_with("Invalid watchdog device /dev/watchdog: error")
+        mock_run.assert_called_once_with("wdctl /dev/watchdog")
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_verify_watchdog_device(self, mock_run):
+        mock_run.return_value = (0, None, None)
+        res = self.watchdog_inst._verify_watchdog_device("/dev/watchdog")
+        self.assertEqual(res, True)
+
+    @mock.patch('crmsh.bootstrap.invoke')
+    def test_load_watchdog_driver(self, mock_invoke):
+        self.watchdog_inst._load_watchdog_driver("softdog")
+        mock_invoke.assert_has_calls([
+            mock.call("echo softdog > /etc/modules-load.d/watchdog.conf"),
+            mock.call("systemctl restart systemd-modules-load")
+            ])
+
+    @mock.patch('crmsh.utils.parse_sysconfig')
+    def test_get_watchdog_device_from_sbd_config(self, mock_parse):
+        mock_parse_inst = mock.Mock()
+        mock_parse.return_value = mock_parse_inst
+        mock_parse_inst.get.return_value = "/dev/watchdog"
+        res = self.watchdog_inst._get_watchdog_device_from_sbd_config()
+        self.assertEqual(res, "/dev/watchdog")
+        mock_parse.assert_called_once_with(bootstrap.SYSCONFIG_SBD)
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_driver_is_loaded(self, mock_run):
+        output = """
+button                 24576  0
+softdog                16384  2
+btrfs                1474560  1
+        """
+        mock_run.return_value = (0, output, None)
+        res = self.watchdog_inst._driver_is_loaded("softdog")
+        assert res is not None
+        mock_run.assert_called_once_with("lsmod")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_set_watchdog_info_error(self, mock_run, mock_error):
+        mock_run.return_value = (1, None, "error")
+        mock_error.side_effect = ValueError
+        with self.assertRaises(ValueError):
+            self.watchdog_inst._set_watchdog_info()
+        mock_run.assert_called_once_with(bootstrap.Watchdog.QUERY_CMD)
+        mock_error.assert_called_once_with("Failed to run {}: error".format(bootstrap.Watchdog.QUERY_CMD))
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_set_watchdog_info(self, mock_run):
+        output = """
+Discovered 3 watchdog devices:
+
+[1] /dev/watchdog
+Identity: Software Watchdog
+Driver: softdog
+CAUTION: Not recommended for use with sbd.
+
+[2] /dev/watchdog0
+Identity: Software Watchdog
+Driver: softdog
+CAUTION: Not recommended for use with sbd.
+
+[3] /dev/watchdog1
+Identity: iTCO_wdt
+Driver: iTCO_wdt
+        """
+        mock_run.return_value = (0, output, None)
+        self.watchdog_inst._set_watchdog_info()
+        self.assertEqual(self.watchdog_inst._watchdog_info_dict, {'/dev/watchdog': 'softdog', '/dev/watchdog0': 'softdog', '/dev/watchdog1': 'iTCO_wdt'})
+
+    @mock.patch('crmsh.bootstrap.Watchdog._verify_watchdog_device')
+    def test_get_device_through_driver_none(self, mock_verify):
+        self.watchdog_inst._watchdog_info_dict = {'/dev/watchdog': 'softdog', '/dev/watchdog0': 'softdog', '/dev/watchdog1': 'iTCO_wdt'}
+        mock_verify.return_value = False
+        res = self.watchdog_inst._get_device_through_driver("iTCO_wdt")
+        self.assertEqual(res, None)
+        mock_verify.assert_called_once_with("/dev/watchdog1")
+
+    @mock.patch('crmsh.bootstrap.Watchdog._verify_watchdog_device')
+    def test_get_device_through_driver(self, mock_verify):
+        self.watchdog_inst._watchdog_info_dict = {'/dev/watchdog': 'softdog', '/dev/watchdog0': 'softdog', '/dev/watchdog1': 'iTCO_wdt'}
+        mock_verify.return_value = True
+        res = self.watchdog_inst._get_device_through_driver("iTCO_wdt")
+        self.assertEqual(res, "/dev/watchdog1")
+        mock_verify.assert_called_once_with("/dev/watchdog1")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_get_driver_through_device_remotely_error(self, mock_run, mock_error):
+        mock_run.return_value = (1, None, "error")
+        self.watchdog_join_inst._get_driver_through_device_remotely("test")
+        mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no root@node1 sbd query-watchdog")
+        mock_error.assert_called_once_with("Failed to run sbd query-watchdog remotely: error")
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_get_driver_through_device_remotely_none(self, mock_run):
+        mock_run.return_value = (0, "data", None)
+        res = self.watchdog_join_inst._get_driver_through_device_remotely("/dev/watchdog")
+        self.assertEqual(res, None)
+        mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no root@node1 sbd query-watchdog")
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_get_driver_through_device_remotely(self, mock_run):
+        output = """
+Discovered 3 watchdog devices:
+
+[1] /dev/watchdog
+Identity: Software Watchdog
+Driver: softdog
+CAUTION: Not recommended for use with sbd.
+
+[2] /dev/watchdog0
+Identity: Software Watchdog
+Driver: softdog
+CAUTION: Not recommended for use with sbd.
+
+[3] /dev/watchdog1
+Identity: iTCO_wdt
+Driver: iTCO_wdt
+        """
+        mock_run.return_value = (0, output, None)
+        res = self.watchdog_join_inst._get_driver_through_device_remotely("/dev/watchdog")
+        self.assertEqual(res, "softdog")
+        mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no root@node1 sbd query-watchdog")
+
+    def test_get_first_unused_device_none(self):
+        res = self.watchdog_inst._get_first_unused_device()
+        self.assertEqual(res, None)
+
+    @mock.patch('crmsh.bootstrap.Watchdog._verify_watchdog_device')
+    def test_get_first_unused_device(self, mock_verify):
+        mock_verify.return_value = True
+        self.watchdog_inst._watchdog_info_dict = {'/dev/watchdog': 'softdog', '/dev/watchdog0': 'softdog', '/dev/watchdog1': 'iTCO_wdt'}
+        res = self.watchdog_inst._get_first_unused_device()
+        self.assertEqual(res, "/dev/watchdog")
+        mock_verify.assert_called_once_with("/dev/watchdog", ignore_error=True)
+
+    @mock.patch('crmsh.bootstrap.Watchdog._get_first_unused_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._verify_watchdog_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._get_watchdog_device_from_sbd_config')
+    def test_set_input_from_config(self, mock_from_config, mock_verify, mock_first):
+        mock_from_config.return_value = "/dev/watchdog"
+        mock_verify.return_value = True
+        self.watchdog_inst._set_input()
+        mock_first.assert_not_called()
+        mock_from_config.assert_called_once_with()
+
+    @mock.patch('crmsh.bootstrap.Watchdog._get_first_unused_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._verify_watchdog_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._get_watchdog_device_from_sbd_config')
+    def test_set_input(self, mock_from_config, mock_verify, mock_first):
+        mock_from_config.return_value = None
+        mock_first.return_value = None
+        self.watchdog_inst._set_input()
+        self.assertEqual(self.watchdog_inst._input, "softdog")
+        mock_from_config.assert_called_once_with()
+        mock_verify.assert_not_called()
+        mock_first.assert_called_once_with()
+
+    def test_valid_device_false(self):
+        res = self.watchdog_inst._valid_device("test")
+        self.assertEqual(res, False)
+
+    @mock.patch('crmsh.bootstrap.Watchdog._verify_watchdog_device')
+    def test_valid_device(self, mock_verify):
+        mock_verify.return_value = True
+        self.watchdog_inst._watchdog_info_dict = {'/dev/watchdog': 'softdog', '/dev/watchdog0': 'softdog', '/dev/watchdog1': 'iTCO_wdt'}
+        res = self.watchdog_inst._valid_device("/dev/watchdog")
+        self.assertEqual(res, True)
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.Watchdog._get_watchdog_device_from_sbd_config')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_watchdog_info')
+    def test_join_watchdog_error(self, mock_set_info, mock_from_config, mock_error):
+        mock_from_config.return_value = None
+        mock_error.side_effect = SystemExit
+        with self.assertRaises(SystemExit):
+            self.watchdog_join_inst.join_watchdog()
+        mock_set_info.assert_called_once_with()
+        mock_from_config.assert_called_once_with()
+        mock_error.assert_called_once_with("Failed to get watchdog device from {}".format(bootstrap.SYSCONFIG_SBD))
+
+    @mock.patch('crmsh.bootstrap.Watchdog._load_watchdog_driver')
+    @mock.patch('crmsh.bootstrap.Watchdog._get_driver_through_device_remotely')
+    @mock.patch('crmsh.bootstrap.Watchdog._valid_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._get_watchdog_device_from_sbd_config')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_watchdog_info')
+    def test_join_watchdog(self, mock_set_info, mock_from_config, mock_valid, mock_get_driver_remotely, mock_load):
+        mock_from_config.return_value = "/dev/watchdog"
+        mock_valid.return_value = False
+        mock_get_driver_remotely.return_value = "softdog"
+
+        self.watchdog_join_inst.join_watchdog()
+
+        mock_set_info.assert_called_once_with()
+        mock_from_config.assert_called_once_with()
+        mock_valid.assert_called_once_with("/dev/watchdog")
+        mock_get_driver_remotely.assert_called_once_with("/dev/watchdog")
+        mock_load.assert_called_once_with("softdog")
+
+    @mock.patch('crmsh.bootstrap.invokerc')
+    @mock.patch('crmsh.bootstrap.Watchdog._valid_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_input')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_watchdog_info')
+    def test_init_watchdog_valid(self, mock_set_info, mock_set_input, mock_valid, mock_invokerc):
+        mock_valid.return_value = True
+        self.watchdog_inst._input = "/dev/watchdog"
+        self.watchdog_inst.init_watchdog()
+        mock_invokerc.assert_not_called()
+        mock_valid.assert_called_once_with("/dev/watchdog")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+    @mock.patch('crmsh.bootstrap.Watchdog._valid_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_input')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_watchdog_info')
+    def test_init_watchdog_error(self, mock_set_info, mock_set_input, mock_valid, mock_invokerc, mock_error):
+        mock_valid.return_value = False
+        mock_invokerc.return_value = False
+        self.watchdog_inst._input = "test"
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            self.watchdog_inst.init_watchdog()
+
+        mock_valid.assert_called_once_with("test")
+        mock_invokerc.assert_called_once_with("modinfo test")
+        mock_error.assert_called_once_with("Should provide valid watchdog device or driver name by -w option")
+
+    @mock.patch('crmsh.bootstrap.Watchdog._get_device_through_driver')
+    @mock.patch('crmsh.bootstrap.Watchdog._load_watchdog_driver')
+    @mock.patch('crmsh.bootstrap.Watchdog._driver_is_loaded')
+    @mock.patch('crmsh.bootstrap.invokerc')
+    @mock.patch('crmsh.bootstrap.Watchdog._valid_device')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_input')
+    @mock.patch('crmsh.bootstrap.Watchdog._set_watchdog_info')
+    def test_init_watchdog(self, mock_set_info, mock_set_input, mock_valid, mock_invokerc, mock_is_loaded, mock_load, mock_get_device):
+        mock_valid.return_value = False
+        self.watchdog_inst._input = "softdog"
+        mock_invokerc.return_value = True
+        mock_is_loaded.return_value = False
+        mock_get_device.return_value = "/dev/watchdog"
+
+        self.watchdog_inst.init_watchdog()
+
+        mock_valid.assert_called_once_with("softdog")
+        mock_invokerc.assert_called_once_with("modinfo softdog")
+        mock_is_loaded.assert_called_once_with("softdog")
+        mock_load.assert_called_once_with("softdog")
+        mock_set_info.assert_has_calls([mock.call(), mock.call()])
+        mock_get_device.assert_called_once_with("softdog")
+
+
 class TestSBDManager(unittest.TestCase):
     """
     Unitary tests for crmsh.bootstrap.SBDManager
@@ -53,36 +350,142 @@ class TestSBDManager(unittest.TestCase):
         Global tearDown.
         """
 
-    @mock.patch('crmsh.bootstrap.error')
+<<<<<<< HEAD
+    @mock.patch('crmsh.bootstrap.warn')
+    def test_get_sbd_device_interactive_yes_to_all(self, mock_warn):
+        bootstrap._context = mock.Mock(yes_to_all=True)
+        self.sbd_inst._get_sbd_device_interactive()
+        mock_warn.assert_called_once_with("Not configuring SBD ({} left untouched).".format(bootstrap.SYSCONFIG_SBD))
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.check_watchdog')
     def test_check_environment_no_watchdog(self, mock_watchdog, mock_error):
         mock_watchdog.return_value = False
         mock_error.side_effect = ValueError
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
 
-        with self.assertRaises(ValueError):
-            self.sbd_inst._check_environment()
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.warn')
+    def test__get_sbd_device_interactive_not_confirm(self, mock_warn, mock_status, mock_confirm):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_confirm.return_value = False
+        self.sbd_inst._get_sbd_device_interactive()
+        mock_status.assert_called_once_with(bootstrap.SBDManager.SBD_STATUS_DESCRIPTION)
+        mock_warn.assert_called_once_with("Not configuring SBD - STONITH will be disabled.")
 
-        mock_error.assert_called_once_with("Watchdog device must be configured in order to use SBD")
-        mock_watchdog.assert_called_once_with()
+    @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.status')
+    def test_get_sbd_device_interactive_already_configured(self, mock_status, mock_confirm, mock_from_config):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_confirm.side_effect = [True, False]
+        mock_from_config.return_value = ["/dev/sda1"]
 
+        res = self.sbd_inst._get_sbd_device_interactive()
+        self.assertEqual(res, ["/dev/sda1"])
+
+        mock_status.assert_called_once_with(bootstrap.SBDManager.SBD_STATUS_DESCRIPTION)
+        mock_confirm.assert_has_calls([
+            mock.call("Do you wish to use SBD?"),
+            mock.call("SBD is already configured to use /dev/sda1 - overwrite?")
+            ])
+        mock_status.assert_called_once_with(bootstrap.SBDManager.SBD_STATUS_DESCRIPTION)
+        mock_from_config.assert_called_once_with()
+
+<<<<<<< HEAD
+    @mock.patch('crmsh.bootstrap.prompt_for_string')
+    @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.status')
+    def test_get_sbd_device_interactive_diskless(self, mock_status, mock_confirm, mock_from_config, mock_prompt):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_confirm.return_value = True
+        mock_from_config.return_value = None
+        mock_prompt.return_value = "none"
+=======
     @mock.patch('crmsh.utils.is_program')
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.check_watchdog')
     def test_check_environment_no_sbd(self, mock_watchdog, mock_error, mock_is_program):
         mock_watchdog.return_value = True
         mock_is_program.return_value = False
         mock_error.side_effect = ValueError
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
 
-        with self.assertRaises(ValueError):
-            self.sbd_inst._check_environment()
+        self.sbd_inst._get_sbd_device_interactive()
 
-        mock_error.assert_called_once_with("sbd executable not found! Cannot configure SBD")
-        mock_watchdog.assert_called_once_with()
-        mock_is_program.assert_called_once_with("sbd")
+        mock_status.assert_called_once_with(bootstrap.SBDManager.SBD_STATUS_DESCRIPTION)
+        mock_from_config.assert_called_once_with()
+        mock_prompt.assert_called_once_with('Path to storage device (e.g. /dev/disk/by-id/...), or "none" for diskless sbd, use ";" as separator for multi path', 'none|\\/.*')
 
-    def test_parse_sbd_device(self):
+    @mock.patch('crmsh.bootstrap.prompt_for_string')
+    @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.status')
+    def test_get_sbd_device_interactive_null_and_diskless(self, mock_status, mock_confirm, mock_from_config, mock_prompt):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_confirm.return_value = True
+        mock_from_config.return_value = None
+        mock_prompt.side_effect = [None, "none"]
+
+        self.sbd_inst._get_sbd_device_interactive()
+
+        mock_status.assert_called_once_with(bootstrap.SBDManager.SBD_STATUS_DESCRIPTION)
+        mock_confirm.assert_called_once_with("Do you wish to use SBD?")
+        mock_from_config.assert_called_once_with()
+        mock_prompt.assert_has_calls([
+            mock.call('Path to storage device (e.g. /dev/disk/by-id/...), or "none" for diskless sbd, use ";" as separator for multi path', 'none|\\/.*') for x in range(2)
+            ])
+
+    @mock.patch('crmsh.utils.re_split_string')
+    @mock.patch('crmsh.bootstrap.warn')
+    @mock.patch('crmsh.bootstrap.print_error_msg')
+    @mock.patch('crmsh.bootstrap.SBDManager._verify_sbd_device')
+    @mock.patch('crmsh.bootstrap.prompt_for_string')
+    @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.status')
+    def test_get_sbd_device_interactive(self, mock_status, mock_confirm, mock_from_config, mock_prompt, mock_verify, mock_error_msg, mock_warn, mock_split):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_confirm.side_effect = [True, False, True]
+        mock_from_config.return_value = None
+        mock_prompt.side_effect = ["/dev/test1", "/dev/sda1", "/dev/sdb1"]
+        mock_split.side_effect = [["/dev/test1"], ["/dev/sda1"], ["/dev/sdb1"]]
+        mock_verify.side_effect = [ValueError("/dev/test1 error"), None, None]
+
+        res = self.sbd_inst._get_sbd_device_interactive()
+        self.assertEqual(res, ["/dev/sdb1"])
+
+        mock_status.assert_called_once_with(bootstrap.SBDManager.SBD_STATUS_DESCRIPTION)
+        mock_confirm.assert_has_calls([
+            mock.call("Do you wish to use SBD?"),
+            mock.call("Are you sure you wish to use this device?")
+            ])
+        mock_from_config.assert_called_once_with()
+        mock_error_msg.assert_called_once_with("/dev/test1 error")
+        mock_warn.assert_has_calls([
+            mock.call("All data on /dev/sda1 will be destroyed!"),
+            mock.call("All data on /dev/sdb1 will be destroyed!")
+            ])
+        mock_prompt.assert_has_calls([
+            mock.call('Path to storage device (e.g. /dev/disk/by-id/...), or "none" for diskless sbd, use ";" as separator for multi path', 'none|\\/.*') for x in range(3)
+            ])
+        mock_split.assert_has_calls([
+            mock.call(bootstrap.SBDManager.PARSE_RE, "/dev/test1"),
+            mock.call(bootstrap.SBDManager.PARSE_RE, "/dev/sda1"),
+            mock.call(bootstrap.SBDManager.PARSE_RE, "/dev/sdb1"),
+            ])
+
+    @mock.patch('crmsh.utils.re_split_string')
+    def test_parse_sbd_device(self, mock_split):
+        mock_split.side_effect = [["/dev/sdb1"], ["/dev/sdc1"]]
         res = self.sbd_inst._parse_sbd_device()
         assert res == ["/dev/sdb1", "/dev/sdc1"]
+        mock_split.assert_has_calls([
+            mock.call(bootstrap.SBDManager.PARSE_RE, "/dev/sdb1"),
+            mock.call(bootstrap.SBDManager.PARSE_RE, "/dev/sdc1")
+            ])
 
     def test_verify_sbd_device_gt_3(self):
         assert self.sbd_inst_devices_gt_3.sbd_devices_input == ["/dev/sdb1", "/dev/sdc1", "/dev/sdd1", "/dev/sde1"]
@@ -91,8 +494,9 @@ class TestSBDManager(unittest.TestCase):
             self.sbd_inst_devices_gt_3._verify_sbd_device(dev_list)
         self.assertEqual("Maximum number of SBD device is 3", str(err.exception))
 
+    @mock.patch('crmsh.bootstrap.SBDManager._compare_device_uuid')
     @mock.patch('crmsh.bootstrap.is_block_device')
-    def test_verify_sbd_device_not_block(self, mock_block_device):
+    def test_verify_sbd_device_not_block(self, mock_block_device, mock_compare):
         assert self.sbd_inst.sbd_devices_input == ["/dev/sdb1", "/dev/sdc1"]
         dev_list = self.sbd_inst.sbd_devices_input
         mock_block_device.side_effect = [True, False]
@@ -102,16 +506,15 @@ class TestSBDManager(unittest.TestCase):
         self.assertEqual("/dev/sdc1 doesn't look like a block device", str(err.exception))
 
         mock_block_device.assert_has_calls([mock.call("/dev/sdb1"), mock.call("/dev/sdc1")])
+        mock_compare.assert_called_once_with("/dev/sdb1", [])
 
-    @mock.patch('crmsh.bootstrap.SBDManager._check_environment')
     @mock.patch('crmsh.bootstrap.SBDManager._verify_sbd_device')
     @mock.patch('crmsh.bootstrap.SBDManager._parse_sbd_device')
-    def test_get_sbd_device_from_option(self, mock_parse, mock_verify, mock_check):
+    def test_get_sbd_device_from_option(self, mock_parse, mock_verify):
         mock_parse.return_value = ["/dev/sdb1", "/dev/sdc1"]
         self.sbd_inst._get_sbd_device()
         mock_parse.assert_called_once_with()
         mock_verify.assert_called_once_with(mock_parse.return_value)
-        mock_check.assert_called_once_with()
 
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_interactive')
     def test_get_sbd_device_from_interactive(self, mock_interactive):
@@ -119,16 +522,14 @@ class TestSBDManager(unittest.TestCase):
         self.sbd_inst_interactive._get_sbd_device()
         mock_interactive.assert_called_once_with()
 
-    @mock.patch('crmsh.bootstrap.SBDManager._check_environment')
-    def test_get_sbd_device_diskless(self, mock_check):
+    def test_get_sbd_device_diskless(self):
         self.sbd_inst_diskless._get_sbd_device()
-        mock_check.assert_called_once_with()
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
     def test_initialize_sbd(self, mock_invoke, mock_error):
         self.sbd_inst._sbd_devices = ["/dev/sdb1", "/dev/sdc1"]
-        mock_invoke.side_effect = [True, False]
+        mock_invoke.side_effect = [(True, None, None), (False, None, "error")]
         mock_error.side_effect = ValueError
 
         with self.assertRaises(ValueError):
@@ -138,20 +539,18 @@ class TestSBDManager(unittest.TestCase):
             mock.call("sbd -d /dev/sdb1 create"),
             mock.call("sbd -d /dev/sdc1 create")
             ])
-        mock_error.assert_called_once_with("Failed to initialize SBD device /dev/sdc1")
+        mock_error.assert_called_once_with("Failed to initialize SBD device /dev/sdc1: error")
 
     @mock.patch('crmsh.bootstrap.csync2_update')
     @mock.patch('crmsh.utils.sysconfig_set')
-    @mock.patch('crmsh.bootstrap.detect_watchdog_device')
     @mock.patch('shutil.copyfile')
-    def test_update_configuration(self, mock_copy, mock_detect, mock_sysconfig, mock_update):
+    def test_update_configuration(self, mock_copy, mock_sysconfig, mock_update):
         self.sbd_inst._sbd_devices = ["/dev/sdb1", "/dev/sdc1"]
-        mock_detect.return_value = "/dev/watchdog"
+        self.sbd_inst._watchdog_inst = mock.Mock(watchdog_device_name="/dev/watchdog")
 
         self.sbd_inst._update_configuration()
 
         mock_copy.assert_called_once_with("/usr/share/fillup-templates/sysconfig.sbd", "/etc/sysconfig/sbd")
-        mock_detect.assert_called_once_with()
         mock_sysconfig.assert_called_once_with("/etc/sysconfig/sbd", SBD_PACEMAKER='yes', SBD_STARTMODE='always', SBD_DELAY_START='no', SBD_WATCHDOG_DEV='/dev/watchdog', SBD_DEVICE='/dev/sdb1;/dev/sdc1')
         mock_update.assert_called_once_with("/etc/sysconfig/sbd")
 
@@ -167,17 +566,20 @@ class TestSBDManager(unittest.TestCase):
         mock_parse.assert_called_once_with("/etc/sysconfig/sbd")
         mock_parse_inst.get.assert_called_once_with("SBD_DEVICE")
 
+    @mock.patch('crmsh.utils.re_split_string')
     @mock.patch('crmsh.bootstrap.utils.parse_sysconfig')
-    def test_get_sbd_device_from_config(self, mock_parse):
+    def test_get_sbd_device_from_config(self, mock_parse, mock_split):
         mock_parse_inst = mock.Mock()
         mock_parse.return_value = mock_parse_inst
         mock_parse_inst.get.return_value = "/dev/sdb1;/dev/sdc1"
+        mock_split.return_value = ["/dev/sdb1", "/dev/sdc1"]
 
         res = self.sbd_inst._get_sbd_device_from_config()
         assert res == ["/dev/sdb1", "/dev/sdc1"]
 
         mock_parse.assert_called_once_with("/etc/sysconfig/sbd")
         mock_parse_inst.get.assert_called_once_with("SBD_DEVICE")
+        mock_split.assert_called_once_with(bootstrap.SBDManager.PARSE_RE, "/dev/sdb1;/dev/sdc1")
 
     @mock.patch('crmsh.utils.package_is_installed')
     def test_sbd_init_not_installed(self, mock_package):
@@ -185,16 +587,21 @@ class TestSBDManager(unittest.TestCase):
         self.sbd_inst.sbd_init()
         mock_package.assert_called_once_with("sbd")
 
+    @mock.patch('crmsh.bootstrap.invoke')
     @mock.patch('crmsh.bootstrap.status_done')
     @mock.patch('crmsh.bootstrap.SBDManager._update_configuration')
     @mock.patch('crmsh.bootstrap.SBDManager._initialize_sbd')
     @mock.patch('crmsh.bootstrap.status_long')
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device')
+    @mock.patch('crmsh.bootstrap.Watchdog')
     @mock.patch('crmsh.utils.package_is_installed')
-    def test_sbd_init_return(self, mock_package, mock_get_device, mock_status, mock_initialize, mock_update, mock_status_done):
+    def test_sbd_init_return(self, mock_package, mock_watchdog, mock_get_device, mock_status, mock_initialize, mock_update, mock_status_done, mock_invoke):
         mock_package.return_value = True
         self.sbd_inst._sbd_devices = None
         self.sbd_inst.diskless_sbd = False
+        mock_watchdog_inst = mock.Mock()
+        mock_watchdog.return_value = mock_watchdog_inst
+        mock_watchdog_inst.init_watchdog = mock.Mock()
 
         self.sbd_inst.sbd_init()
 
@@ -204,15 +611,24 @@ class TestSBDManager(unittest.TestCase):
         mock_initialize.assert_not_called()
         mock_update.assert_not_called()
         mock_status_done.assert_not_called()
+        mock_watchdog.assert_called_once_with(_input=None)
+        mock_watchdog_inst.init_watchdog.assert_called_once_with()
+        mock_invoke.assert_called_once_with("systemctl disable sbd.service")
 
+    @mock.patch('crmsh.bootstrap.warn')
     @mock.patch('crmsh.bootstrap.status_done')
     @mock.patch('crmsh.bootstrap.SBDManager._update_configuration')
     @mock.patch('crmsh.bootstrap.SBDManager._initialize_sbd')
     @mock.patch('crmsh.bootstrap.status_long')
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device')
+    @mock.patch('crmsh.bootstrap.Watchdog')
     @mock.patch('crmsh.utils.package_is_installed')
-    def test_sbd_init_return(self, mock_package, mock_get_device, mock_status, mock_initialize, mock_update, mock_status_done):
+    def test_sbd_init(self, mock_package, mock_watchdog, mock_get_device, mock_status, mock_initialize, mock_update, mock_status_done, mock_warn):
+        bootstrap._context = mock.Mock(watchdog=None)
         mock_package.return_value = True
+        mock_watchdog_inst = mock.Mock()
+        mock_watchdog.return_value = mock_watchdog_inst
+        mock_watchdog_inst.init_watchdog = mock.Mock()
         self.sbd_inst_diskless.sbd_init()
 
         mock_package.assert_called_once_with("sbd")
@@ -221,6 +637,9 @@ class TestSBDManager(unittest.TestCase):
         mock_initialize.assert_called_once_with()
         mock_update.assert_called_once_with()
         mock_status_done.assert_called_once_with()
+        mock_watchdog.assert_called_once_with(_input=None)
+        mock_watchdog_inst.init_watchdog.assert_called_once_with()
+        mock_warn.assert_called_once_with(bootstrap.SBDManager.DISKLESS_SBD_WARNING)
 
     @mock.patch('crmsh.utils.package_is_installed')
     def test_configure_sbd_resource_not_installed(self, mock_package):
@@ -228,8 +647,13 @@ class TestSBDManager(unittest.TestCase):
         self.sbd_inst.configure_sbd_resource()
         mock_package.assert_called_once_with("sbd")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('crmsh.utils.package_is_installed')
@@ -249,8 +673,13 @@ class TestSBDManager(unittest.TestCase):
         mock_invoke.assert_called_once_with("crm configure primitive stonith-sbd stonith:external/sbd pcmk_delay_max=30s")
         mock_error.assert_called_once_with("Can't create stonith-sbd primitive")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('crmsh.utils.package_is_installed')
@@ -273,8 +702,13 @@ class TestSBDManager(unittest.TestCase):
             ])
         mock_error.assert_called_once_with("Can't enable STONITH for SBD")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('crmsh.utils.package_is_installed')
@@ -311,50 +745,148 @@ class TestSBDManager(unittest.TestCase):
         mock_exists.assert_called_once_with("/etc/sysconfig/sbd")
         mock_invoke.assert_called_once_with("systemctl disable sbd.service")
 
-    @mock.patch('crmsh.bootstrap.SBDManager._check_environment')
     @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('os.path.exists')
     @mock.patch('crmsh.utils.package_is_installed')
-    def test_join_sbd_config_disabled(self, mock_package, mock_exists, mock_invoke, mock_check):
+    def test_join_sbd_config_disabled(self, mock_package, mock_exists, mock_enabled, mock_invoke):
         mock_package.return_value = True
         mock_exists.return_value = True
-        mock_invoke.side_effect = [False, True]
+        mock_enabled.return_value = False
 
         self.sbd_inst.join_sbd("node1")
 
         mock_package.assert_called_once_with("sbd")
         mock_exists.assert_called_once_with("/etc/sysconfig/sbd")
-        mock_invoke.assert_has_calls([
-                mock.call("ssh -o StrictHostKeyChecking=no root@node1 systemctl is-enabled sbd.service"),
-                mock.call("systemctl disable sbd.service")
-            ])
-        mock_check.assert_not_called()
+        mock_invoke.assert_called_once_with("systemctl disable sbd.service")
+        mock_enabled.assert_called_once_with("sbd.service", "node1")
 
     @mock.patch('crmsh.bootstrap.status')
     @mock.patch('crmsh.bootstrap.SBDManager._verify_sbd_device')
     @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
-    @mock.patch('crmsh.bootstrap.SBDManager._check_environment')
+    @mock.patch('crmsh.bootstrap.Watchdog')
     @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.utils.service_is_enabled')
     @mock.patch('os.path.exists')
     @mock.patch('crmsh.utils.package_is_installed')
-    def test_join_sbd(self, mock_package, mock_exists, mock_invoke, mock_check, mock_get_device, mock_verify, mock_status):
+    def test_join_sbd(self, mock_package, mock_exists, mock_enabled, mock_invoke, mock_watchdog, mock_get_device, mock_verify, mock_status):
         mock_package.return_value = True
         mock_exists.return_value = True
-        mock_invoke.side_effect = [True, True]
+        mock_enabled.return_value = True
         mock_get_device.return_value = ["/dev/sdb1"]
+        mock_watchdog_inst = mock.Mock()
+        mock_watchdog.return_value = mock_watchdog_inst
+        mock_watchdog_inst.join_watchdog = mock.Mock()
 
         self.sbd_inst.join_sbd("node1")
 
         mock_package.assert_called_once_with("sbd")
         mock_exists.assert_called_once_with("/etc/sysconfig/sbd")
-        mock_invoke.assert_has_calls([
-            mock.call("ssh -o StrictHostKeyChecking=no root@node1 systemctl is-enabled sbd.service"),
-            mock.call("systemctl enable sbd.service")
-            ])
-        mock_check.assert_called_once_with()
+        mock_invoke.assert_called_once_with("systemctl enable sbd.service")
         mock_get_device.assert_called_once_with()
-        mock_verify.assert_called_once_with(["/dev/sdb1"])
+        mock_verify.assert_called_once_with(["/dev/sdb1"], ["node1"])
+        mock_enabled.assert_called_once_with("sbd.service", "node1")
         mock_status.assert_called_once_with("Got SBD configuration")
+        mock_watchdog.assert_called_once_with(peer_host="node1")
+        mock_watchdog_inst.join_watchdog.assert_called_once_with()
+
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.warn')
+    @mock.patch('crmsh.utils.get_quorum_votes_dict')
+    @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
+    @mock.patch('crmsh.bootstrap.Watchdog')
+    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.utils.service_is_enabled')
+    @mock.patch('os.path.exists')
+    @mock.patch('crmsh.utils.package_is_installed')
+    def test_join_sbd_diskless(self, mock_package, mock_exists, mock_enabled, mock_invoke, mock_watchdog, mock_get_device, mock_quorum_votes, mock_warn, mock_status):
+        mock_package.return_value = True
+        mock_exists.return_value = True
+        mock_enabled.return_value = True
+        mock_get_device.return_value = []
+        mock_watchdog_inst = mock.Mock()
+        mock_watchdog.return_value = mock_watchdog_inst
+        mock_watchdog_inst.join_watchdog = mock.Mock()
+        mock_quorum_votes.return_value = {'Expected': '1', 'Total': '1'}
+
+        self.sbd_inst.join_sbd("node1")
+
+        mock_package.assert_called_once_with("sbd")
+        mock_exists.assert_called_once_with("/etc/sysconfig/sbd")
+        mock_invoke.assert_called_once_with("systemctl enable sbd.service")
+        mock_get_device.assert_called_once_with()
+        mock_quorum_votes.assert_called_once_with("node1")
+        mock_warn.assert_called_once_with(bootstrap.SBDManager.DISKLESS_SBD_WARNING)
+        mock_enabled.assert_called_once_with("sbd.service", "node1")
+        mock_status.assert_called_once_with("Got diskless SBD configuration")
+        mock_watchdog.assert_called_once_with(peer_host="node1")
+        mock_watchdog_inst.join_watchdog.assert_called_once_with()
+
+    @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
+    def test_verify_sbd_device_classmethod_exception(self, mock_get_config):
+        mock_get_config.return_value = []
+        with self.assertRaises(ValueError) as err:
+            bootstrap.SBDManager.verify_sbd_device()
+        self.assertEqual("No sbd device configured", str(err.exception))
+        mock_get_config.assert_called_once_with()
+
+    @mock.patch('crmsh.bootstrap.SBDManager._verify_sbd_device')
+    @mock.patch('crmsh.utils.list_cluster_nodes_except_me')
+    @mock.patch('crmsh.bootstrap.SBDManager._get_sbd_device_from_config')
+    def test_verify_sbd_device_classmethod(self, mock_get_config, mock_list_nodes, mock_verify):
+        mock_get_config.return_value = ["/dev/sda1"]
+        mock_list_nodes.return_value = ["node1"]
+        bootstrap.SBDManager.verify_sbd_device()
+        mock_get_config.assert_called_once_with()
+        mock_verify.assert_called_once_with(["/dev/sda1"], ["node1"])
+
+    @mock.patch('crmsh.bootstrap.SBDManager._get_device_uuid')
+    def test_compare_device_uuid_return(self, mock_get_uuid):
+        self.sbd_inst._compare_device_uuid("/dev/sdb1", None)
+        mock_get_uuid.assert_not_called()
+
+    @mock.patch('crmsh.bootstrap.SBDManager._get_device_uuid')
+    def test_compare_device_uuid(self, mock_get_uuid):
+        mock_get_uuid.side_effect = ["1234", "5678"]
+        with self.assertRaises(ValueError) as err:
+            self.sbd_inst._compare_device_uuid("/dev/sdb1", ["node1"])
+        self.assertEqual("Device /dev/sdb1 doesn't have the same UUID with node1", str(err.exception))
+        mock_get_uuid.assert_has_calls([mock.call("/dev/sdb1"), mock.call("/dev/sdb1", "node1")])
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_get_device_uuid_error_dump(self, mock_run):
+        mock_run.return_value = (1, None, "error data")
+        with self.assertRaises(ValueError) as err:
+            self.sbd_inst._get_device_uuid("/dev/sdb1")
+        self.assertEqual("Cannot dump sbd meta-data: error data", str(err.exception))
+        mock_run.assert_called_once_with("sbd -d /dev/sdb1 dump")
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_get_device_uuid_not_match(self, mock_run):
+        mock_run.return_value = (0, "output data", None)
+        with self.assertRaises(ValueError) as err:
+            self.sbd_inst._get_device_uuid("/dev/sdb1")
+        self.assertEqual("Cannot find sbd device UUID for /dev/sdb1", str(err.exception))
+        mock_run.assert_called_once_with("sbd -d /dev/sdb1 dump")
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    def test_get_device_uuid(self, mock_run):
+        output = """
+        ==Dumping header on disk /dev/sda1
+        Header version     : 2.1
+        UUID               : a2e9a92c-cc72-4ef9-ac55-ccc342f3546b
+        Number of slots    : 255
+        Sector size        : 512
+        Timeout (watchdog) : 5
+        Timeout (allocate) : 2
+        Timeout (loop)     : 1
+        Timeout (msgwait)  : 10
+        ==Header on disk /dev/sda1 is dumped
+        """
+        mock_run.return_value = (0, output, None)
+        res = self.sbd_inst._get_device_uuid("/dev/sda1")
+        self.assertEqual(res, "a2e9a92c-cc72-4ef9-ac55-ccc342f3546b")
+        mock_run.assert_called_once_with("sbd -d /dev/sda1 dump")
 
 
 class TestBootstrap(unittest.TestCase):
@@ -386,34 +918,108 @@ class TestBootstrap(unittest.TestCase):
         """
 
     @mock.patch('crmsh.bootstrap.configure_local_ssh_key')
-    @mock.patch('crmsh.bootstrap.start_service')
+    @mock.patch('crmsh.utils.start_service')
     def test_init_ssh(self, mock_start_service, mock_config_ssh):
         bootstrap.init_ssh()
-        mock_start_service.assert_called_once_with("sshd.service")
-        mock_config_ssh.assert_called_once_with()
+        mock_start_service.assert_called_once_with("sshd.service", enable=True)
+        mock_config_ssh.assert_has_calls([
+            mock.call("root"),
+            mock.call("hacluster")
+            ])
 
-    @mock.patch('crmsh.bootstrap.append_unique')
-    @mock.patch('builtins.open', create=True)
+    @mock.patch('crmsh.userdir.gethomedir')
+    def test_key_files(self, mock_gethome):
+        mock_gethome.return_value = "/root"
+        expected_res = {"private": "/root/.ssh/id_rsa", "public": "/root/.ssh/id_rsa.pub", "authorized": "/root/.ssh/authorized_keys"}
+        self.assertEqual(bootstrap.key_files("root"), expected_res)
+        mock_gethome.assert_called_once_with("root")
+
+    @mock.patch('builtins.open')
+    def test_is_nologin(self, mock_open_file):
+        data = "hacluster:x:90:90:heartbeat processes:/var/lib/heartbeat/cores/hacluster:/sbin/nologin"
+        mock_open_file.return_value = mock.mock_open(read_data=data).return_value
+        assert bootstrap.is_nologin("hacluster") is not None
+        mock_open_file.assert_called_once_with("/etc/passwd")
+
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.is_nologin')
+    def test_change_user_shell_return(self, mock_nologin, mock_status, mock_confirm):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_nologin.return_value = True
+        mock_confirm.return_value = False
+
+        bootstrap.change_user_shell("hacluster")
+
+        mock_nologin.assert_called_once_with("hacluster")
+        mock_confirm.assert_called_once_with("Continue?")
+
+    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.bootstrap.is_nologin')
+    def test_change_user_shell_return(self, mock_nologin, mock_invoke):
+        bootstrap._context = mock.Mock(yes_to_all=True)
+        mock_nologin.return_value = True
+
+        bootstrap.change_user_shell("hacluster")
+
+        mock_nologin.assert_called_once_with("hacluster")
+        mock_invoke.assert_called_once_with("usermod -s /bin/bash hacluster")
+
     @mock.patch('crmsh.utils.this_node')
+    @mock.patch('crmsh.bootstrap.error')
     @mock.patch('crmsh.bootstrap.invoke')
     @mock.patch('crmsh.bootstrap.status')
     @mock.patch('os.path.exists')
-    def test_configure_local_ssh_key(self, mock_exists, mock_status, mock_invoke,
-            mock_this_node, mock_open_file, mock_append):
+    @mock.patch('crmsh.bootstrap.key_files')
+    @mock.patch('crmsh.bootstrap.change_user_shell')
+    def test_configure_local_ssh_key_error(self, mock_change_shell, mock_key_files, mock_exists, mock_status, mock_invoke, mock_error, mock_this_node):
+        mock_key_files.return_value = {"private": "/root/.ssh/id_rsa", "public": "/root/.ssh/id_rsa.pub", "authorized": "/root/.ssh/authorized_keys"}
+        mock_exists.return_value = False
+        mock_invoke.return_value = (False, None, "error")
+        mock_this_node.return_value = "node1"
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit) as err:
+            bootstrap.configure_local_ssh_key("root")
+
+        mock_change_shell.assert_called_once_with("root")
+        mock_key_files.assert_called_once_with("root")
+        mock_exists.assert_called_once_with("/root/.ssh/id_rsa")
+        mock_status.assert_called_once_with("Generating SSH key for root")
+        mock_invoke.assert_called_once_with("ssh-keygen -q -f /root/.ssh/id_rsa -C 'Cluster Internal on node1' -N ''")
+        mock_error.assert_called_once_with("Failed to generate ssh key for root: error")
+
+    @mock.patch('crmsh.bootstrap.append_unique')
+    @mock.patch('builtins.open', create=True)
+    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.utils.add_su')
+    @mock.patch('crmsh.utils.this_node')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('os.path.exists')
+    @mock.patch('crmsh.bootstrap.key_files')
+    @mock.patch('crmsh.bootstrap.change_user_shell')
+    def test_configure_local_ssh_key(self, mock_change_shell, mock_key_files, mock_exists, mock_status, mock_this_node, mock_su, mock_invoke, mock_open_file, mock_append):
+        bootstrap._context = mock.Mock(yes_to_all=True)
+        mock_key_files.return_value = {"private": "/test/.ssh/id_rsa", "public": "/test/.ssh/id_rsa.pub", "authorized": "/test/.ssh/authorized_keys"}
         mock_exists.side_effect = [False, False]
         mock_this_node.return_value = "node1"
+        mock_invoke.return_value = (True, None, None)
+        mock_su.return_value = "cmd with su"
 
-        bootstrap.configure_local_ssh_key()
+        bootstrap.configure_local_ssh_key("test")
 
+        mock_change_shell.assert_called_once_with("test")
+        mock_key_files.assert_called_once_with("test")
         mock_exists.assert_has_calls([
-            mock.call(bootstrap.RSA_PRIVATE_KEY),
-            mock.call(bootstrap.AUTHORIZED_KEYS_FILE)
+            mock.call("/test/.ssh/id_rsa"),
+            mock.call("/test/.ssh/authorized_keys")
             ])
-        mock_status.assert_called_once_with("Generating SSH key")
-        mock_invoke.assert_called_once_with("ssh-keygen -q -f {} -C 'Cluster Internal on {}' -N ''".format(bootstrap.RSA_PRIVATE_KEY, mock_this_node.return_value))
+        mock_status.assert_called_once_with("Generating SSH key for test")
+        mock_invoke.assert_called_once_with("cmd with su")
+        mock_su.assert_called_once_with("ssh-keygen -q -f /test/.ssh/id_rsa -C 'Cluster Internal on node1' -N ''", "test")
         mock_this_node.assert_called_once_with()
-        mock_open_file.assert_called_once_with(bootstrap.AUTHORIZED_KEYS_FILE, 'w')
-        mock_append.assert_called_once_with(bootstrap.RSA_PUBLIC_KEY, bootstrap.AUTHORIZED_KEYS_FILE)
+        mock_open_file.assert_called_once_with("/test/.ssh/authorized_keys", 'w')
+        mock_append.assert_called_once_with("/test/.ssh/id_rsa.pub", "/test/.ssh/authorized_keys")
 
     @mock.patch('crmsh.bootstrap.append')
     @mock.patch('crmsh.utils.check_file_content_included')
@@ -423,16 +1029,17 @@ class TestBootstrap(unittest.TestCase):
         mock_check.assert_called_once_with("fromfile", "tofile")
         mock_append.assert_called_once_with("fromfile", "tofile")
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
     def test_append_to_remote_file(self, mock_invoke, mock_error):
-        mock_invoke.return_value = False
+        mock_invoke.return_value = (False, None, "error")
+        error_string = 'Failed to append contents of fromfile to node1:\n"error"\n\n    crmsh has no way to help you to setup up passwordless ssh among nodes at this time. \n    As the hint, likely, `PasswordAuthentication` is \'no\' in /etc/ssh/sshd_config. \n    Given in this case, users must setup passwordless ssh beforehand, or change it to \'yes\' and manage passwords properly\n    '
         bootstrap.append_to_remote_file("fromfile", "node1", "tofile")
         cmd = "cat fromfile | ssh -oStrictHostKeyChecking=no root@node1 'cat >> tofile'"
         mock_invoke.assert_called_once_with(cmd)
-        mock_error.assert_called_once_with("Failed to run \"{}\"".format(cmd))
+        mock_error.assert_called_once_with(error_string)
 
-    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.bootstrap.invokerc')
     def test_fetch_public_key_from_remote_node_exception(self, mock_invoke):
         mock_invoke.side_effect = [False, False, False, False]
 
@@ -448,77 +1055,101 @@ class TestBootstrap(unittest.TestCase):
             ])
 
     @mock.patch('crmsh.tmpfiles.create')
+    @mock.patch('crmsh.bootstrap.invokerc')
     @mock.patch('crmsh.bootstrap.invoke')
-    def test_fetch_public_key_from_remote_node(self, mock_invoke, mock_tmpfile):
-        mock_invoke.side_effect = [True, True]
+    def test_fetch_public_key_from_remote_node(self, mock_invoke, mock_invokerc, mock_tmpfile):
+        mock_invokerc.return_value = True
+        mock_invoke.return_value = (True, None, None)
         mock_tmpfile.return_value = (0, "temp_file_name")
 
         res = bootstrap.fetch_public_key_from_remote_node("node1")
         self.assertEqual(res, "temp_file_name")
 
-        mock_invoke.assert_has_calls([
-            mock.call("ssh -oStrictHostKeyChecking=no root@node1 'test -f /root/.ssh/id_rsa.pub'"),
-            mock.call("scp -oStrictHostKeyChecking=no root@node1:/root/.ssh/id_rsa.pub temp_file_name")
-            ])
+        mock_invokerc.assert_called_once_with("ssh -oStrictHostKeyChecking=no root@node1 'test -f /root/.ssh/id_rsa.pub'")
+        mock_invoke.assert_called_once_with("scp -oStrictHostKeyChecking=no root@node1:/root/.ssh/id_rsa.pub temp_file_name")
         mock_tmpfile.assert_called_once_with()
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     def test_join_ssh_no_seed_host(self, mock_error):
         mock_error.side_effect = ValueError
         with self.assertRaises(ValueError):
             bootstrap.join_ssh(None)
         mock_error.assert_called_once_with("No existing IP/hostname specified (use -c option)")
 
-    @mock.patch('crmsh.bootstrap.setup_passwordless_with_other_nodes')
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
+=======
+    @mock.patch('crmsh.bootstrap.setup_passwordless_with_other_nodes')
+    @mock.patch('crmsh.bootstrap.fatal')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.invoke')
     @mock.patch('crmsh.bootstrap.swap_public_ssh_key')
     @mock.patch('crmsh.bootstrap.configure_local_ssh_key')
-    @mock.patch('crmsh.bootstrap.start_service')
-    def test_join_ssh(self, mock_start_service, mock_config_ssh, mock_swap, mock_invoke, mock_error, mock_swap_other):
+    @mock.patch('crmsh.utils.start_service')
+    def test_join_ssh(self, mock_start_service, mock_config_ssh, mock_swap, mock_invoke, mock_error):
         bootstrap._context = mock.Mock(default_nic_list=["eth1"])
-        mock_invoke.return_value = False
+        mock_invoke.return_value = (False, None, "error")
 
         bootstrap.join_ssh("node1")
 
-        mock_start_service.assert_called_once_with("sshd.service")
-        mock_config_ssh.assert_called_once_with()
-        mock_swap.assert_called_once_with("node1")
+        mock_start_service.assert_called_once_with("sshd.service", enable=True)
+        mock_config_ssh.assert_has_calls([
+            mock.call("root"),
+            mock.call("hacluster")
+            ])
+        mock_swap.assert_has_calls([
+            mock.call("node1", "root"),
+            mock.call("node1", "hacluster")
+            ])
         mock_invoke.assert_called_once_with("ssh root@node1 crm cluster init -i eth1 ssh_remote")
-        mock_error.assert_called_once_with("Can't invoke crm cluster init -i eth1 ssh_remote on node1")
-        mock_swap_other.assert_called_once_with("node1")
+        mock_error.assert_called_once_with("Can't invoke crm cluster init -i eth1 ssh_remote on node1: error")
 
-    @mock.patch('crmsh.bootstrap.warn')
+    def test_swap_public_ssh_key_return(self):
+        bootstrap._context = mock.Mock(with_other_user=False)
+        bootstrap.swap_public_ssh_key("node1", "hacluster")
+
+    @mock.patch('crmsh.log.logger_bootstrap.warning')
     @mock.patch('crmsh.bootstrap.fetch_public_key_from_remote_node')
     @mock.patch('crmsh.utils.check_ssh_passwd_need')
-    def test_swap_public_ssh_key_exception(self, mock_check_passwd, mock_fetch, mock_warn):
+    @mock.patch('crmsh.bootstrap.key_files')
+    def test_swap_public_ssh_key_exception(self, mock_key_files, mock_check_passwd, mock_fetch, mock_warn):
+        mock_key_files.return_value = {"private": "/root/.ssh/id_rsa", "public": "/root/.ssh/id_rsa.pub", "authorized": "/root/.ssh/authorized_keys"}
         mock_check_passwd.return_value = False
         mock_fetch.side_effect = ValueError("No key exist")
 
         bootstrap.swap_public_ssh_key("node1")
 
+        mock_key_files.assert_called_once_with("root")
         mock_warn.assert_called_once_with(mock_fetch.side_effect)
-        mock_check_passwd.assert_called_once_with("node1")
-        mock_fetch.assert_called_once_with("node1")
+        mock_check_passwd.assert_called_once_with("node1", "root")
+        mock_fetch.assert_called_once_with("node1", "root")
 
     @mock.patch('crmsh.bootstrap.append_unique')
     @mock.patch('crmsh.bootstrap.fetch_public_key_from_remote_node')
     @mock.patch('crmsh.bootstrap.append_to_remote_file')
     @mock.patch('crmsh.bootstrap.status')
     @mock.patch('crmsh.utils.check_ssh_passwd_need')
-    def test_swap_public_ssh_key(self, mock_check_passwd, mock_status, mock_append_remote, mock_fetch, mock_append_unique):
+    @mock.patch('crmsh.bootstrap.key_files')
+    def test_swap_public_ssh_key(self, mock_key_files, mock_check_passwd, mock_status, mock_append_remote, mock_fetch, mock_append_unique):
+        mock_key_files.return_value = {"private": "/root/.ssh/id_rsa", "public": "/root/.ssh/id_rsa.pub", "authorized": "/root/.ssh/authorized_keys"}
         mock_check_passwd.return_value = True
         mock_fetch.return_value = "file1"
 
         bootstrap.swap_public_ssh_key("node1")
 
-        mock_check_passwd.assert_called_once_with("node1")
+        mock_key_files.assert_called_once_with("root")
+        mock_check_passwd.assert_called_once_with("node1", "root")
         mock_status.assert_called_once_with("Configuring SSH passwordless with root@node1")
+<<<<<<< HEAD
+        mock_append_remote.assert_called_once_with("/root/.ssh/id_rsa.pub", "node1", "/root/.ssh/authorized_keys")
+        mock_fetch.assert_called_once_with("node1", "root")
+        mock_append_unique.assert_called_once_with("file1", "/root/.ssh/authorized_keys")
+=======
         mock_append_remote.assert_called_once_with(bootstrap.RSA_PUBLIC_KEY, "node1", bootstrap.AUTHORIZED_KEYS_FILE)
         mock_fetch.assert_called_once_with("node1")
         mock_append_unique.assert_called_once_with("file1", bootstrap.AUTHORIZED_KEYS_FILE)
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.utils.get_stdout_stderr')
     def test_setup_passwordless_with_other_nodes_cluster_inactive(self, mock_run, mock_error):
         mock_run.return_value = (1, None, None)
@@ -529,29 +1160,26 @@ class TestBootstrap(unittest.TestCase):
 
         mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no root@node1 systemctl -q is-active pacemaker.service")
         mock_error.assert_called_once_with("Cluster is inactive on node1")
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.utils.get_stdout_stderr')
     def test_setup_passwordless_with_other_nodes_failed_fetch_nodelist(self, mock_run, mock_error):
-        mock_run.side_effect = [(0, None, None), (1, None, None)]
+        mock_run.return_value = (1, None, None)
         mock_error.side_effect = SystemExit
 
         with self.assertRaises(SystemExit):
             bootstrap.setup_passwordless_with_other_nodes("node1")
 
-        mock_run.assert_has_calls([
-            mock.call("ssh -o StrictHostKeyChecking=no root@node1 systemctl -q is-active pacemaker.service"),
-            mock.call("ssh -o StrictHostKeyChecking=no root@node1 crm_node -l")
-            ])
+        mock_run.assert_called_once_with("ssh -o StrictHostKeyChecking=no root@node1 crm_node -l")
         mock_error.assert_called_once_with("Can't fetch cluster nodes list from node1: None")
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.utils.get_stdout_stderr')
     def test_setup_passwordless_with_other_nodes_failed_fetch_hostname(self, mock_run, mock_error):
         out_node_list = """1 node1 member
         2 node2 member"""
         mock_run.side_effect = [
-                (0, None, None),
                 (0, out_node_list, None),
                 (1, None, None)
                 ]
@@ -561,7 +1189,6 @@ class TestBootstrap(unittest.TestCase):
             bootstrap.setup_passwordless_with_other_nodes("node1")
 
         mock_run.assert_has_calls([
-            mock.call("ssh -o StrictHostKeyChecking=no root@node1 systemctl -q is-active pacemaker.service"),
             mock.call("ssh -o StrictHostKeyChecking=no root@node1 crm_node -l"),
             mock.call("ssh -o StrictHostKeyChecking=no root@node1 hostname")
             ])
@@ -573,7 +1200,6 @@ class TestBootstrap(unittest.TestCase):
         out_node_list = """1 node1 member
         2 node2 member"""
         mock_run.side_effect = [
-                (0, None, None),
                 (0, out_node_list, None),
                 (0, "node1", None)
                 ]
@@ -581,11 +1207,13 @@ class TestBootstrap(unittest.TestCase):
         bootstrap.setup_passwordless_with_other_nodes("node1")
 
         mock_run.assert_has_calls([
-            mock.call("ssh -o StrictHostKeyChecking=no root@node1 systemctl -q is-active pacemaker.service"),
             mock.call("ssh -o StrictHostKeyChecking=no root@node1 crm_node -l"),
             mock.call("ssh -o StrictHostKeyChecking=no root@node1 hostname")
             ])
-        mock_swap.assert_called_once_with("node2")
+        mock_swap.assert_has_calls([
+            mock.call("node2", "root"),
+            mock.call("node2", "hacluster")
+            ])
 
     @mock.patch('builtins.open')
     @mock.patch('crmsh.bootstrap.append')
@@ -619,41 +1247,28 @@ class TestBootstrap(unittest.TestCase):
         ])
         mock_append.assert_called_once_with("/root/.ssh/id_rsa.pub", "/root/.ssh/authorized_keys")
 
-    @mock.patch('crmsh.utils.IP.is_valid_ip')
     @mock.patch('crmsh.utils.get_stdout_stderr')
-    def test_get_cluster_node_hostname_None(self, mock_stdout_stderr, mock_valid_ip):
-        bootstrap._context = mock.Mock(cluster_node=None)
+    def test_get_cluster_node_hostname(self, mock_stdout_stderr):
+        bootstrap._context = mock.Mock(cluster_node="node1")
+        mock_stdout_stderr.return_value = (0, "Node1", None)
 
         peer_node = bootstrap.get_cluster_node_hostname()
-        assert peer_node is None
+        assert peer_node == "Node1"
 
-        mock_valid_ip.assert_not_called()
-        mock_stdout_stderr.assert_not_called()
+        mock_stdout_stderr.assert_called_once_with("ssh node1 crm_node --name")
 
-    @mock.patch('crmsh.utils.IP.is_valid_ip')
+    @mock.patch('crmsh.bootstrap.error')
     @mock.patch('crmsh.utils.get_stdout_stderr')
-    def test_get_cluster_node_hostname_IP(self, mock_stdout_stderr, mock_valid_ip):
-        bootstrap._context = mock.Mock(cluster_node="1.1.1.1")
-        mock_valid_ip.return_value = True
-        mock_stdout_stderr.return_value = (0, "node1", None)
-
-        peer_node = bootstrap.get_cluster_node_hostname()
-        assert peer_node == "node1"
-
-        mock_valid_ip.assert_called_once_with("1.1.1.1")
-        mock_stdout_stderr.assert_called_once_with("ssh 1.1.1.1 crm_node --name")
-
-    @mock.patch('crmsh.utils.IP.is_valid_ip')
-    @mock.patch('crmsh.utils.get_stdout_stderr')
-    def test_get_cluster_node_hostname_HOST(self, mock_stdout_stderr, mock_valid_ip):
+    def test_get_cluster_node_hostname_error(self, mock_stdout_stderr, mock_error):
         bootstrap._context = mock.Mock(cluster_node="node2")
-        mock_valid_ip.return_value = False
+        mock_stdout_stderr.return_value = (1, None, "error")
+        mock_error.side_effect = SystemExit
 
-        peer_node = bootstrap.get_cluster_node_hostname()
-        assert peer_node == "node2"
+        with self.assertRaises(SystemExit):
+            bootstrap.get_cluster_node_hostname()
 
-        mock_valid_ip.assert_called_once_with("node2")
-        mock_stdout_stderr.assert_not_called()
+        mock_stdout_stderr.assert_called_once_with("ssh node2 crm_node --name")
+        mock_error.assert_called_once_with("error")
 
     @mock.patch('crmsh.utils.this_node')
     @mock.patch('re.search')
@@ -682,8 +1297,13 @@ class TestBootstrap(unittest.TestCase):
         mock_get_peer.assert_called_once_with()
         mock_search.assert_called_once_with("Online: .* node1 ", "text")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.stop_service')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.stop_service')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.csync2_update')
     @mock.patch('crmsh.corosync.conf')
     @mock.patch('shutil.copy')
@@ -716,8 +1336,13 @@ class TestBootstrap(unittest.TestCase):
         mock_stop_service.assert_called_once_with("corosync")
         mock_error.assert_called_once_with("Cannot see peer node \"node1\", please check the communication IP")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.stop_service')
+=======
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.stop_service')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.csync2_update')
     @mock.patch('crmsh.corosync.conf')
     @mock.patch('shutil.copy')
@@ -744,24 +1369,30 @@ class TestBootstrap(unittest.TestCase):
         mock_stop_service.assert_not_called()
         mock_error.assert_not_called()
 
+    @mock.patch('crmsh.bootstrap.invokerc')
     @mock.patch('crmsh.bootstrap.invoke')
-    def test_csync2_update_no_conflicts(self, mock_invoke):
-        mock_invoke.side_effect = [True, True]
+    def test_csync2_update_no_conflicts(self, mock_invoke, mock_invokerc):
+        mock_invokerc.return_value = True
         bootstrap.csync2_update("/etc/corosync.conf")
-        mock_invoke.assert_has_calls([
-            mock.call("csync2 -rm /etc/corosync.conf"),
-            mock.call("csync2 -rxv /etc/corosync.conf")
-            ])
+        mock_invoke.assert_called_once_with("csync2 -rm /etc/corosync.conf")
+        mock_invokerc.assert_called_once_with("csync2 -rxv /etc/corosync.conf")
 
+<<<<<<< HEAD
     @mock.patch('crmsh.bootstrap.warn')
+    @mock.patch('crmsh.bootstrap.invokerc')
+=======
+    @mock.patch('crmsh.log.logger_bootstrap.warning')
+>>>>>>> Dev: unittest: ut changed for using logging in crmsh
     @mock.patch('crmsh.bootstrap.invoke')
-    def test_csync2_update(self, mock_invoke, mock_warn):
-        mock_invoke.side_effect = [True, False, True, False]
+    def test_csync2_update(self, mock_invoke, mock_invokerc, mock_warn):
+        mock_invokerc.side_effect = [False, False]
         bootstrap.csync2_update("/etc/corosync.conf")
         mock_invoke.assert_has_calls([
             mock.call("csync2 -rm /etc/corosync.conf"),
+            mock.call("csync2 -rf /etc/corosync.conf")
+            ])
+        mock_invokerc.assert_has_calls([
             mock.call("csync2 -rxv /etc/corosync.conf"),
-            mock.call("csync2 -rf /etc/corosync.conf"),
             mock.call("csync2 -rxv /etc/corosync.conf")
             ])
         mock_warn.assert_called_once_with("/etc/corosync.conf was not synced")
@@ -780,20 +1411,22 @@ class TestBootstrap(unittest.TestCase):
         mock_interfaces_inst.get_default_nic_list_from_route.assert_called_once_with()
         mock_interfaces_inst.get_default_ip_list.assert_called_once_with()
 
+    @mock.patch('crmsh.utils.disable_service')
     @mock.patch('crmsh.bootstrap.status')
-    def test_init_qdevice_no_config(self, mock_status):
+    def test_init_qdevice_no_config(self, mock_status, mock_disable):
         bootstrap._context = mock.Mock(qdevice_inst=None)
         bootstrap.init_qdevice()
         mock_status.assert_not_called()
+        mock_disable.assert_called_once_with("corosync-qdevice.service")
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
     @mock.patch('crmsh.utils.check_ssh_passwd_need')
     @mock.patch('crmsh.bootstrap.status')
     def test_init_qdevice_copy_ssh_key_failed(self, mock_status, mock_ssh, mock_invoke, mock_error):
         bootstrap._context = mock.Mock(qdevice_inst=self.qdevice_with_ip)
         mock_ssh.return_value = True
-        mock_invoke.return_value = False
+        mock_invoke.return_value = (False, None, "error")
         mock_error.side_effect = SystemExit
 
         with self.assertRaises(SystemExit):
@@ -805,7 +1438,7 @@ class TestBootstrap(unittest.TestCase):
             ])
         mock_ssh.assert_called_once_with("10.10.10.123")
         mock_invoke.assert_called_once_with("ssh-copy-id -i /root/.ssh/id_rsa.pub root@10.10.10.123")
-        mock_error.assert_called_once_with("Failed to copy ssh key")
+        mock_error.assert_called_once_with("Failed to copy ssh key: error")
 
     @mock.patch('crmsh.bootstrap.start_qdevice_service')
     @mock.patch('crmsh.bootstrap.confirm')
@@ -856,12 +1489,57 @@ class TestBootstrap(unittest.TestCase):
         mock_status_done.assert_called_once_with()
         mock_start_qdevice.assert_called_once_with()
 
+    @mock.patch('crmsh.bootstrap.prompt_for_string')
+    def test_configure_qdevice_interactive_return(self, mock_prompt):
+        bootstrap._context = mock.Mock(yes_to_all=True)
+        bootstrap.configure_qdevice_interactive()
+        mock_prompt.assert_not_called()
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.prompt_for_string')
+    @mock.patch('crmsh.bootstrap.confirm')
+    def test_configure_qdevice_interactive_error(self, mock_confirm, mock_prompt, mock_error):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_confirm.return_value = True
+        mock_prompt.return_value = None
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap.configure_qdevice_interactive()
+
+        mock_error.assert_called_once_with("Address of QNetd is required")
+        mock_confirm.assert_called_once_with("Do you want to configure QDevice?")
+        mock_prompt.assert_called_once_with("HOST or IP of the QNetd server to be used")
+
+    @mock.patch('crmsh.corosync.QDevice')
+    @mock.patch('crmsh.bootstrap.prompt_for_string')
+    @mock.patch('crmsh.bootstrap.confirm')
+    def test_configure_qdevice_interactive(self, mock_confirm, mock_prompt, mock_qdevice):
+        bootstrap._context = mock.Mock(yes_to_all=False)
+        mock_confirm.return_value = True
+        mock_prompt.side_effect = ["qnetd-node", 5403, "ffsplit", "lowest", "on", None]
+        mock_qdevice_inst = mock.Mock()
+        mock_qdevice.return_value = mock_qdevice_inst
+
+        bootstrap.configure_qdevice_interactive()
+        mock_confirm.assert_called_once_with("Do you want to configure QDevice?")
+        mock_prompt.assert_has_calls([
+            mock.call("HOST or IP of the QNetd server to be used"),
+            mock.call("TCP PORT of QNetd server", default=5403),
+            mock.call("QNetd decision ALGORITHM (ffsplit/lms)", default="ffsplit"),
+            mock.call("QNetd TIE_BREAKER (lowest/highest/valid node id)", default="lowest"),
+            mock.call("Whether using TLS on QDevice/QNetd (on/off/required)", default="on"),
+            mock.call("Heuristics COMMAND to run with absolute path; For multiple commands, use \";\" to separate")
+            ])
+        mock_qdevice.assert_called_once_with('qnetd-node', port=5403, algo='ffsplit', tie_breaker='lowest', tls='on', cmds=None, mode=None)
+        mock_qdevice_inst.valid_attr.assert_called_once_with()
+
     @mock.patch('crmsh.corosync.QDevice.start_qnetd')
     @mock.patch('crmsh.corosync.QDevice.enable_qnetd')
     @mock.patch('crmsh.utils.cluster_run_cmd')
     @mock.patch('crmsh.bootstrap.status')
-    def test_start_qdevice_service(self, mock_status, mock_cluster_run, mock_enable_qnetd, mock_start_qnetd):
-        bootstrap._context = mock.Mock(qdevice_inst=self.qdevice_with_ip)
+    def test_start_qdevice_service_reload(self, mock_status, mock_cluster_run, mock_enable_qnetd, mock_start_qnetd):
+        bootstrap._context = mock.Mock(qdevice_inst=self.qdevice_with_ip, qdevice_reload_policy=bootstrap.QdevicePolicy.QDEVICE_RELOAD)
 
         bootstrap.start_qdevice_service()
 
@@ -873,8 +1551,54 @@ class TestBootstrap(unittest.TestCase):
             ])
         mock_cluster_run.assert_has_calls([
             mock.call("systemctl enable corosync-qdevice"),
-            mock.call("systemctl start corosync-qdevice")
+            mock.call("systemctl restart corosync-qdevice")
             ])
+        mock_enable_qnetd.assert_called_once_with()
+        mock_start_qnetd.assert_called_once_with()
+
+    @mock.patch('crmsh.corosync.QDevice.start_qnetd')
+    @mock.patch('crmsh.corosync.QDevice.enable_qnetd')
+    @mock.patch('crmsh.bootstrap.wait_for_cluster')
+    @mock.patch('crmsh.utils.cluster_run_cmd')
+    @mock.patch('crmsh.bootstrap.status')
+    def test_start_qdevice_service_restart(self, mock_status, mock_cluster_run, mock_wait, mock_enable_qnetd, mock_start_qnetd):
+        bootstrap._context = mock.Mock(qdevice_inst=self.qdevice_with_ip, qdevice_reload_policy=bootstrap.QdevicePolicy.QDEVICE_RESTART)
+
+        bootstrap.start_qdevice_service()
+
+        mock_status.assert_has_calls([
+            mock.call("Enable corosync-qdevice.service in cluster"),
+            mock.call("Restarting cluster service"),
+            mock.call("Enable corosync-qnetd.service on 10.10.10.123"),
+            mock.call("Starting corosync-qnetd.service on 10.10.10.123")
+            ])
+        mock_wait.assert_called_once_with()
+        mock_cluster_run.assert_has_calls([
+            mock.call("systemctl enable corosync-qdevice"),
+            mock.call("crm cluster restart")
+            ])
+        mock_enable_qnetd.assert_called_once_with()
+        mock_start_qnetd.assert_called_once_with()
+
+    @mock.patch('crmsh.corosync.QDevice.start_qnetd')
+    @mock.patch('crmsh.corosync.QDevice.enable_qnetd')
+    @mock.patch('crmsh.bootstrap.warn')
+    @mock.patch('crmsh.utils.cluster_run_cmd')
+    @mock.patch('crmsh.bootstrap.status')
+    def test_start_qdevice_service_warn(self, mock_status, mock_cluster_run, mock_warn, mock_enable_qnetd, mock_start_qnetd):
+        bootstrap._context = mock.Mock(qdevice_inst=self.qdevice_with_ip, qdevice_reload_policy=bootstrap.QdevicePolicy.QDEVICE_RESTART_LATER)
+
+        bootstrap.start_qdevice_service()
+
+        mock_status.assert_has_calls([
+            mock.call("Enable corosync-qdevice.service in cluster"),
+            mock.call("Enable corosync-qnetd.service on 10.10.10.123"),
+            mock.call("Starting corosync-qnetd.service on 10.10.10.123")
+            ])
+        mock_cluster_run.assert_has_calls([
+            mock.call("systemctl enable corosync-qdevice"),
+            ])
+        mock_warn.assert_called_once_with("To use qdevice service, need to restart cluster service manually on each node")
         mock_enable_qnetd.assert_called_once_with()
         mock_start_qnetd.assert_called_once_with()
 
@@ -888,7 +1612,7 @@ class TestBootstrap(unittest.TestCase):
     @mock.patch('crmsh.corosync.QDevice.remove_qdevice_db')
     def test_config_qdevice(self, mock_remove_qdevice_db, mock_write_qdevice_config, mock_is_unicast,
             mock_add_nodelist, mock_status_long, mock_update_votes, mock_cluster_run, mock_status_done):
-        bootstrap._context = mock.Mock(qdevice_inst=self.qdevice_with_ip)
+        bootstrap._context = mock.Mock(qdevice_inst=self.qdevice_with_ip, qdevice_reload_policy=bootstrap.QdevicePolicy.QDEVICE_RELOAD)
         mock_is_unicast.return_value = False
 
         bootstrap.config_qdevice()
@@ -902,7 +1626,7 @@ class TestBootstrap(unittest.TestCase):
         mock_cluster_run.assert_called_once_with("crm corosync reload")
         mock_status_done.assert_called_once_with()
 
-    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.fatal')
     @mock.patch('crmsh.utils.is_qdevice_configured')
     def test_remove_qdevice_no_configured(self, mock_qdevice_configured, mock_error):
         mock_qdevice_configured.return_value = False
@@ -932,12 +1656,15 @@ class TestBootstrap(unittest.TestCase):
     @mock.patch('crmsh.bootstrap.status_long')
     @mock.patch('crmsh.bootstrap.invoke')
     @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.evaluate_qdevice_quorum_effect')
+    @mock.patch('crmsh.utils.check_all_nodes_reachable')
     @mock.patch('crmsh.bootstrap.confirm')
     @mock.patch('crmsh.utils.is_qdevice_configured')
-    def test_remove_qdevice(self, mock_qdevice_configured, mock_confirm, mock_status, mock_invoke,
-            mock_status_long, mock_get_value, mock_qdevice, mock_update_votes, mock_status_done):
+    def test_remove_qdevice_reload(self, mock_qdevice_configured, mock_confirm, mock_reachable, mock_evaluate,
+            mock_status, mock_invoke, mock_status_long, mock_get_value, mock_qdevice, mock_update_votes, mock_status_done):
         mock_qdevice_configured.return_value = True
         mock_confirm.return_value = True
+        mock_evaluate.return_value = bootstrap.QdevicePolicy.QDEVICE_RELOAD
         mock_get_value.return_value = "10.10.10.123"
         mock_qdevice_inst = mock.Mock()
         mock_qdevice.return_value = mock_qdevice_inst
@@ -948,6 +1675,8 @@ class TestBootstrap(unittest.TestCase):
 
         mock_qdevice_configured.assert_called_once_with()
         mock_confirm.assert_called_once_with("Removing QDevice service and configuration from cluster: Are you sure?")
+        mock_reachable.assert_called_once_with()
+        mock_evaluate.assert_called_once_with(bootstrap.QDEVICE_REMOVE)
         mock_status.assert_has_calls([
             mock.call("Disable corosync-qdevice.service"),
             mock.call("Stopping corosync-qdevice.service")
@@ -966,7 +1695,7 @@ class TestBootstrap(unittest.TestCase):
         mock_status_done.assert_called_once_with()
 
     @mock.patch('crmsh.bootstrap.status_done')
-    @mock.patch('crmsh.bootstrap.start_service')
+    @mock.patch('crmsh.utils.start_service')
     @mock.patch('crmsh.corosync.QDevice')
     @mock.patch('crmsh.corosync.get_value')
     @mock.patch('crmsh.utils.is_qdevice_tls_on')
@@ -999,8 +1728,63 @@ class TestBootstrap(unittest.TestCase):
         mock_get_value.assert_called_once_with("quorum.device.net.host")
         mock_qdevice.assert_called_once_with("10.10.10.123", cluster_node="node2")
         mock_qdevice_inst.certificate_process_on_join.assert_called_once_with()
-        mock_start_service.assert_called_once_with("corosync-qdevice.service")
+        mock_start_service.assert_called_once_with("corosync-qdevice.service", enable=True)
         mock_status_done.assert_called_once_with()
+
+    @mock.patch('crmsh.utils.get_stdout_stderr')
+    @mock.patch('crmsh.bootstrap.log')
+    def test_invoke(self, mock_log, mock_run):
+        mock_run.return_value = (0, "output", "error")
+        res = bootstrap.invoke("cmd --option")
+        self.assertEqual(res, (True, "output", "error"))
+        mock_log.assert_has_calls([
+            mock.call('+ cmd --option'),
+            mock.call('output'),
+            mock.call('error')
+            ])
+
+    @mock.patch('crmsh.bootstrap.invoke')
+    def test_invokerc(self, mock_invoke):
+        mock_invoke.return_value = (True, None, None)
+        res = bootstrap.invokerc("cmd")
+        self.assertEqual(res, True)
+        mock_invoke.assert_called_once_with("cmd")
+
+    @mock.patch('crmsh.utils.is_quorate')
+    @mock.patch('crmsh.utils.get_quorum_votes_dict')
+    def test_evaluate_qdevice_quorum_effect_reload(self, mock_get_dict, mock_quorate):
+        mock_get_dict.return_value = {'Expected': '2', 'Total': '2'}
+        mock_quorate.return_value = True
+        res = bootstrap.evaluate_qdevice_quorum_effect(bootstrap.QDEVICE_ADD)
+        self.assertEqual(res, bootstrap.QdevicePolicy.QDEVICE_RELOAD)
+        mock_get_dict.assert_called_once_with()
+        mock_quorate.assert_called_once_with(3, 2)
+
+    @mock.patch('crmsh.utils.has_resource_running')
+    @mock.patch('crmsh.utils.is_quorate')
+    @mock.patch('crmsh.utils.get_quorum_votes_dict')
+    def test_evaluate_qdevice_quorum_effect_reload(self, mock_get_dict, mock_quorate, mock_ra_running):
+        mock_get_dict.return_value = {'Expected': '2', 'Total': '2'}
+        mock_quorate.return_value = False
+        mock_ra_running.return_value = True
+        res = bootstrap.evaluate_qdevice_quorum_effect(bootstrap.QDEVICE_REMOVE)
+        self.assertEqual(res, bootstrap.QdevicePolicy.QDEVICE_RESTART_LATER)
+        mock_get_dict.assert_called_once_with()
+        mock_quorate.assert_called_once_with(2, 1)
+        mock_ra_running.assert_called_once_with()
+
+    @mock.patch('crmsh.utils.has_resource_running')
+    @mock.patch('crmsh.utils.is_quorate')
+    @mock.patch('crmsh.utils.get_quorum_votes_dict')
+    def test_evaluate_qdevice_quorum_effect(self, mock_get_dict, mock_quorate, mock_ra_running):
+        mock_get_dict.return_value = {'Expected': '2', 'Total': '2'}
+        mock_quorate.return_value = False
+        mock_ra_running.return_value = False
+        res = bootstrap.evaluate_qdevice_quorum_effect(bootstrap.QDEVICE_REMOVE)
+        self.assertEqual(res, bootstrap.QdevicePolicy.QDEVICE_RESTART)
+        mock_get_dict.assert_called_once_with()
+        mock_quorate.assert_called_once_with(2, 1)
+        mock_ra_running.assert_called_once_with()
 
 
 class TestValidation(unittest.TestCase):
@@ -1078,7 +1862,7 @@ class TestValidation(unittest.TestCase):
         bootstrap.Validation.valid_port("10.10.10.1")
         mock_port.assert_called_once_with()
 
-    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.bootstrap.invokerc')
     @mock.patch('crmsh.utils.IP.is_ipv6')
     def test_valid_admin_ip_in_use(self, mock_ipv6, mock_invoke):
         mock_ipv6.return_value = False
@@ -1090,3 +1874,404 @@ class TestValidation(unittest.TestCase):
 
         mock_ipv6.assert_called_once_with("10.10.10.1")
         mock_invoke.assert_called_once_with("ping -c 1 10.10.10.1")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_cluster_is_active(self, mock_context, mock_init, mock_active,
+            mock_error):
+        mock_context_inst = mock.Mock()
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = False
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+             bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_error.assert_called_once_with("Cluster is not active - can't execute removing action")
+
+    @mock.patch('crmsh.bootstrap.remove_qdevice')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_qdevice(self, mock_context, mock_init, mock_active,
+            mock_error, mock_qdevice):
+        mock_context_inst = mock.Mock(qdevice=True, cluster_node=None)
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+
+        bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_error.assert_not_called()
+        mock_qdevice.assert_called_once_with()
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_qdevice_cluster_node(self, mock_context, mock_init, mock_active, mock_error):
+        mock_context_inst = mock.Mock(qdevice=True, cluster_node="node1")
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_error.assert_called_once_with("Either remove node or qdevice")
+
+    @mock.patch('crmsh.bootstrap.prompt_for_string')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.remove_qdevice')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_no_cluster_node(self, mock_context, mock_init, mock_active,
+            mock_error, mock_qdevice, mock_status, mock_prompt):
+        mock_context_inst = mock.Mock(yes_to_all=False, cluster_node=None, qdevice_rm_flag=None)
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+        mock_prompt.return_value = None
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_qdevice.assert_not_called()
+        mock_status.assert_called_once_with('Remove This Node from Cluster:\n  You will be asked for the IP address or name of an existing node,\n  which will be removed from the cluster. This command must be\n  executed from a different node in the cluster.\n')
+        mock_prompt.assert_called_once_with("IP address or hostname of cluster node (e.g.: 192.168.1.1)", ".+")
+        mock_error.assert_called_once_with("No existing IP/hostname specified (use -c option)")
+
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.get_cluster_node_hostname')
+    @mock.patch('crmsh.bootstrap.remove_qdevice')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_no_confirm(self, mock_context, mock_init, mock_active,
+            mock_error, mock_qdevice, mock_hostname, mock_confirm):
+        mock_context_inst = mock.Mock(cluster_node="node1", force=False, qdevice_rm_flag=None)
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+        mock_hostname.return_value = "node1"
+        mock_confirm.return_value = False
+
+        bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_qdevice.assert_not_called()
+        mock_error.assert_not_called()
+        mock_hostname.assert_called_once_with()
+        mock_confirm.assert_called_once_with('Removing node "node1" from the cluster: Are you sure?')
+
+    @mock.patch('crmsh.utils.this_node')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.get_cluster_node_hostname')
+    @mock.patch('crmsh.bootstrap.remove_qdevice')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_self_need_force(self, mock_context, mock_init, mock_active,
+            mock_error, mock_qdevice, mock_hostname, mock_confirm, mock_this_node):
+        mock_context_inst = mock.Mock(cluster_node="node1", force=False, qdevice_rm_flag=None)
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+        mock_hostname.return_value = "node1"
+        mock_confirm.return_value = True
+        mock_this_node.return_value = "node1"
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_qdevice.assert_not_called()
+        mock_hostname.assert_called_once_with()
+        mock_confirm.assert_called_once_with('Removing node "node1" from the cluster: Are you sure?')
+        mock_this_node.assert_called_once_with()
+        mock_error.assert_called_once_with("Removing self requires --force")
+
+    @mock.patch('crmsh.bootstrap.remove_self')
+    @mock.patch('crmsh.utils.this_node')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.get_cluster_node_hostname')
+    @mock.patch('crmsh.bootstrap.remove_qdevice')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_self(self, mock_context, mock_init, mock_active,
+            mock_error, mock_qdevice, mock_hostname, mock_confirm, mock_this_node, mock_self):
+        mock_context_inst = mock.Mock(cluster_node="node1", force=True, qdevice_rm_flag=None)
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+        mock_hostname.return_value = "node1"
+        mock_this_node.return_value = "node1"
+
+        bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_qdevice.assert_not_called()
+        mock_hostname.assert_called_once_with()
+        mock_confirm.assert_not_called()
+        mock_this_node.assert_called_once_with()
+        mock_error.assert_not_called()
+        mock_self.assert_called_once_with()
+
+    @mock.patch('crmsh.xmlutil.listnodes')
+    @mock.patch('crmsh.utils.this_node')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.get_cluster_node_hostname')
+    @mock.patch('crmsh.bootstrap.remove_qdevice')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove_not_in_cluster(self, mock_context, mock_init, mock_active,
+            mock_error, mock_qdevice, mock_hostname, mock_confirm, mock_this_node, mock_list):
+        mock_context_inst = mock.Mock(cluster_node="node2", force=True, qdevice_rm_flag=None)
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+        mock_hostname.return_value = "node2"
+        mock_this_node.return_value = "node1"
+        mock_list.return_value = ["node1", "node3"]
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_qdevice.assert_not_called()
+        mock_hostname.assert_called_once_with()
+        mock_confirm.assert_not_called()
+        mock_this_node.assert_called_once_with()
+        mock_error.assert_called_once_with("Specified node node2 is not configured in cluster! Unable to remove.")
+
+    @mock.patch('crmsh.bootstrap.remove_node_from_cluster')
+    @mock.patch('crmsh.xmlutil.listnodes')
+    @mock.patch('crmsh.utils.this_node')
+    @mock.patch('crmsh.bootstrap.confirm')
+    @mock.patch('crmsh.bootstrap.get_cluster_node_hostname')
+    @mock.patch('crmsh.bootstrap.remove_qdevice')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.service_is_active')
+    @mock.patch('crmsh.bootstrap.init')
+    @mock.patch('crmsh.bootstrap.Context')
+    def test_bootstrap_remove(self, mock_context, mock_init, mock_active,
+            mock_error, mock_qdevice, mock_hostname, mock_confirm, mock_this_node,
+            mock_list, mock_remove):
+        mock_context_inst = mock.Mock(cluster_node="node2", qdevice_rm_flag=None, force=True)
+        mock_context.return_value = mock_context_inst
+        mock_active.return_value = True
+        mock_hostname.return_value = "node2"
+        mock_this_node.return_value = "node1"
+        mock_list.return_value = ["node1", "node2"]
+
+        bootstrap.bootstrap_remove(mock_context_inst)
+
+        mock_init.assert_called_once_with()
+        mock_active.assert_called_once_with("corosync.service")
+        mock_qdevice.assert_not_called()
+        mock_hostname.assert_called_once_with()
+        mock_confirm.assert_not_called()
+        mock_this_node.assert_called_once_with()
+        mock_error.assert_not_called()
+        mock_remove.assert_called_once_with()
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.utils.ext_cmd_nosudo')
+    @mock.patch('crmsh.xmlutil.listnodes')
+    def test_remove_self_other_nodes(self, mock_list, mock_ext, mock_error):
+        mock_list.return_value = ["node1", "node2"]
+        mock_ext.return_value = 1
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap._context = mock.Mock(cluster_node="node1", yes_to_all=True)
+            bootstrap.remove_self()
+
+        mock_list.assert_called_once_with(include_remote_nodes=False)
+        mock_ext.assert_called_once_with("ssh -o StrictHostKeyChecking=no node2 'crm cluster remove -y -c node1'")
+        mock_error.assert_called_once_with("Failed to remove this node from node2")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+    @mock.patch('crmsh.bootstrap.stop_services')
+    @mock.patch('crmsh.xmlutil.listnodes')
+    def test_remove_self_rm_failed(self, mock_list, mock_stop_service, mock_invoke, mock_error):
+        mock_list.return_value = ["node1"]
+        mock_invoke.return_value = False
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap._context = mock.Mock(cluster_node="node1", yes_to_all=True, rm_list=["file1", "file2"])
+            bootstrap.remove_self()
+
+        mock_list.assert_called_once_with(include_remote_nodes=False)
+        mock_stop_service.assert_called_once_with(bootstrap.SERVICES_STOP_LIST)
+        mock_invoke.assert_called_once_with('bash -c "rm -f file1 file2"')
+        mock_error.assert_called_once_with("Deleting the configuration files failed")
+
+    @mock.patch('crmsh.utils.get_iplist_from_name')
+    @mock.patch('crmsh.corosync.get_values')
+    def test_set_cluster_node_ip_host(self, mock_get_values, mock_get_iplist):
+        mock_get_values.return_value = ["node1", "node2"]
+        bootstrap._context = mock.Mock(cluster_node="node1")
+        bootstrap.set_cluster_node_ip()
+        mock_get_values.assert_called_once_with("nodelist.node.ring0_addr")
+        mock_get_iplist.assert_not_called()
+
+    @mock.patch('crmsh.utils.get_iplist_from_name')
+    @mock.patch('crmsh.corosync.get_values')
+    def test_set_cluster_node_ip(self, mock_get_values, mock_get_iplist):
+        mock_get_values.return_value = ["10.10.10.1", "10.10.10.2"]
+        mock_get_iplist.return_value = ["10.10.10.1"]
+        bootstrap._context = mock.Mock(cluster_node="node1")
+        bootstrap.set_cluster_node_ip()
+        mock_get_values.assert_called_once_with("nodelist.node.ring0_addr")
+        mock_get_iplist.assert_called_once_with('node1')
+
+    @mock.patch('crmsh.utils.stop_service')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.utils.service_is_active')
+    def test_stop_services(self, mock_active, mock_status, mock_stop):
+        mock_active.side_effect = [True, True, True]
+        bootstrap.stop_services(bootstrap.SERVICES_STOP_LIST)
+        mock_active.assert_has_calls([
+            mock.call("corosync-qdevice.service", remote_addr=None),
+            mock.call("corosync.service", remote_addr=None),
+            mock.call("hawk.service", remote_addr=None)
+            ])
+        mock_status.assert_has_calls([
+            mock.call("Stopping the corosync-qdevice.service"),
+            mock.call("Stopping the corosync.service"),
+            mock.call("Stopping the hawk.service")
+            ])
+        mock_stop.assert_has_calls([
+            mock.call("corosync-qdevice.service", disable=True, remote_addr=None),
+            mock.call("corosync.service", disable=True, remote_addr=None),
+            mock.call("hawk.service", disable=True, remote_addr=None)
+            ])
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.bootstrap.stop_services')
+    @mock.patch('crmsh.bootstrap.set_cluster_node_ip')
+    def test_remove_node_from_cluster_rm_failed(self, mock_get_ip, mock_stop, mock_invoke, mock_error):
+        mock_invoke.return_value = (False, None, "error")
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap._context = mock.Mock(cluster_node="node1", rm_list=["file1", "file2"])
+            bootstrap.remove_node_from_cluster()
+
+        mock_get_ip.assert_called_once_with()
+        mock_stop.assert_called_once_with(bootstrap.SERVICES_STOP_LIST, remote_addr="node1")
+        mock_invoke.assert_called_once_with('ssh -o StrictHostKeyChecking=no root@node1 "bash -c \\"rm -f file1 file2\\""')
+        mock_error.assert_called_once_with("Deleting the configuration files failed: error")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.stop_services')
+    @mock.patch('crmsh.bootstrap.set_cluster_node_ip')
+    def test_remove_node_from_cluster_rm_node_failed(self, mock_get_ip, mock_stop, mock_status, mock_invoke, mock_invokerc, mock_error):
+        mock_invoke.return_value = (True, None, None)
+        mock_invokerc.return_value = False
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap._context = mock.Mock(cluster_node="node1", rm_list=["file1", "file2"])
+            bootstrap.remove_node_from_cluster()
+
+        mock_get_ip.assert_called_once_with()
+        mock_status.assert_called_once_with("Removing the node node1")
+        mock_stop.assert_called_once_with(bootstrap.SERVICES_STOP_LIST, remote_addr="node1")
+        mock_invoke.assert_called_once_with('ssh -o StrictHostKeyChecking=no root@node1 "bash -c \\"rm -f file1 file2\\""')
+        mock_invokerc.assert_called_once_with("crm node delete node1")
+        mock_error.assert_called_once_with("Failed to remove node1")
+
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.stop_services')
+    @mock.patch('crmsh.bootstrap.set_cluster_node_ip')
+    def test_remove_node_from_cluster_rm_csync_failed(self, mock_get_ip, mock_stop, mock_status, mock_invoke, mock_invokerc, mock_error):
+        mock_invoke.return_value = (True, None, None)
+        mock_invokerc.side_effect = [True, False]
+        mock_error.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            bootstrap._context = mock.Mock(cluster_node="node1", rm_list=["file1", "file2"])
+            bootstrap.remove_node_from_cluster()
+
+        mock_get_ip.assert_called_once_with()
+        mock_status.assert_called_once_with("Removing the node node1")
+        mock_stop.assert_called_once_with(bootstrap.SERVICES_STOP_LIST, remote_addr="node1")
+        mock_invoke.assert_called_once_with('ssh -o StrictHostKeyChecking=no root@node1 "bash -c \\"rm -f file1 file2\\""')
+        mock_invokerc.assert_has_calls([
+            mock.call('crm node delete node1'),
+            mock.call("sed -i /node1/d {}".format(bootstrap.CSYNC2_CFG))
+            ])
+        mock_error.assert_called_once_with("Removing the node node1 from {} failed".format(bootstrap.CSYNC2_CFG))
+
+    @mock.patch('crmsh.bootstrap.csync2_update')
+    @mock.patch('crmsh.bootstrap.decrease_expected_votes')
+    @mock.patch('crmsh.corosync.del_node')
+    @mock.patch('crmsh.corosync.get_values')
+    @mock.patch('crmsh.bootstrap.error')
+    @mock.patch('crmsh.bootstrap.invokerc')
+    @mock.patch('crmsh.bootstrap.invoke')
+    @mock.patch('crmsh.bootstrap.status')
+    @mock.patch('crmsh.bootstrap.stop_services')
+    @mock.patch('crmsh.bootstrap.set_cluster_node_ip')
+    def test_remove_node_from_cluster_hostname(self, mock_get_ip, mock_stop, mock_status,
+            mock_invoke, mock_invokerc, mock_error, mock_get_values, mock_del, mock_decrease, mock_csync2):
+        mock_invoke.side_effect = [(True, None, None), (True, None, None)]
+        mock_invokerc.side_effect = [True, True]
+        mock_get_values.return_value = ["10.10.10.1"]
+
+        bootstrap._context = mock.Mock(cluster_node="node1", cluster_node_ip=None, rm_list=["file1", "file2"])
+        bootstrap.remove_node_from_cluster()
+
+        mock_get_ip.assert_called_once_with()
+        mock_status.assert_has_calls([
+            mock.call("Removing the node node1"),
+            mock.call("Propagating configuration changes across the remaining nodes")
+            ])
+        mock_stop.assert_called_once_with(bootstrap.SERVICES_STOP_LIST, remote_addr="node1")
+        mock_invoke.assert_has_calls([
+            mock.call('ssh -o StrictHostKeyChecking=no root@node1 "bash -c \\"rm -f file1 file2\\""'),
+            mock.call("corosync-cfgtool -R")
+            ])
+        mock_invokerc.assert_has_calls([
+            mock.call('crm node delete node1'),
+            mock.call("sed -i /node1/d {}".format(bootstrap.CSYNC2_CFG))
+            ])
+        mock_error.assert_not_called()
+        mock_get_values.assert_called_once_with("nodelist.node.ring0_addr")
+        mock_del.assert_called_once_with("node1")
+        mock_decrease.assert_called_once_with()
+        mock_csync2.assert_has_calls([
+            mock.call(bootstrap.CSYNC2_CFG),
+            mock.call("/etc/corosync/corosync.conf")
+            ])

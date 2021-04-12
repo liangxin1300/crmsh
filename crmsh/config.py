@@ -7,7 +7,19 @@ Holds user-configurable options.
 import os
 import re
 import configparser
+from contextlib import contextmanager
 from . import userdir
+
+
+@contextmanager
+def _disable_exception_traceback():
+    """
+    All traceback information is suppressed and only the exception type and value are printed
+    """
+    default_value = getattr(sys, "tracebacklimit", 1000)  # `1000` is a Python's default value
+    sys.tracebacklimit = 0
+    yield
+    sys.tracebacklimit = default_value  # revert changes
 
 
 def configure_libdir():
@@ -239,6 +251,7 @@ DEFAULTS = {
         'dot': opt_program('', ('dot',)),
         'ignore_missing_metadata': opt_boolean('no'),
         'report_tool_options': opt_string(''),
+        'lock_timeout': opt_string('120'),
         'obscure_pattern': opt_string('passw*')
     },
     'path': {
@@ -280,7 +293,8 @@ DEFAULTS = {
         'speed_up': opt_boolean('no'),
         'collect_extra_logs': opt_string('/var/log/messages /var/log/pacemaker/pacemaker.log /var/log/pacemaker.log /var/log/crmsh/ha-cluster-bootstrap.log'),
         'remove_exist_dest': opt_boolean('no'),
-        'single_node': opt_boolean('no')
+        'single_node': opt_boolean('no'),
+        'sanitize_rule': opt_string('passw.*')
     }
 }
 
@@ -308,11 +322,10 @@ class _Configuration(object):
         """
         Try to handle configparser.MissingSectionHeaderError while reading
         """
-        from . import utils
         try:
             config_parser_inst.read(file_list)
         except configparser.MissingSectionHeaderError:
-            with utils.disable_exception_traceback():
+            with _disable_exception_traceback():
                 raise
 
     def load(self):

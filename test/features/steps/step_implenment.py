@@ -47,6 +47,16 @@ def step_impl(context, cmd, addr):
     context.stdout = out
 
 
+@then('Print stdout')
+def step_impl(context):
+    context.logger.info("\n{}".format(context.stdout))
+
+
+@then('Print stderr')
+def step_impl(context):
+    context.logger.info("\n{}".format(context.command_error_output))
+
+
 @when('Try "{cmd}" on "{addr}"')
 def step_impl(context, cmd, addr):
     run_command_local_or_remote(context, cmd, addr, err_record=True)
@@ -93,9 +103,15 @@ def step_impl(context, num):
     assert context.return_code == int(num)
 
 
+@then('Expected "{msg}" not in stdout')
+def step_impl(context, msg):
+    assert msg not in context.stdout
+    context.stdout = None
+
+
 @then('Except "{msg}"')
 def step_impl(context, msg):
-    assert context.command_error_output == msg
+    assert msg in context.command_error_output
     context.command_error_output = None
 
 
@@ -272,3 +288,10 @@ def step_impl(context, f, archive):
 @then('File "{f}" not in "{archive}"')
 def step_impl(context, f, archive):
     assert file_in_archive(f, archive) is False
+
+
+@then('File "{f}" was synced in cluster')
+def step_impl(context, f):
+    cmd = "crm cluster diff {}".format(f)
+    rc, out = run_command(context, cmd)
+    assert out == ""

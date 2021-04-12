@@ -7,12 +7,13 @@ import re
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from . import command
 from . import utils
-from .msg import err_buf
+from .log import logger
 from . import scripts
 from . import completers as compl
 from . import bootstrap
 from . import corosync
 from .cibconfig import cib_factory
+from . import constants
 
 
 class ArgParser(ArgumentParser):
@@ -92,10 +93,13 @@ class Cluster(command.UI):
         Starts the cluster services on this node
         '''
         try:
+            if utils.service_is_active("pacemaker.service"):
+                logger.info("Cluster services already started")
+                return
             utils.start_service("pacemaker")
             if utils.is_qdevice_configured():
                 utils.start_service("corosync-qdevice")
-            err_buf.info("Cluster services started")
+            logger.info("Cluster services started")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -107,10 +111,13 @@ class Cluster(command.UI):
         Stops the cluster services on this node
         '''
         try:
-            if utils.is_qdevice_configured():
+            if not utils.service_is_active("corosync.service"):
+                logger.info("Cluster services already stopped")
+                return
+            if utils.service_is_active("corosync-qdevice"):
                 utils.stop_service("corosync-qdevice")
             utils.stop_service("corosync")
-            err_buf.info("Cluster services stopped")
+            logger.info("Cluster services stopped")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -130,8 +137,10 @@ class Cluster(command.UI):
         Enable the cluster services on this node
         '''
         try:
-            utils.enable_service("pacemaker")
-            err_buf.info("Cluster services enabled")
+            utils.enable_service("pacemaker.service")
+            if utils.is_qdevice_configured():
+                utils.enable_service("corosync-qdevice.service")
+            logger.info("Cluster services enabled")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -143,8 +152,10 @@ class Cluster(command.UI):
         Disable the cluster services on this node
         '''
         try:
-            utils.disable_service("pacemaker")
-            err_buf.info("Cluster services disabled")
+            utils.disable_service("pacemaker.service")
+            if utils.is_qdevice_configured():
+                utils.disable_service("corosync-qdevice.service")
+            logger.info("Cluster services disabled")
         except IOError as err:
             context.fatal_error(str(err))
 
@@ -216,7 +227,7 @@ Note:
         parser.add_argument("-S", "--enable-sbd", dest="diskless_sbd", action="store_true",
                             help="Enable SBD even if no SBD device is configured (diskless mode)")
         parser.add_argument("-w", "--watchdog", dest="watchdog", metavar="WATCHDOG",
-                            help="Use the given watchdog device")
+                            help="Use the given watchdog device or driver name")
         parser.add_argument("--no-overwrite-sshkey", action="store_true", dest="no_overwrite_sshkey",
                             help='Avoid "/root/.ssh/id_rsa" overwrite if "-y" option is used (False by default)')
 
@@ -233,21 +244,21 @@ Note:
         network_group.add_argument("-I", "--ipv6", action="store_true", dest="ipv6",
                                    help="Configure corosync use IPv6")
 
-        qdevice_group = parser.add_argument_group("QDevice configuration", "Options for configuring QDevice and QNetd.")
+        qdevice_group = parser.add_argument_group("QDevice configuration", re.sub('  ', '', constants.qdevice_help_info) + "\n\nOptions for configuring QDevice and QNetd.")
         qdevice_group.add_argument("--qnetd-hostname", dest="qnetd_addr", metavar="HOST",
                                    help="HOST or IP of the QNetd server to be used")
         qdevice_group.add_argument("--qdevice-port", dest="qdevice_port", metavar="PORT", type=int, default=5403,
-                                   help="TCP PORT of QNetd server(default:5403)")
+                                   help="TCP PORT of QNetd server (default:5403)")
         qdevice_group.add_argument("--qdevice-algo", dest="qdevice_algo", metavar="ALGORITHM", default="ffsplit", choices=['ffsplit', 'lms'],
-                                   help="QNetd decision ALGORITHM(ffsplit/lms, default:ffsplit)")
+                                   help="QNetd decision ALGORITHM (ffsplit/lms, default:ffsplit)")
         qdevice_group.add_argument("--qdevice-tie-breaker", dest="qdevice_tie_breaker", metavar="TIE_BREAKER", default="lowest",
-                                   help="QNetd TIE_BREAKER(lowest/highest/valid_node_id, default:lowest)")
+                                   help="QNetd TIE_BREAKER (lowest/highest/valid_node_id, default:lowest)")
         qdevice_group.add_argument("--qdevice-tls", dest="qdevice_tls", metavar="TLS", default="on", choices=['on', 'off', 'required'],
-                                   help="Whether using TLS on QDevice/QNetd(on/off/required, default:on)")
+                                   help="Whether using TLS on QDevice/QNetd (on/off/required, default:on)")
         qdevice_group.add_argument("--qdevice-heuristics", dest="qdevice_heuristics", metavar="COMMAND",
-                                   help="COMMAND to run with absolute path. For multiple commands, use \";\" to separate(details about heuristics can see man 8 corosync-qdevice)")
+                                   help="COMMAND to run with absolute path. For multiple commands, use \";\" to separate (details about heuristics can see man 8 corosync-qdevice)")
         qdevice_group.add_argument("--qdevice-heuristics-mode", dest="qdevice_heuristics_mode", metavar="MODE", choices=['on', 'sync', 'off'],
-                                   help="MODE of operation of heuristics(on/sync/off, default:sync)")
+                                   help="MODE of operation of heuristics (on/sync/off, default:sync)")
 
         storage_group = parser.add_argument_group("Storage configuration", "Options for configuring shared storage.")
         storage_group.add_argument("-p", "--partition-device", dest="shared_device", metavar="DEVICE",
@@ -271,7 +282,7 @@ Note:
             if options.qdevice_heuristics_mode and not options.qdevice_heuristics:
                 parser.error("Option --qdevice-heuristics is required if want to configure heuristics mode")
             options.qdevice_heuristics_mode = options.qdevice_heuristics_mode or "sync"
-        elif re.search("--qdevice-.*", ' '.join(sys.argv)) or stage == "qdevice":
+        elif re.search("--qdevice-.*", ' '.join(sys.argv)) or (stage == "qdevice" and options.yes_to_all):
             parser.error("Option --qnetd-hostname is required if want to configure qdevice")
 
         if options.sbd_devices and options.diskless_sbd:
@@ -283,6 +294,7 @@ Note:
         boot_context.ui_context = context
         boot_context.stage = stage
         boot_context.args = args
+        boot_context.type = "init"
 
         bootstrap.bootstrap_init(boot_context)
 
@@ -338,6 +350,7 @@ If stage is not specified, each stage will be invoked in sequence.
         join_context = bootstrap.Context.set_context(options)
         join_context.ui_context = context
         join_context.stage = stage
+        join_context.type = "join"
 
         bootstrap.bootstrap_join(join_context)
 
@@ -581,26 +594,21 @@ Cluster Description
         '''
         Quick cluster health status. Corosync status, DRBD status...
         '''
-
-        stack = utils.cluster_stack()
-        if not stack:
-            err_buf.error("No supported cluster stack found (tried heartbeat|openais|corosync)")
-        if utils.cluster_stack() == 'corosync':
-            print("Name: {}\n".format(get_cluster_name()))
-            print("Services:")
-            for svc in ["corosync", "pacemaker"]:
-                info = utils.service_info(svc)
-                if info:
-                    print("%-16s %s" % (svc, info))
-                else:
-                    print("%-16s unknown" % (svc))
-
-            rc, outp = utils.get_stdout(['corosync-cfgtool', '-s'], shell=False)
-            if rc == 0:
-                print("")
-                print(outp)
+        print("Name: {}\n".format(get_cluster_name()))
+        print("Services:")
+        for svc in ["corosync", "pacemaker"]:
+            info = utils.service_info(svc)
+            if info:
+                print("%-16s %s" % (svc, info))
             else:
-                print("Failed to get corosync status")
+                print("%-16s unknown" % (svc))
+
+        rc, outp = utils.get_stdout(['corosync-cfgtool', '-s'], shell=False)
+        if rc == 0:
+            print("")
+            print(outp)
+        else:
+            print("Failed to get corosync status")
 
     @command.completers_repeating(compl.choice(['10', '60', '600']))
     def do_wait_for_startup(self, context, timeout='10'):
@@ -646,15 +654,15 @@ Cluster Description
                 break
         for host, result in parallax.call(hosts, cmd, opts).items():
             if isinstance(result, parallax.Error):
-                err_buf.error("[%s]: %s" % (host, result))
+                logger.error("[%s]: %s" % (host, result))
             else:
                 if result[0] != 0:
-                    err_buf.error("[%s]: rc=%s\n%s\n%s" % (host, result[0], utils.to_ascii(result[1]), utils.to_ascii(result[2])))
+                    logger.error("[%s]: rc=%s\n%s\n%s" % (host, result[0], utils.to_ascii(result[1]), utils.to_ascii(result[2])))
                 else:
                     if not result[1]:
-                        err_buf.ok("[%s]" % host)
+                        logger.ok("[%s]" % host)
                     else:
-                        err_buf.ok("[%s]\n%s" % (host, utils.to_ascii(result[1])))
+                        logger.ok("[%s]\n%s" % (host, utils.to_ascii(result[1])))
 
     def do_copy(self, context, local_file, *nodes):
         '''

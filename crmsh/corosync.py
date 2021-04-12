@@ -12,15 +12,11 @@ from . import utils
 from . import tmpfiles
 from . import parallax
 from . import bootstrap
-from .msg import err_buf, common_debug
+from .log import logger, logger_bootstrap
 
 
 def conf():
     return os.getenv('COROSYNC_MAIN_CONFIG_FILE', '/etc/corosync/corosync.conf')
-
-
-def is_corosync_stack():
-    return utils.cluster_stack() == 'corosync'
 
 
 def check_tools():
@@ -271,9 +267,7 @@ class QDevice(object):
         except socket.error:
             raise ValueError("host \"{}\" is unreachable".format(self.qnetd_addr))
 
-        rc, _ = utils.get_stdout("ping -c 1 {}".format(self.qnetd_addr))
-        if rc != 0:
-            raise ValueError("host \"{}\" is unreachable".format(self.qnetd_addr))
+        utils.ping_node(self.qnetd_addr)
 
         if utils.InterfacesInfo.ip_in_local(qnetd_ip):
             raise ValueError("host for qnetd must be a remote one")
@@ -284,8 +278,14 @@ class QDevice(object):
         if not utils.valid_port(self.port):
             raise ValueError("invalid qdevice port range(1024 - 65535)")
 
-        if self.tie_breaker not in ["lowest", "highest"] and not utils.valid_nodeid(self.tie_breaker):
+        if self.algo not in ("ffsplit", "lms"):
+            raise ValueError("invalid ALGORITHM choice: '{}' (choose from 'ffsplit', 'lms')".format(self.algo))
+
+        if self.tie_breaker not in ("lowest", "highest") and not utils.valid_nodeid(self.tie_breaker):
             raise ValueError("invalid qdevice tie_breaker(lowest/highest/valid_node_id)")
+
+        if self.tls not in ("on", "off", "required"):
+            raise ValueError("invalid TLS choice: '{}' (choose from 'on', 'off', 'required')".format(self.tls))
 
         if self.cmds:
             for cmd in self.cmds.strip(';').split(';'):
@@ -333,8 +333,7 @@ class QDevice(object):
         self.manage_qnetd("stop")
 
     def debug_and_log_to_bootstrap(self, msg):
-        common_debug(msg)
-        bootstrap.log("# " + msg)
+        logger_bootstrap.debug(msg)
 
     def init_db_on_qnetd(self):
         """
@@ -823,7 +822,7 @@ class Parser(object):
 
     def add(self, path, tokens):
         """Adds tokens to a section"""
-        common_debug("corosync.add (%s) (%s)" % (path, tokens))
+        logger.debug("corosync.add (%s) (%s)" % (path, tokens))
         if not path:
             self._tokens += tokens
             return
@@ -1064,16 +1063,16 @@ def add_node(addr, name=None):
         nodes = []
     ipaddr = get_ip(addr)
     if addr in nodenames + coronodes or (ipaddr and ipaddr in coronodes):
-        err_buf.warning("%s already in corosync.conf" % (addr))
+        logger.warning("%s already in corosync.conf" % (addr))
         return
     if name and name in nodenames + coronodes:
-        err_buf.warning("%s already in corosync.conf" % (name))
+        logger.warning("%s already in corosync.conf" % (name))
         return
     if addr in nodes:
-        err_buf.warning("%s already in configuration" % (addr))
+        logger.warning("%s already in configuration" % (addr))
         return
     if name and name in nodes:
-        err_buf.warning("%s already in configuration" % (name))
+        logger.warning("%s already in configuration" % (name))
         return
 
     f = open(conf()).read()
@@ -1130,19 +1129,6 @@ def del_node(addr):
     f = open(conf(), 'w')
     f.write(p.to_string())
     f.close()
-
-    # check for running config
-    try:
-        nodes = utils.list_cluster_nodes()
-    except Exception:
-        nodes = []
-    if nodes:
-        utils.ext_cmd(["corosync-cmapctl", "-D", "nodelist.node.%s.nodeid" % (nth)],
-                      shell=False)
-        utils.ext_cmd(["corosync-cmapctl", "-D", "nodelist.node.%s.ring0_addr" % (nth)],
-                      shell=False)
-        utils.ext_cmd(["corosync-cmapctl", "-D", "nodelist.node.%s.name" % (nth)],
-                      shell=False)
 
 
 _COROSYNC_CONF_TEMPLATE_HEAD = """# Please read the corosync.conf.5 manual page

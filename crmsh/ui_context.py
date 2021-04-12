@@ -6,7 +6,7 @@ import sys
 from . import config
 from . import utils
 from . import options
-from .msg import common_err, common_info, common_warn
+from .log import logger
 from . import ui_utils
 from . import userdir
 from . import constants
@@ -77,7 +77,7 @@ class Context(object):
                 if not self.command_info:
                     self.fatal_error("No such command")
                 if self.command_name in self.command_info.aliases:
-                    common_warn("This command '{}' is deprecated, please use '{}'"\
+                    logger.warning("This command '{}' is deprecated, please use '{}'"\
                             .format(self.command_name, self.command_info.name))
                 self.command_name = self.command_info.name
                 if self.command_info.type == 'level':
@@ -92,14 +92,14 @@ class Context(object):
                 import traceback
                 traceback.print_exc()
                 sys.stdout.flush()
-            common_err("%s: %s" % (self.get_qualified_name(), msg))
+            logger.error("%s: %s" % (self.get_qualified_name(), msg))
             rv = False
         except IOError as msg:
             if config.core.debug or options.regression_tests:
                 import traceback
                 traceback.print_exc()
                 sys.stdout.flush()
-            common_err("%s: %s" % (self.get_qualified_name(), msg))
+            logger.error("%s: %s" % (self.get_qualified_name(), msg))
             rv = False
         if cmd or (rv is False):
             rv = self._back_out() and rv
@@ -162,10 +162,10 @@ class Context(object):
                 # not sure this is the right thing to do
                 return self.current_level().get_completions()
             except ValueError:
-                # common_err("%s: %s" % (self.get_qualified_name(), msg))
+                # logger.error("%s: %s" % (self.get_qualified_name(), msg))
                 pass
             except IOError:
-                # common_err("%s: %s" % (self.get_qualified_name(), msg))
+                # logger.error("%s: %s" % (self.get_qualified_name(), msg))
                 pass
             return []
         finally:
@@ -396,13 +396,13 @@ class Context(object):
         """
         Error message only, don't cancel execution of command
         """
-        common_err("%s: %s" % (self.get_qualified_name(), msg))
+        logger.error("%s: %s" % (self.get_qualified_name(), msg))
 
     def warning(self, msg):
-        common_warn("%s: %s" % (self.get_qualified_name(), msg))
+        logger.warning("%s: %s" % (self.get_qualified_name(), msg))
 
     def info(self, msg):
-        common_info("%s: %s" % (self.get_qualified_name(), msg))
+        logger.info("%s: %s" % (self.get_qualified_name(), msg))
 
 
 # vim:ts=4:sw=4:et:
