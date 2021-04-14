@@ -1356,3 +1356,69 @@ class CorosyncConfParser(object):
         self._verify_config_file()
         with open(self._config_file) as f:
             self._config_dict, _ = self._convert2dict_raw(f.read().splitlines())
+
+    def _unpack_list_in_dict(self, value_list, indentation):
+        """
+        Convert dict list to string
+        """
+        output = ''
+        for item_dict in value_list:
+            output += self._convert2string_raw(item_dict, indentation)
+        return output
+
+    def _unpack_dict(self, key, value, indentation):
+        """
+        Convert dict to string
+        """
+        output = ''
+        if isinstance(value, dict):
+            output += '{}{} {{\n'.format(indentation, key)
+            indentation += '\t'
+            output += self._convert2string_raw(value, indentation)
+            indentation = indentation[:-1]
+            output += '{}}}\n\n'.format(indentation)
+        elif isinstance(value, list):
+            output += self._unpack_list_in_dict(value, indentation)
+        else:
+            output += '{}{}: {}\n'.format(indentation, key, value)
+        return output
+
+    def _convert2string_raw(self, corodict, indentation=''):
+        """
+        Convert a corosync like data dictionary to string
+        """
+        output = ''
+        for key, value in corodict.items():
+            output += self._unpack_dict(key, value, indentation)
+        return output
+
+    def _convert2string(self):
+        """
+        Wrapped _convert2string_raw function
+        """
+        return self._convert2string_raw(self._config_dict)
+
+    def _mergedicts_raw(self, main_dict, changes_dict, applied_changes, initial_path='', index=0):
+        """
+        Merge the 2 dictionaries. We cannot use update as it changes all the children of an entry
+        """
+        for key, value in changes_dict.items():
+            current_path = '{}.{}'.format(initial_path, key) if initial_path else key
+            if key in main_dict.keys() and not isinstance(value, dict):
+                if str(main_dict[key]) != str(value):
+                    applied_changes[current_path] = value
+                main_dict[key] = value
+            elif key in main_dict.keys():
+                modified_dict, new_changes = self._mergedicts_raw(main_dict[key], value, applied_changes, current_path, index)
+            elif current_path in self.KNOWN_SEC_NAMES_WITH_LIST:
+                modified_sec_name = self.MODIFIED_SEC_NAME_TEMPL.format(key)
+                if index < len(main_dict[modified_sec_name]):
+                    modified_dict, new_changes = self._mergedicts_raw(main_dict[modified_sec_name][index][key], value, applied_changes, current_path, index)
+                else:  # index out of range, so create a new entry
+                    main_dict[modified_sec_name].append(changes_dict)
+                    applied_changes[current_path] = value
+            else:  # Entry not found in current main dictionary, so we can update all
+                main_dict[key] = changes_dict[key]
+                applied_changes[current_path] = value
+
+        return main_dict, applied_changes
