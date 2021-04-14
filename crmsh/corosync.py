@@ -1295,6 +1295,7 @@ class CorosyncConfParser(object):
         Initialize function
         """
         self._config_file = config_file or conf()
+        self._config_dict = {}
 
     def _verify_config_file(self):
         """
@@ -1309,7 +1310,49 @@ class CorosyncConfParser(object):
             if len(re.findall("[{}]", data)) % 2 != 0:
                 raise ValueError("Missing closing brace")
 
-    def _convert2dict(self, initial_path=""):
+    def _convert2dict_raw(self, file_content_lines, initial_path=""):
         """
         Convert the corosync configuration file to a dictionary
         """
+        corodict = {}
+        sub_dict = {}
+        index = 0
+
+        for i, line in enumerate(file_content_lines):
+            stripped_line = line.strip()
+            if not stripped_line or stripped_line[0] == '#':
+                continue
+
+            if index > i:
+                continue
+
+            if '{' in stripped_line:
+                sec_name = re.sub("\s*{", "", stripped_line)
+                initial_path += ".{}".format(sec_name) if initial_path else sec_name
+                sub_dict, new_index = self._convert2dict_raw(file_content_lines[i+1:], initial_path)
+                if initial_path in self.KNOWN_SEC_NAMES_WITH_LIST:
+                    modified_sec_name = self.MODIFIED_SEC_NAME_TEMPL.format(sec_name)
+                    if modified_sec_name not in corodict:
+                        corodict[modified_sec_name] = []
+                    corodict[modified_sec_name].append({sec_name: sub_dict})
+                else:
+                    corodict[sec_name] = sub_dict
+                index = i + new_index
+                initial_path = re.sub("\.{}".format(sec_name), "", initial_path) if "." in initial_path else ""
+            elif ':' in stripped_line:
+                # To parse the line with multi ":", like IPv6 address
+                data = stripped_line.split(':')
+                key, values = data[0], data[1:]
+                corodict[key] = ':'.join(values).strip()
+            elif '}' in stripped_line:
+                return corodict, i+2
+
+        return corodict, index
+
+    def _convert2dict(self):
+        """
+        Convert the corosync configuration file to a dictionary
+        """
+        self._verify_config_file()
+        with open(self._config_file) as f:
+            self._config_dict, _ = _convert2dict_raw(f.read().splitlines())
