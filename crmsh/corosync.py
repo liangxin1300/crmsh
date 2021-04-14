@@ -1351,7 +1351,7 @@ class CorosyncConfParser(object):
 
     def _convert2dict(self):
         """
-        Convert the corosync configuration file to a dictionary
+        Wrapped _convert2dict_raw function
         """
         self._verify_config_file()
         with open(self._config_file) as f:
