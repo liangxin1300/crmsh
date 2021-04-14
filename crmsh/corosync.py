@@ -1282,3 +1282,34 @@ def create_configuration(clustername="hacluster",
                               _COROSYNC_CONF_TEMPLATE_RING_ALL + \
                               _COROSYNC_CONF_TEMPLATE_TAIL
     utils.str2file(_COROSYNC_CONF_TEMPLATE % config_common, conf())
+
+
+class CorosyncConfParser(object):
+    """
+    """
+    MODIFIED_SEC_NAME_TEMPL = "__{}_list"
+    KNOWN_SEC_NAMES_WITH_LIST = ("totem.interface", "nodelist.node")
+
+    def __init__(self, config_file=None):
+        """
+        Initialize function
+        """
+        self._config_file = config_file or conf()
+
+    def _verify_config_file(self):
+        """
+        Verify config file
+        """
+        if not os.path.exists(self._config_file):
+            raise ValueError("File \"{}\" not exist".format(self._config_file))
+        if not os.path.isfile(self._config_file):
+            raise ValueError("\"{}\" is not a file".format(self._config_file))
+        with open(self._config_file) as f:
+            data = f.read()
+            if len(re.findall("[{}]", data)) % 2 != 0:
+                raise ValueError("Missing closing brace")
+
+    def _convert2dict(self, initial_path=""):
+        """
+        Convert the corosync configuration file to a dictionary
+        """
