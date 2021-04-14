@@ -1355,4 +1355,4 @@ class CorosyncConfParser(object):
         """
         self._verify_config_file()
         with open(self._config_file) as f:
-            self._config_dict, _ = _convert2dict_raw(f.read().splitlines())
+            self._config_dict, _ = self._convert2dict_raw(f.read().splitlines())
