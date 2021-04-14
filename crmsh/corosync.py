@@ -1422,3 +1422,9 @@ class CorosyncConfParser(object):
                 applied_changes[current_path] = value
 
         return main_dict, applied_changes
+
+    def _mergedicts(self, data, index=0):
+        """
+        Wrapped _mergedicts_raw function
+        """
+        return self._mergedicts_raw(self._config_dict, data, {}, index=index)
