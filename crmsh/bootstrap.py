@@ -97,6 +97,7 @@ class Context(object):
         self.qdevice_heuristics = None
         self.qdevice_heuristics_mode = None
         self.qdevice_rm_flag = None
+        self.sbd_rm_flag = None
         self.qdevice_reload_policy = QdevicePolicy.QDEVICE_RESTART
         self.shared_device = None
         self.ocfs2_device = None
@@ -592,6 +593,12 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
         if not dev_list:
             raise ValueError("No sbd device configured")
         inst._verify_sbd_device(dev_list, utils.list_cluster_nodes_except_me())
+
+    @classmethod
+    def remove(cls):
+        """
+        Remove sbd resource and service
+        """
 
 
 _context = None
@@ -2730,6 +2737,8 @@ def bootstrap_remove(context):
 
     if _context.qdevice_rm_flag:
         remove_qdevice()
+        return
+    if _context.sbd_rm_flag:
         return
 
     if not _context.yes_to_all and _context.cluster_node is None:
