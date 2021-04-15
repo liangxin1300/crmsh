@@ -398,6 +398,7 @@ If stage is not specified, each stage will be invoked in sequence.
         parser.add_argument("-c", "--cluster-node", dest="cluster_node", help="IP address or hostname of cluster node which will be deleted", metavar="HOST")
         parser.add_argument("-F", "--force", dest="force", help="Remove current node", action="store_true")
         parser.add_argument("--qdevice", dest="qdevice_rm_flag", help="Remove QDevice configuration and service from cluster", action="store_true")
+        parser.add_argument("--sbd", dest="sbd_rm_flag", help="Remove SBD resource and service from cluster", action="store_true")
         options, args = parse_options(parser, args)
         if options is None or args is None:
             return
