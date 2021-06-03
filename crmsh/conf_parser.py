@@ -13,8 +13,6 @@ from . import utils
 COROSYNC_CONF_TEMPLATE = """
 totem {
     version: 2
-    crypto_cipher: aes256
-    crypto_hash: sha256
 }
 
 quorum {
@@ -241,7 +239,8 @@ class ConfParser(object):
         Returns all values matching path
         """
         if not self._is_list_path(path):
-            return [self.get(path)]
+            value = self.get(path)
+            return [value] if value else []
         return [self.get(path, index=i) for i in range(self._len_of_list(path))]
 
     def remove(self, path, index=0):
@@ -258,7 +257,10 @@ class ConfParser(object):
         """
         real_path = self._real_path(path, index, on_set=True)
         try:
-            exec("self._config_inst.{} = \"{}\"".format(real_path, value))
+            if isinstance(value, dict):
+                exec("self._config_inst.{} = {}".format(real_path, value))
+            else:
+                exec("self._config_inst.{} = \"{}\"".format(real_path, value))
         except AttributeError:
             raise ValueError("Invalid path \"{}\"".format(path)) from None
 
@@ -299,4 +301,13 @@ class ConfParser(object):
         inst = cls()
         inst.convert2dict()
         inst.set(path, value, index)
+        utils.str2file(inst.convert2string(), inst._config_file)
+
+    @classmethod
+    def remove_key(cls, path, index=0):
+        """
+        """
+        inst = cls()
+        inst.convert2dict()
+        inst.remove(path, index)
         utils.str2file(inst.convert2string(), inst._config_file)
