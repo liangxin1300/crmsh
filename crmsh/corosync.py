@@ -12,6 +12,7 @@ from . import utils
 from . import tmpfiles
 from . import parallax
 from .msg import err_buf, common_debug
+from . import conf_parser
 
 
 def conf():
@@ -125,6 +126,18 @@ def add_nodelist_from_cmaptool():
 
 def is_unicast():
     return get_value("totem.transport") == "udpu"
+
+
+def is_knet():
+    return conf_parser.ConfParser.get_value("totem.transport") == "knet"
+
+
+def get_link_number():
+    link_num = 1
+    for key, value in conf_parser.ConfParser.get_value("nodelist.node").items():
+        if re.search("ring[1-7]_addr", key) and value:
+            link_num += 1
+    return link_num
 
 
 _tCOMMENT = 0
@@ -634,27 +647,28 @@ class QDevice(object):
         """
         Write qdevice attributes to config file
         """
-        with open(conf()) as f:
-            p = Parser(f.read())
-
-        p.remove("quorum.device")
-        p.add('quorum', make_section('quorum.device', []))
-        p.set('quorum.device.votes', '1')
-        p.set('quorum.device.model', 'net')
-        p.add('quorum.device', make_section('quorum.device.net', []))
-        p.set('quorum.device.net.tls', self.tls)
-        p.set('quorum.device.net.host', self.qnetd_addr)
-        p.set('quorum.device.net.port', self.port)
-        p.set('quorum.device.net.algorithm', self.algo)
-        p.set('quorum.device.net.tie_breaker', self.tie_breaker)
+        inst = conf_parser.ConfParser()
+        inst.convert2dict()
+        qdevice_config_dict = {
+                "votes": 1,
+                "model": "net",
+                "net": {
+                    "tls": self.tls,
+                    "host": self.qnetd_addr,
+                    "port": self.port,
+                    "algorithm": self.algo,
+                    "tie_breaker": self.tie_breaker
+                    }
+                }
+        inst.set("quorum.device", qdevice_config_dict)
         if self.cmds:
-            p.add('quorum.device', make_section('quorum.device.heuristics', []))
-            p.set('quorum.device.heuristics.mode', self.mode)
+            heuristics_dict = {"mode": self.mode}
             for i, cmd in enumerate(self.cmds.strip(';').split(';')):
                 cmd_name = re.sub("[.-]", "_", os.path.basename(cmd.split()[0]))
                 exec_name = "exec_{}{}".format(cmd_name, i)
-                p.set('quorum.device.heuristics.{}'.format(exec_name), cmd)
-        utils.str2file(p.to_string(), conf())
+                heuristics_dict[exec_name] = cmd
+            inst.set("quorum.device.heuristics", heuristics_dict)
+        utils.str2file(inst.convert2string(), conf())
 
     def remove_qdevice_config(self):
         """
@@ -948,8 +962,8 @@ def diff_configuration(nodes, checksum=False):
         utils.remote_diff(local_path, nodes)
 
 
-def get_free_nodeid(parser):
-    ids = parser.get_all('nodelist.node.nodeid')
+def get_free_nodeid():
+    ids = conf_parser.ConfParser.get_values("nodelist.node.nodeid")
     if not ids:
         return 1
     ids = [int(i) for i in ids]
@@ -974,22 +988,15 @@ def get_all_paths():
 
 
 def get_value(path):
-    f = open(conf()).read()
-    p = Parser(f)
-    return p.get(path)
+    return conf_parser.ConfParser.get_value(path)
 
 
 def get_values(path):
-    f = open(conf()).read()
-    p = Parser(f)
-    return p.get_all(path)
+    return conf_parser.ConfParser.get_values(path)
 
 
 def set_value(path, value):
-    f = open(conf()).read()
-    p = Parser(f)
-    p.set(path, value)
-    utils.str2file(p.to_string(), conf())
+    conf_parser.ConfParser.set_value(path, value)
 
 
 class IPAlreadyConfiguredError(Exception):
@@ -1051,6 +1058,20 @@ def add_node_ucast(ip_list, node_id=None):
         p.set('quorum.two_node', '0')
 
     utils.str2file(p.to_string(), conf())
+
+
+def add_node_knet(ip_list):
+    """
+    """
+    find_configured_ip(ip_list)
+    inst = conf_parser.ConfParser()
+    inst.convert2dict()
+    node_index = len(inst.get_all("nodelist.node"))
+    for i, addr in enumerate(ip_list):
+        inst.set("nodelist.node.ring{}_addr".format(i), addr, node_index)
+    inst.set("nodelist.node.name", utils.this_node(), node_index)
+    inst.set("nodelist.node.nodeid", get_free_nodeid(), node_index)
+    utils.str2file(inst.convert2string(), conf())
 
 
 def add_node(addr, name=None):
@@ -1118,181 +1139,9 @@ def del_node(addr):
     '''
     Remove node from corosync
     '''
-    f = open(conf()).read()
-    p = Parser(f)
-    nth = p.remove_section_where('nodelist.node', 'ring0_addr', addr)
-    if nth == -1:
-        return
-
-    num_nodes = p.count('nodelist.node')
-    p.set('quorum.two_node', '1' if num_nodes == 2 else '0')
-    if p.get("quorum.device.model") == "net":
-        p.set('quorum.two_node', '0')
-
-    utils.str2file(p.to_string(), conf())
-
-
-_COROSYNC_CONF_TEMPLATE_HEAD = """# Please read the corosync.conf.5 manual page
-
-totem {
-    version:    2
-    secauth:    on
-    crypto_hash:    sha1
-    crypto_cipher:  aes256
-    cluster_name:   %(clustername)s
-    clear_node_high_bit: yes
-
-    token:      5000
-    token_retransmits_before_loss_const: 10
-    join:       60
-    consensus:  6000
-    max_messages:   20
-"""
-_COROSYNC_CONF_TEMPLATE_TAIL = """
-    %(rrp_mode)s
-    %(transport)s
-    %(ipv6)s
-    %(ipv6_nodeid)s
-}
-
-logging {
-    fileline:   off
-    to_stderr:  no
-    to_logfile:     no
-    logfile:    /var/log/cluster/corosync.log
-    to_syslog:  yes
-    debug:      off
-    timestamp:  on
-    logger_subsys {
-        subsys:     QUORUM
-        debug:  off
-    }
-}
-
-%(nodelist)s
-%(quorum)s
-"""
-_COROSYNC_CONF_TEMPLATE_RING = """
-    interface {
-        ringnumber: %(number)d
-        %(bindnetaddr)s
-%(mcast)s
-        ttl: 1
-    }
-"""
-
-
-def create_configuration(clustername="hacluster",
-                         bindnetaddr=None,
-                         mcastaddr=None,
-                         mcastport=None,
-                         ringXaddr=None,
-                         transport=None,
-                         ipv6=False,
-                         nodeid=None,
-                         two_rings=False,
-                         qdevice=None):
-
-    if transport == "udpu":
-        ring_tmpl = ""
-        for i in 0, 1:
-            ring_tmpl += "        ring{}_addr: {}\n".format(i, ringXaddr[i])
-            if not two_rings:
-                break
-
-        nodelist_tmpl = """nodelist {
-    node {
-%(ringaddr)s
-        nodeid: 1
-    }
-}
-""" % {"ringaddr": ring_tmpl}
-    else:
-        nodelist_tmpl = ""
-
-    transport_tmpl = ""
-    if transport is not None:
-        transport_tmpl = "transport: {}\n".format(transport)
-
-    rrp_mode_tmp = ""
-    if two_rings:
-        rrp_mode_tmp = "rrp_mode:  passive"
-
-    ipv6_tmpl = ""
-    ipv6_nodeid = ""
-    if ipv6:
-        ipv6_tmpl = "ip_version:  ipv6"
-        if transport != "udpu":
-            ipv6_nodeid = "nodeid:  %d" % nodeid
-
-    quorum_tmpl = """quorum {
-    # Enable and configure quorum subsystem (default: off)
-    # see also corosync.conf.5 and votequorum.5
-    provider: corosync_votequorum
-    expected_votes: 1
-    two_node: 0
-}
-"""
-    if qdevice is not None:
-        quorum_tmpl = """quorum {
-    # Enable and configure quorum subsystem (default: off)
-    # see also corosync.conf.5 and votequorum.5
-    provider: corosync_votequorum
-    expected_votes: 1
-    two_node: 0
-    device {
-      votes: 0
-      model: net
-      net {
-        tls: %(tls)s
-        host: %(ip)s
-        port: %(port)s
-        algorithm: %(algo)s
-        tie_breaker: %(tie_breaker)s
-      }
-    }
-}
-""" % qdevice.__dict__
-
-    config_common = {
-        "clustername": clustername,
-        "nodelist": nodelist_tmpl,
-        "quorum": quorum_tmpl,
-        "ipv6": ipv6_tmpl,
-        "ipv6_nodeid": ipv6_nodeid,
-        "rrp_mode": rrp_mode_tmp,
-        "transport": transport_tmpl
-    }
-
-    _COROSYNC_CONF_TEMPLATE_RING_ALL = ""
-    mcast_tmp = []
-    bindnetaddr_tmp = []
-    config_ring = []
-    for i in 0, 1:
-        mcast_tmp.append("")
-        if mcastaddr is not None:
-            mcast_tmp[i] += "        mcastaddr:   {}\n".format(mcastaddr[i])
-        if mcastport is not None:
-            mcast_tmp[i] += "        mcastport:   {}".format(mcastport[i])
-
-        bindnetaddr_tmp.append("")
-        if bindnetaddr is None:
-            bindnetaddr_tmp[i] = ""
-        else:
-            bindnetaddr_tmp[i] = "bindnetaddr: {}".format(bindnetaddr[i])
-
-        config_ring.append("")
-        config_ring[i] = {
-            "bindnetaddr": bindnetaddr_tmp[i],
-            "mcast": mcast_tmp[i],
-            "number": i
-        }
-        _COROSYNC_CONF_TEMPLATE_RING_ALL += _COROSYNC_CONF_TEMPLATE_RING % config_ring[i]
-
-        if not two_rings:
-            break
-
-    _COROSYNC_CONF_TEMPLATE = _COROSYNC_CONF_TEMPLATE_HEAD + \
-                              _COROSYNC_CONF_TEMPLATE_RING_ALL + \
-                              _COROSYNC_CONF_TEMPLATE_TAIL
-    utils.str2file(_COROSYNC_CONF_TEMPLATE % config_common, conf())
+    inst = conf_parser.ConfParser()
+    inst.convert2dict()
+    name_list = inst.get_all("nodelist.node.name")
+    index = name_list.index(addr)
+    inst.remove("nodelist.node", index)
+    utils.str2file(inst.convert2string(), conf())

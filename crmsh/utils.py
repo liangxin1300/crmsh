@@ -18,6 +18,7 @@ import ipaddress
 import argparse
 import random
 import string
+from pathlib import Path
 from contextlib import contextmanager, closing
 from stat import S_ISBLK
 from . import config
@@ -588,14 +589,14 @@ def safe_close_w(f):
 
 
 def is_path_sane(name):
-    if re.search(r"['`#*?$\[\]]", name):
+    if re.search(r"['`#*?$\[\];]", name):
         common_err("%s: bad path" % name)
         return False
     return True
 
 
 def is_filename_sane(name):
-    if re.search(r"['`/#*?$\[\]]", name):
+    if re.search(r"['`/#*?$\[\];]", name):
         common_err("%s: bad filename" % name)
         return False
     return True
@@ -724,10 +725,11 @@ def lock(lockdir):
             rmdir_r(os.path.join(lockdir, _LOCKDIR))
 
 
-def mkdirp(d, mode=0o777):
-    if os.path.isdir(d):
-        return True
-    os.makedirs(d, mode=mode)
+def mkdirp(directory, mode=0o777, parents=True, exist_ok=True):
+    """
+    Same behavior as the POSIX mkdir -p command
+    """
+    Path(directory).mkdir(mode, parents, exist_ok)
 
 
 def pipe_cmd_nosudo(cmd):
@@ -1989,10 +1991,6 @@ def obscure(obscure_list):
         _obscured_nvpairs = prev
 
 
-def gen_nodeid_from_ipv6(addr):
-    return int(ipaddress.ip_address(addr)) % 1000000000
-
-
 # Set by detect_cloud()
 # to avoid multiple requests
 _ip_for_cloud = None
@@ -2131,7 +2129,7 @@ def is_qdevice_tls_on():
 
 def get_nodeinfo_from_cmaptool():
     nodeid_ip_dict = {}
-    rc, out = get_stdout("corosync-cmapctl -b runtime.totem.pg.mrp.srp.members")
+    rc, out = get_stdout("corosync-cmapctl -b runtime.members")
     if rc != 0:
         return nodeid_ip_dict
 
@@ -2311,17 +2309,15 @@ class InterfacesInfo(object):
     Class to collect interfaces information on local node
     """
 
-    def __init__(self, ipv6=False, second_heartbeat=False, custom_nic_list=[]):
+    def __init__(self, ipv6=False, custom_nic_list=[]):
         """
         Init function
 
         On init process,
         "ipv6" is provided by -I option
-        "second_heartbeat" is provided by -M option
         "custom_nic_list" is provided by -i option
         """
         self.ip_version = 6 if ipv6 else 4
-        self.second_heartbeat = second_heartbeat
         self._default_nic_list = custom_nic_list
         self._nic_info_dict = {}
 
@@ -2343,9 +2339,8 @@ class InterfacesInfo(object):
             # maybe from tun interface
             if not '/' in ip_with_mask:
                 continue
-            #TODO change this condition when corosync support link-local address
             interface_inst = Interface(ip_with_mask)
-            if interface_inst.is_loopback or interface_inst.is_link_local:
+            if interface_inst.is_loopback:
                 continue
             # one nic might configured multi IP addresses
             if nic not in self._nic_info_dict:
@@ -2354,8 +2349,6 @@ class InterfacesInfo(object):
 
         if not self._nic_info_dict:
             raise ValueError("No address configured")
-        if self.second_heartbeat and len(self._nic_info_dict) == 1:
-            raise ValueError("Cannot configure second heartbeat, since only one address is available")
 
     @property
     def nic_list(self):
@@ -2449,12 +2442,7 @@ class InterfacesInfo(object):
             if nic not in self.nic_list:
                 raise ValueError("Failed to detect IP address for {}".format(nic))
             _ip_list.append(self._nic_first_ip(nic))
-        # in case -M specified but given one interface via -i
-        if self.second_heartbeat and len(self._default_nic_list) == 1:
-            for nic in self.nic_list:
-                if nic not in self._default_nic_list:
-                    _ip_list.append(self._nic_first_ip(nic))
-                    break
+
         return _ip_list
 
     @classmethod
@@ -2868,4 +2856,25 @@ def append_res_to_group(group_id, res_id):
     """
     cmd = "crm configure modgroup {} add {}".format(group_id, res_id)
     get_stdout_or_raise_error(cmd)
+
+
+def get_qdevice_sync_timeout():
+    """
+    Get qdevice sync_timeout
+    """
+    out = get_stdout_or_raise_error("crm corosync status qdevice")
+    res = re.search("Sync HB interval:\s+(\d+)ms", out)
+    if not res:
+        raise ValueError("Cannot find qdevice sync timeout")
+    return int(int(res.group(1))/1000)
+
+
+def is_using_ipv6():
+    """
+    """
+    from . import corosync
+    res = corosync.get_value("totem.ip_version")
+    if res and res == "ipv6":
+        return True
+    return False
 # vim:ts=4:sw=4:et:
