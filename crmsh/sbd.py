@@ -47,6 +47,8 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
         self._sbd_watchdog_timeout = 0
         self._is_s390 = "390" in os.uname().machine
         self._context = context
+        self._sbd_msgwait = None
+        self._delay_start = False
 
     @staticmethod
     def _get_device_uuid(dev, node=None):
@@ -150,8 +152,13 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
         """
         if self.diskless_sbd:
             return
+        opt = ""
+        if self._context.profiles_dict:
+            self._sbd_msgwait = self._context.profiles_dict["sbd_msgwait"]
+            self._sbd_watchdog_timeout = self._context.profiles_dict["sbd_watchdog_timeout"]
+            opt = "-4 {} -1 {}".format(self._sbd_msgwait, self._sbd_watchdog_timeout)
         for dev in self._sbd_devices:
-            rc, _, err = bootstrap.invoke("sbd -d {} create".format(dev))
+            rc, _, err = bootstrap.invoke("sbd {} -d {} create".format(opt, dev))
             if not rc:
                 bootstrap.error("Failed to initialize SBD device {}: {}".format(dev, err))
 
@@ -161,10 +168,12 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
         """
         shutil.copyfile(self.SYSCONFIG_SBD_TEMPLATE, SYSCONFIG_SBD)
         self._determine_sbd_watchdog_timeout()
+        if utils.detect_virt() and self._sbd_devices:
+            self._delay_start = True
         sbd_config_dict = {
                 "SBD_PACEMAKER": "yes",
                 "SBD_STARTMODE": "always",
-                "SBD_DELAY_START": "yes" if utils.detect_virt() and self._sbd_devices else "no",
+                "SBD_DELAY_START": "yes" if self._delay_start else "no",
                 "SBD_WATCHDOG_DEV": self._watchdog_inst.watchdog_device_name
                 }
         if self._sbd_watchdog_timeout > 0:
@@ -241,6 +250,30 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
             # in init process
             bootstrap.invoke("systemctl enable sbd.service")
 
+    def _adjust_systemd(self):
+        """
+        Adjust start timeout for sbd when set SBD_DELAY_START
+        """
+        if not self._delay_start:
+            return
+
+        # TimeoutStartUSec default is 1min 30s, need to parse as seconds
+        cmd = "systemctl show service -p TimeoutStartUSec"
+        out = utils.get_stdout_or_raise_error(cmd)
+        res_seconds = re.search("(\d+)s", out)
+        default_start_timeout = int(res_seconds.group(1)) if res_seconds else 0
+        res_min = re.search("(\d+)min", out)
+        default_start_timeout += 60 * int(res_min.group(1)) if res_min else 0
+        if self._sbd_msgwait <= default_start_timeout:
+            return
+
+        systemd_sbd_dir = "/etc/systemd/system/sbd.service.d"
+        utils.mkdirp(systemd_sbd_dir)
+        systemd_timeout_sec = self._sbd_msgwait * 1.2
+        sbd_delay_start_file = "{}/sbd_delay_start.conf".format(systemd_sbd_dir)
+        utils.str2file("[Service]\nTimeoutSec={}".format(systemd_timeout_sec), sbd_delay_start_file)
+        utils.get_stdout_or_raise_error("systemctl daemon-reload")
+
     def _warn_diskless_sbd(self, peer=None):
         """
         Give warning when configuring diskless sbd
@@ -278,6 +311,7 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
             self._update_configuration()
         self._determine_stonith_watchdog_timeout()
         self._enable_sbd_service()
+        self._adjust_systemd()
 
     def configure_sbd_resource(self):
         """
