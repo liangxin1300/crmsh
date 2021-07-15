@@ -1,0 +1,7 @@
+microsoft-azure:
+  corosync_token: 30000
+  corosync_consensus: 36000
+  corosync_max_messages: 20
+  corosync_token_retransmits_before_loss_const: 10
+  sbd_watchdog_timeout: 60
+  sbd_msgwait: 120
