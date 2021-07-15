@@ -19,6 +19,7 @@ import re
 import time
 import readline
 import shutil
+import yaml
 from string import Template
 from lxml import etree
 from pathlib import Path
@@ -39,6 +40,7 @@ from . import ocfs2
 from . import qdevice
 
 
+PROFILES_FILE = "/etc/crm/profiles.yml"
 LOG_FILE = "/var/log/crmsh/ha-cluster-bootstrap.log"
 CSYNC2_KEY = "/etc/csync2/key_hagroup"
 CSYNC2_CFG = "/etc/csync2/csync2.cfg"
@@ -118,6 +120,7 @@ class Context(object):
         self.interfaces_inst = None
         self.with_other_user = True
         self.cluster_is_running = None
+        self.profiles_dict = {}
         self.default_nic_list = []
         self.default_ip_list = []
         self.local_ip_list = []
@@ -185,6 +188,20 @@ class Context(object):
     def init_sbd_manager(self):
         from .sbd import SBDManager
         self.sbd_manager = SBDManager(self)
+
+    def load_profiles(self):
+        """
+        Load profiles data for different cloud provider
+        """
+        env_name = utils.detect_cloud()
+        if not env_name:
+            return
+        if not os.path.exists(PROFILES_FILE):
+            return
+
+        with open(PROFILES_FILE) as f:
+            data = yaml.load(f, Loader=yaml.SafeLoader)
+        self.profiles_dict = data[env_name]
 
 
 _context = None
@@ -696,7 +713,8 @@ def init_cluster_local():
     if pass_msg:
         warn("You should change the hacluster password to something more secure!")
 
-    utils.start_service("pacemaker.service", enable=True)
+    with status_long("Starting pacemaker"):
+        utils.start_service("pacemaker.service", enable=True)
     wait_for_cluster()
 
 
@@ -1164,6 +1182,18 @@ Configure Corosync:
     csync2_update(corosync.conf())
 
 
+def profiles_adjust_for_corosync():
+    """
+    Adjust corosync's parameters according profiles
+    """
+    if not _context.profiles_dict:
+        return
+    corosync.set_value("totem.token", _context.profiles_dict["corosync_token"])
+    corosync.set_value("totem.consensus", _context.profiles_dict["corosync_consensus"])
+    corosync.set_value("totem.max_messages", _context.profiles_dict["corosync_max_messages"])
+    corosync.set_value("totem.token_retransmits_before_loss_const", _context.profiles_dict["corosync_token_retransmits_before_loss_const"])
+
+
 def init_corosync():
     """
     Configure corosync (unicast or multicast, encrypted?)
@@ -1184,6 +1214,7 @@ def init_corosync():
         init_corosync_unicast()
     else:
         init_corosync_multicast()
+    profiles_adjust_for_corosync()
 
 
 def init_sbd():
@@ -2016,6 +2047,7 @@ def bootstrap_init(context):
 
     _context.initialize_qdevice()
     _context.validate_option()
+    _context.load_profiles()
     _context.init_sbd_manager()
 
     # Need hostname resolution to work, want NTP (but don't block ssh_remote or csync2_remote)
