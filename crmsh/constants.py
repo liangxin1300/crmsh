@@ -490,4 +490,10 @@ QDEVICE_HELP_INFO = """  QDevice participates in quorum decisions. With the assi
 
 
 SSH_OPTION = "-o StrictHostKeyChecking=no"
+
+
+RED = '\033[31m'
+YELLOW = '\033[33m'
+GREEN = '\033[32m'
+END = '\033[0m'
 # vim:ts=4:sw=4:et:
