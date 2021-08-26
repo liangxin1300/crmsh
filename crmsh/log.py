@@ -137,7 +137,7 @@ LOGGING_CFG = {
             "propagate": False,
             "level": "DEBUG"
         },
-        "hb_report": {
+        "crmsh.hb_report": {
             "handlers": ["null", "file", "console"],
             "propagate": False,
             "level": "DEBUG"
