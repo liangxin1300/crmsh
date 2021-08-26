@@ -2898,4 +2898,12 @@ def detect_virt():
     """
     rc, _, _ = get_stdout_stderr("systemd-detect-virt")
     return rc == 0
+
+
+def fatal(error_msg):
+    """
+    Raise exception to jump over this module,
+    handled by Context.run in ui_context.py
+    """
+    raise ValueError(error_msg)
 # vim:ts=4:sw=4:et:

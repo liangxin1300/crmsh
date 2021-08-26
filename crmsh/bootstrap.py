@@ -163,12 +163,12 @@ class Context(object):
         Validate sbd options
         """
         if self.sbd_devices and self.diskless_sbd:
-            fatal("Can't use -s and -S options together")
+            utils.fatal("Can't use -s and -S options together")
         if self.stage == "sbd":
             if not self.sbd_devices and not self.diskless_sbd and self.yes_to_all:
-                fatal("Stage sbd should specify sbd device by -s or diskless sbd by -S option")
+                utils.fatal("Stage sbd should specify sbd device by -s or diskless sbd by -S option")
             if utils.service_is_active("sbd.service"):
-                fatal("Cannot configure stage sbd: sbd.service already running!")
+                utils.fatal("Cannot configure stage sbd: sbd.service already running!")
             if self.cluster_is_running:
                 utils.check_all_nodes_reachable()
 
@@ -182,9 +182,9 @@ class Context(object):
             self.qdevice_inst.valid_qdevice_options()
         if self.nic_list:
             if len(self.nic_list) > 2:
-                fatal("Maximum number of interface is 2")
+                utils.fatal("Maximum number of interface is 2")
             if len(self.nic_list) != len(set(self.nic_list)):
-                fatal("Duplicated input")
+                utils.fatal("Duplicated input")
         if self.no_overwrite_sshkey:
             logger.warning("--no-overwrite-sshkey option is deprecated since crmsh does not overwrite ssh keys by default anymore and will be removed in future versions")
         if self.type == "join" and self.watchdog:
@@ -252,14 +252,6 @@ class Context(object):
 
 
 _context = None
-
-
-def fatal(error_msg):
-    """
-    Raise exception to jump over this module,
-    handled by Context.run in ui_context.py
-    """
-    raise ValueError(error_msg)
 
 
 def drop_last_history():
@@ -342,14 +334,14 @@ def crm_configure_load(action, configuration):
     logger_utils.log_only_to_file("Loading crm config (%s), content is:" % (action))
     logger_utils.log_only_to_file(configuration)
     if not cib_factory.initialize():
-        fatal("Failed to load cluster configuration")
+        utils.fatal("Failed to load cluster configuration")
     set_obj = mkset_obj()
     if action == 'replace':
         cib_factory.erase()
     if not set_obj.save(configuration, remove=False, method=action):
-        fatal("Failed to load cluster configuration")
+        utils.fatal("Failed to load cluster configuration")
     if not cib_factory.commit():
-        fatal("Failed to commit cluster configuration")
+        utils.fatal("Failed to commit cluster configuration")
 
 
 def wait_for_resource(message, resource):
@@ -387,7 +379,7 @@ def get_cluster_node_hostname():
     if _context.cluster_node:
         rc, out, err = utils.get_stdout_stderr("ssh {} {} crm_node --name".format(SSH_OPTION, _context.cluster_node))
         if rc != 0:
-            fatal(err)
+            utils.fatal(err)
         peer_node = out
     return peer_node
 
@@ -412,7 +404,7 @@ def is_online(crm_mon_txt):
         csync2_update(corosync.conf())
         utils.stop_service("corosync")
         print()
-        fatal("Cannot see peer node \"{}\", please check the communication IP".format(peer_node))
+        utils.fatal("Cannot see peer node \"{}\", please check the communication IP".format(peer_node))
     return True
 
 
@@ -474,7 +466,7 @@ def check_tty():
     if _context.yes_to_all:
         return
     if not sys.stdin.isatty():
-        fatal("No pseudo-tty detected! Use -t option to ssh if calling remotely.")
+        utils.fatal("No pseudo-tty detected! Use -t option to ssh if calling remotely.")
 
 
 def my_hostname_resolves():
@@ -579,7 +571,7 @@ def configure_firewall(tcp=None, udp=None):
         # Firewall is active, either restart or complain if we couldn't tweak it
         logger.info("Restarting firewall (tcp={}, udp={})".format(" ".join(tcp), " ".join(udp)))
         if not invokerc("rcSuSEfirewall2 restart"):
-            fatal("Failed to restart firewall (SuSEfirewall2)")
+            utils.fatal("Failed to restart firewall (SuSEfirewall2)")
 
     def init_firewall_firewalld(tcp, udp):
         has_firewalld = utils.service_is_active("firewalld")
@@ -587,7 +579,7 @@ def configure_firewall(tcp=None, udp=None):
 
         def cmd(args):
             if not invokerc(cmdbase + args):
-                fatal("Failed to configure firewall.")
+                utils.fatal("Failed to configure firewall.")
 
         for p in tcp:
             cmd("--add-port={}/tcp".format(p))
@@ -597,7 +589,7 @@ def configure_firewall(tcp=None, udp=None):
 
         if has_firewalld:
             if not invokerc("firewall-cmd --reload"):
-                fatal("Failed to reload firewall configuration.")
+                utils.fatal("Failed to reload firewall configuration.")
 
     def init_firewall_ufw(tcp, udp):
         """
@@ -605,10 +597,10 @@ def configure_firewall(tcp=None, udp=None):
         """
         for p in tcp:
             if not invokerc("ufw allow {}/tcp".format(p)):
-                fatal("Failed to configure firewall (ufw)")
+                utils.fatal("Failed to configure firewall (ufw)")
         for p in udp:
             if not invokerc("ufw allow {}/udp".format(p)):
-                fatal("Failed to configure firewall (ufw)")
+                utils.fatal("Failed to configure firewall (ufw)")
 
     if utils.package_is_installed("firewalld"):
         init_firewall_firewalld(tcp, udp)
@@ -648,7 +640,7 @@ def firewall_open_corosync_ports():
 def init_cluster_local():
     # Caller should check this, but I'm paranoid...
     if utils.service_is_active("corosync.service"):
-        fatal("corosync service is running!")
+        utils.fatal("corosync service is running!")
 
     firewall_open_corosync_ports()
 
@@ -728,7 +720,7 @@ def rmfile(path, ignore_errors=False):
         os.remove(path)
     except os.error as err:
         if not ignore_errors:
-            fatal("Failed to remove {}: {}".format(path, err))
+            utils.fatal("Failed to remove {}: {}".format(path, err))
 
 
 def mkdirs_owned(dirs, mode=0o777, uid=-1, gid=-1):
@@ -740,7 +732,7 @@ def mkdirs_owned(dirs, mode=0o777, uid=-1, gid=-1):
         try:
             os.makedirs(dirs, mode)
         except OSError as err:
-            fatal("Failed to create {}: {}".format(dirs, err))
+            utils.fatal("Failed to create {}: {}".format(dirs, err))
         if uid != -1 or gid != -1:
             utils.chown(dirs, uid, gid)
 
@@ -804,7 +796,7 @@ def configure_local_ssh_key(user="root"):
         cmd = utils.add_su(cmd, user)
         rc, _, err = invoke(cmd)
         if not rc:
-            fatal("Failed to generate ssh key for {}: {}".format(user, err))
+            utils.fatal("Failed to generate ssh key for {}: {}".format(user, err))
 
     if not os.path.exists(authorized_file):
         open(authorized_file, 'w').close()
@@ -841,7 +833,7 @@ def append_to_remote_file(fromfile, remote_node, tofile):
     cmd = "cat {} | ssh {} root@{} 'cat >> {}'".format(fromfile, SSH_OPTION, remote_node, tofile)
     rc, _, err = invoke(cmd)
     if not rc:
-        fatal("Failed to append contents of {} to {}:\n\"{}\"\n{}".format(fromfile, remote_node, err, err_details_string))
+        utils.fatal("Failed to append contents of {} to {}:\n\"{}\"\n{}".format(fromfile, remote_node, err, err_details_string))
 
 
 def init_csync2():
@@ -853,7 +845,7 @@ def init_csync2():
     invoke("rm", "-f", CSYNC2_KEY)
     with logger_utils.status_long("Generating csync2 shared key (this may take a while)"):
         if not invokerc("csync2", "-k", CSYNC2_KEY):
-            fatal("Can't create csync2 key {}".format(CSYNC2_KEY))
+            utils.fatal("Can't create csync2 key {}".format(CSYNC2_KEY))
 
     csync2_file_list = ""
     for f in FILES_TO_SYNC:
@@ -900,7 +892,7 @@ def init_csync2_remote():
     """
     newhost = _context.cluster_node
     if not newhost:
-        fatal("Hostname not specified")
+        utils.fatal("Hostname not specified")
 
     curr_cfg = open(CSYNC2_CFG).read()
 
@@ -1052,7 +1044,7 @@ def init_corosync_unicast():
                 valid_func=Validation.valid_ucast_ip,
                 prev_value=ringXaddr_res)
         if not ringXaddr:
-            fatal("No value for ring{}".format(i))
+            utils.fatal("No value for ring{}".format(i))
         ringXaddr_res.append(ringXaddr)
 
         mcastport = prompt_for_string(
@@ -1062,7 +1054,7 @@ def init_corosync_unicast():
                 valid_func=Validation.valid_port,
                 prev_value=mcastport_res)
         if not mcastport:
-            fatal("Expected a multicast port for ring{}".format(i))
+            utils.fatal("Expected a multicast port for ring{}".format(i))
         mcastport_res.append(mcastport)
 
         if i == 1 or \
@@ -1115,7 +1107,7 @@ def init_corosync_multicast():
                 valid_func=Validation.valid_mcast_ip,
                 prev_value=bindnetaddr_res)
         if not bindnetaddr:
-            fatal("No value for bindnetaddr")
+            utils.fatal("No value for bindnetaddr")
         bindnetaddr_res.append(bindnetaddr)
 
         mcastaddr = prompt_for_string(
@@ -1124,7 +1116,7 @@ def init_corosync_multicast():
                 valid_func=Validation.valid_mcast_address,
                 prev_value=mcastaddr_res)
         if not mcastaddr:
-            fatal("No value for mcastaddr")
+            utils.fatal("No value for mcastaddr")
         mcastaddr_res.append(mcastaddr)
 
         mcastport = prompt_for_string(
@@ -1134,7 +1126,7 @@ def init_corosync_multicast():
                 valid_func=Validation.valid_port,
                 prev_value=mcastport_res)
         if not mcastport:
-            fatal("No value for mcastport")
+            utils.fatal("No value for mcastport")
         mcastport_res.append(mcastport)
 
         if i == 1 or \
@@ -1215,9 +1207,9 @@ def init_cluster():
     _rc, nnodes = utils.get_stdout("crm_node -l")
     nnodes = len(nnodes.splitlines())
     if nnodes < 1:
-        fatal("No nodes found in cluster")
+        utils.fatal("No nodes found in cluster")
     if nnodes > 1:
-        fatal("Joined existing cluster - will not reconfigure.")
+        utils.fatal("Joined existing cluster - will not reconfigure.")
 
     logger.info("Loading initial cluster configuration")
 
@@ -1249,7 +1241,7 @@ def init_admin():
 
         adminaddr = prompt_for_string('Virtual IP', valid_func=Validation.valid_admin_ip)
         if not adminaddr:
-            fatal("Expected an IP address")
+            utils.fatal("Expected an IP address")
 
     crm_configure_load("update", 'primitive admin-ip IPaddr2 ip=%s op monitor interval=10 timeout=20' % (utils.doublequote(adminaddr)))
     wait_for_resource("Configuring virtual IP ({})".format(adminaddr), "admin-ip")
@@ -1294,7 +1286,7 @@ def configure_qdevice_interactive():
         return
     qnetd_addr = prompt_for_string("HOST or IP of the QNetd server to be used")
     if not qnetd_addr:
-        fatal("Address of QNetd is required")
+        utils.fatal("Address of QNetd is required")
     qdevice_port = prompt_for_string("TCP PORT of QNetd server", default=5403)
     qdevice_algo = prompt_for_string("QNetd decision ALGORITHM (ffsplit/lms)", default="ffsplit")
     qdevice_tie_breaker = prompt_for_string("QNetd TIE_BREAKER (lowest/highest/valid node id)", default="lowest")
@@ -1346,7 +1338,7 @@ def init_qdevice():
         logger.info("Copy ssh key to qnetd node({})".format(qnetd_addr))
         rc, _, err = invoke("ssh-copy-id -i /root/.ssh/id_rsa.pub root@{}".format(qnetd_addr))
         if not rc:
-            fatal("Failed to copy ssh key: {}".format(err))
+            utils.fatal("Failed to copy ssh key: {}".format(err))
     # Start qdevice service if qdevice already configured
     if utils.is_qdevice_configured() and not confirm("Qdevice is already configured - overwrite?"):
         start_qdevice_service()
@@ -1420,7 +1412,7 @@ def join_ssh(seed_host):
     SSH configuration for joining node.
     """
     if not seed_host:
-        fatal("No existing IP/hostname specified (use -c option)")
+        utils.fatal("No existing IP/hostname specified (use -c option)")
 
     utils.start_service("sshd.service", enable=True)
     for user in USER_LIST:
@@ -1433,7 +1425,7 @@ def join_ssh(seed_host):
     # ha-cluster-init).
     rc, _, err = invoke("ssh {} root@{} crm cluster init -i {} ssh_remote".format(SSH_OPTION, seed_host, _context.default_nic_list[0]))
     if not rc:
-        fatal("Can't invoke crm cluster init -i {} ssh_remote on {}: {}".format(_context.default_nic_list[0], seed_host, err))
+        utils.fatal("Can't invoke crm cluster init -i {} ssh_remote on {}: {}".format(_context.default_nic_list[0], seed_host, err))
 
 
 def swap_public_ssh_key(remote_node, user="root"):
@@ -1482,7 +1474,7 @@ def fetch_public_key_from_remote_node(node, user="root"):
         cmd = "scp {} root@{}:{} {}".format(SSH_OPTION, node, public_key_file, temp_public_key_file)
         rc, _, err = invoke(cmd)
         if not rc:
-            fatal("Failed to run \"{}\": {}".format(cmd, err))
+            utils.fatal("Failed to run \"{}\": {}".format(cmd, err))
         return temp_public_key_file
     raise ValueError("No ssh key exist on {}".format(node))
 
@@ -1492,7 +1484,7 @@ def join_csync2(seed_host):
     Csync2 configuration for joining node.
     """
     if not seed_host:
-        fatal("No existing IP/hostname specified (use -c option)")
+        utils.fatal("No existing IP/hostname specified (use -c option)")
     with logger_utils.status_long("Configuring csync2"):
 
         # Necessary if re-running join on a node that's been configured before.
@@ -1508,7 +1500,7 @@ def join_csync2(seed_host):
         cmd = "crm cluster init -i {} csync2_remote {}".format(_context.default_nic_list[0], utils.this_node())
         rc, _, err = invoke("ssh {} root@{} {}".format(SSH_OPTION, seed_host, cmd))
         if not rc:
-            fatal("Can't invoke \"{}\" on {}: {}".format(cmd, seed_host, err))
+            utils.fatal("Can't invoke \"{}\" on {}: {}".format(cmd, seed_host, err))
 
         # This is necessary if syncing /etc/hosts (to ensure everyone's got the
         # same list of hosts)
@@ -1518,7 +1510,7 @@ def join_csync2(seed_host):
         # install_tmp $tmp_conf /etc/hosts
         rc, _, err = invoke("scp root@%s:'/etc/csync2/{csync2.cfg,key_hagroup}' /etc/csync2" % (seed_host))
         if not rc:
-            fatal("Can't retrieve csync2 config from {}: {}".format(seed_host, err))
+            utils.fatal("Can't retrieve csync2 config from {}: {}".format(seed_host, err))
 
         utils.start_service("csync2.socket", enable=True)
 
@@ -1550,7 +1542,7 @@ def join_ssh_merge(_cluster_node):
     try:
         import parallax
     except ImportError:
-        fatal("parallax python library is missing")
+        utils.fatal("parallax python library is missing")
 
     opts = parallax.Options()
     opts.ssh_options = ['StrictHostKeyChecking=no']
@@ -1667,7 +1659,7 @@ def setup_passwordless_with_other_nodes(init_node):
     cmd = "ssh {} root@{} crm_node -l".format(SSH_OPTION, init_node)
     rc, out, err = utils.get_stdout_stderr(cmd)
     if rc != 0:
-        fatal("Can't fetch cluster nodes list from {}: {}".format(init_node, err))
+        utils.fatal("Can't fetch cluster nodes list from {}: {}".format(init_node, err))
     cluster_nodes_list = []
     for line in out.splitlines():
         # Parse line in format: <id> <nodename> <state>, and collect the
@@ -1690,7 +1682,7 @@ def setup_passwordless_with_other_nodes(init_node):
     cmd = "ssh {} root@{} hostname".format(SSH_OPTION, init_node)
     rc, out, err = utils.get_stdout_stderr(cmd)
     if rc != 0:
-        fatal("Can't fetch hostname of {}: {}".format(init_node, err))
+        utils.fatal("Can't fetch hostname of {}: {}".format(init_node, err))
     if out in cluster_nodes_list:
         cluster_nodes_list.remove(out)
 
@@ -1766,7 +1758,7 @@ def join_cluster(seed_host):
 
     # If corosync.conf() doesn't exist or is empty, we will fail here. (bsc#943227)
     if not os.path.exists(corosync.conf()):
-        fatal("{} is not readable. Please ensure that hostnames are resolvable.".format(corosync.conf()))
+        utils.fatal("{} is not readable. Please ensure that hostnames are resolvable.".format(corosync.conf()))
 
     # if unicast, we need to add our node to $corosync.conf()
     is_unicast = corosync.is_unicast()
@@ -1780,7 +1772,7 @@ def join_cluster(seed_host):
                         valid_func=Validation.valid_ucast_ip,
                         prev_value=ringXaddr_res)
                 if not ringXaddr:
-                    fatal("No value for ring{}".format(i))
+                    utils.fatal("No value for ring{}".format(i))
                 ringXaddr_res.append(ringXaddr)
                 break
             if not rrp_flag:
@@ -1926,16 +1918,16 @@ def remove_node_from_cluster():
     # delete configuration files from the node to be removed
     rc, _, err = invoke('ssh {} root@{} "bash -c \\\"rm -f {}\\\""'.format(SSH_OPTION, node, " ".join(_context.rm_list)))
     if not rc:
-        fatal("Deleting the configuration files failed: {}".format(err))
+        utils.fatal("Deleting the configuration files failed: {}".format(err))
 
     # execute the command : crm node delete $HOSTNAME
     logger.info("Removing the node {}".format(node))
     rc, _, err = invoke("crm node delete {}".format(node))
     if not rc:
-        fatal("Failed to remove {}: {}".format(node, err))
+        utils.fatal("Failed to remove {}: {}".format(node, err))
 
     if not invokerc("sed -i /{}/d {}".format(node, CSYNC2_CFG)):
-        fatal("Removing the node {} from {} failed".format(node, CSYNC2_CFG))
+        utils.fatal("Removing the node {} from {} failed".format(node, CSYNC2_CFG))
 
     # Remove node from nodelist
     if corosync.get_values("nodelist.node.ring0_addr"):
@@ -2006,13 +1998,13 @@ def bootstrap_init(context):
     corosync_active = utils.service_is_active("corosync.service")
     if stage in ("vgfs", "admin", "qdevice", "ocfs2"):
         if not corosync_active:
-            fatal("Cluster is inactive - can't run %s stage" % (stage))
+            utils.fatal("Cluster is inactive - can't run %s stage" % (stage))
     elif stage == "":
         if corosync_active:
-            fatal("Cluster is currently active - can't run")
+            utils.fatal("Cluster is currently active - can't run")
     elif stage not in ("ssh", "ssh_remote", "csync2", "csync2_remote", "sbd", "ocfs2"):
         if corosync_active:
-            fatal("Cluster is currently active - can't run %s stage" % (stage))
+            utils.fatal("Cluster is currently active - can't run %s stage" % (stage))
 
     _context.initialize_qdevice()
     _context.validate_option()
@@ -2028,7 +2020,7 @@ def bootstrap_init(context):
         args = _context.args
         logger_utils.log_only_to_file("args: {}".format(args))
         if len(args) != 2:
-            fatal("Expected NODE argument to csync2_remote")
+            utils.fatal("Expected NODE argument to csync2_remote")
         _context.cluster_node = args[1]
 
     if stage != "":
@@ -2048,7 +2040,7 @@ def bootstrap_init(context):
                 init_qdevice()
                 init_ocfs2()
         except lock.ClaimLockError as err:
-            fatal(err)
+            utils.fatal(err)
 
     bootstrap_finished()
 
@@ -2068,7 +2060,7 @@ def bootstrap_join(context):
 
     corosync_active = utils.service_is_active("corosync.service")
     if corosync_active and _context.stage != "ssh":
-        fatal("Abort: Cluster is currently active. Run this command on a node joining the cluster.")
+        utils.fatal("Abort: Cluster is currently active. Run this command on a node joining the cluster.")
 
     if not check_prereqs("join"):
         return
@@ -2092,7 +2084,7 @@ def bootstrap_join(context):
         join_ssh(cluster_node)
 
         if not utils.service_is_active("pacemaker.service", cluster_node):
-            fatal("Cluster is inactive on {}".format(cluster_node))
+            utils.fatal("Cluster is inactive on {}".format(cluster_node))
 
         lock_inst = lock.RemoteLock(cluster_node)
         try:
@@ -2105,7 +2097,7 @@ def bootstrap_join(context):
                 join_ocfs2(cluster_node)
                 join_cluster(cluster_node)
         except (lock.SSHError, lock.ClaimLockError) as err:
-            fatal(err)
+            utils.fatal(err)
 
     bootstrap_finished()
 
@@ -2135,7 +2127,7 @@ def remove_qdevice():
     Remove qdevice service and configuration from cluster
     """
     if not utils.is_qdevice_configured():
-        fatal("No QDevice configuration in this cluster")
+        utils.fatal("No QDevice configuration in this cluster")
     if not confirm("Removing QDevice service and configuration from cluster: Are you sure?"):
         return
 
@@ -2175,10 +2167,10 @@ def bootstrap_remove(context):
     init()
 
     if not utils.service_is_active("corosync.service"):
-        fatal("Cluster is not active - can't execute removing action")
+        utils.fatal("Cluster is not active - can't execute removing action")
 
     if _context.qdevice_rm_flag and _context.cluster_node:
-        fatal("Either remove node or qdevice")
+        utils.fatal("Either remove node or qdevice")
 
     if _context.qdevice_rm_flag:
         remove_qdevice()
@@ -2193,7 +2185,7 @@ def bootstrap_remove(context):
         _context.cluster_node = prompt_for_string("IP address or hostname of cluster node (e.g.: 192.168.1.1)", ".+")
 
     if not _context.cluster_node:
-        fatal("No existing IP/hostname specified (use -c option)")
+        utils.fatal("No existing IP/hostname specified (use -c option)")
 
     _context.cluster_node = get_cluster_node_hostname()
 
@@ -2202,12 +2194,12 @@ def bootstrap_remove(context):
 
     if _context.cluster_node == utils.this_node():
         if not force_flag:
-            fatal("Removing self requires --force")
+            utils.fatal("Removing self requires --force")
         remove_self()
     elif _context.cluster_node in xmlutil.listnodes():
         remove_node_from_cluster()
     else:
-        fatal("Specified node {} is not configured in cluster! Unable to remove.".format(_context.cluster_node))
+        utils.fatal("Specified node {} is not configured in cluster! Unable to remove.".format(_context.cluster_node))
 
     bootstrap_finished()
 
@@ -2222,14 +2214,14 @@ def remove_self():
         cmd = "crm cluster remove{} -c {}".format(" -y" if yes_to_all else "", me)
         rc = utils.ext_cmd_nosudo("ssh{} {} {} '{}'".format("" if yes_to_all else " -t", SSH_OPTION, othernode, cmd))
         if rc != 0:
-            fatal("Failed to remove this node from {}".format(othernode))
+            utils.fatal("Failed to remove this node from {}".format(othernode))
     else:
         # disable and stop cluster
         stop_services(SERVICES_STOP_LIST)
         # remove all trace of cluster from this node
         # delete configuration files from the node to be removed
         if not invokerc('bash -c "rm -f {}"'.format(" ".join(_context.rm_list))):
-            fatal("Deleting the configuration files failed")
+            utils.fatal("Deleting the configuration files failed")
 
 
 def init_common_geo():
@@ -2237,7 +2229,7 @@ def init_common_geo():
     Tasks to do both on first and other geo nodes.
     """
     if not utils.package_is_installed("booth"):
-        fatal("Booth not installed - Not configurable as a geo cluster node.")
+        utils.fatal("Booth not installed - Not configurable as a geo cluster node.")
 
 
 def init_csync2_geo():
@@ -2255,7 +2247,7 @@ def create_booth_authkey():
         rmfile(BOOTH_AUTH)
     rc, _, err = invoke("booth-keygen {}".format(BOOTH_AUTH))
     if not rc:
-        fatal("Failed to generate booth authkey: {}".format(err))
+        utils.fatal("Failed to generate booth authkey: {}".format(err))
 
 
 def create_booth_config(arbitrator, clusters, tickets):
@@ -2320,7 +2312,7 @@ def geo_fetch_config(node):
     tmpdir = tmpfiles.create_dir()
     rc, _, err = invoke("scp -oStrictHostKeyChecking=no root@{}:'{}/*' {}/".format(node, BOOTH_DIR, tmpdir))
     if not rc:
-        fatal("Failed to retrieve configuration: {}".format(err))
+        utils.fatal("Failed to retrieve configuration: {}".format(err))
     try:
         if os.path.isfile("%s/authkey" % (tmpdir)):
             invoke("mv %s/authkey %s" % (tmpdir, BOOTH_AUTH))
@@ -2335,7 +2327,7 @@ def geo_fetch_config(node):
 def geo_cib_config(clusters):
     cluster_name = corosync.get_values('totem.cluster_name')[0]
     if cluster_name not in list(clusters.keys()):
-        fatal("Local cluster name is {}, expected {}".format(cluster_name, "|".join(list(clusters.keys()))))
+        utils.fatal("Local cluster name is {}, expected {}".format(cluster_name, "|".join(list(clusters.keys()))))
 
     logger.info("Configure cluster resources for booth")
     crm_template = Template("""
@@ -2378,7 +2370,7 @@ def bootstrap_arbitrator(context):
     check_tty()
     geo_fetch_config(node)
     if not os.path.isfile(BOOTH_CFG):
-        fatal("Failed to copy {} from {}".format(BOOTH_CFG, node))
+        utils.fatal("Failed to copy {} from {}".format(BOOTH_CFG, node))
     # TODO: verify that the arbitrator IP in the configuration is us?
     logger.info("Enabling and starting the booth arbitrator service")
     utils.start_service("booth@booth", enable=True)

@@ -191,7 +191,7 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
         for dev in self._sbd_devices:
             rc, _, err = bootstrap.invoke("sbd {} -d {} create".format(opt, dev))
             if not rc:
-                bootstrap.fatal("Failed to initialize SBD device {}: {}".format(dev, err))
+                utils.fatal("Failed to initialize SBD device {}: {}".format(dev, err))
 
     def _update_sbd_configuration(self):
         """
@@ -383,13 +383,13 @@ If you want to use diskless SBD for two-nodes cluster, should be combined with Q
 
         if self._get_sbd_device_from_config():
             if not bootstrap.invokerc("crm configure primitive stonith-sbd stonith:external/sbd pcmk_delay_max=30s"):
-                bootstrap.fatal("Can't create stonith-sbd primitive")
+                utils.fatal("Can't create stonith-sbd primitive")
             if not bootstrap.invokerc("crm configure property stonith-enabled=true"):
-                bootstrap.fatal("Can't enable STONITH for SBD")
+                utils.fatal("Can't enable STONITH for SBD")
         else:
             cmd = self.DISKLESS_CRM_CMD.format(self._stonith_watchdog_timeout, str(self._stonith_timeout)+"s")
             if not bootstrap.invokerc(cmd):
-                bootstrap.fatal("Can't enable STONITH for diskless SBD")
+                utils.fatal("Can't enable STONITH for diskless SBD")
 
     def join_sbd(self, peer_host):
         """
