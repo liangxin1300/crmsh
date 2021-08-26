@@ -195,7 +195,7 @@ class TestSBDManager(unittest.TestCase):
 
     @mock.patch('logging.Logger.warning')
     @mock.patch('crmsh.sbd.SBDManager._adjust_sbd_watchdog_timeout_for_s390')
-    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.utils.fatal')
     @mock.patch('crmsh.bootstrap.invoke')
     def test_initialize_sbd(self, mock_invoke, mock_error, mock_adjust_s390, mock_warn):
         self.sbd_inst._context = mock.Mock(profiles_dict={
@@ -404,7 +404,7 @@ class TestSBDManager(unittest.TestCase):
         self.sbd_inst.configure_sbd_resource()
         mock_package.assert_called_once_with("sbd")
 
-    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.utils.fatal')
     @mock.patch('crmsh.bootstrap.invokerc')
     @mock.patch('crmsh.sbd.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.has_resource_configured')
@@ -428,7 +428,7 @@ class TestSBDManager(unittest.TestCase):
         mock_invoke.assert_called_once_with("crm configure primitive stonith-sbd stonith:external/sbd pcmk_delay_max=30s")
         mock_error.assert_called_once_with("Can't create stonith-sbd primitive")
 
-    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.utils.fatal')
     @mock.patch('crmsh.bootstrap.invokerc')
     @mock.patch('crmsh.sbd.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.has_resource_configured')
@@ -455,7 +455,7 @@ class TestSBDManager(unittest.TestCase):
             ])
         mock_error.assert_called_once_with("Can't enable STONITH for SBD")
 
-    @mock.patch('crmsh.bootstrap.fatal')
+    @mock.patch('crmsh.utils.fatal')
     @mock.patch('crmsh.bootstrap.invokerc')
     @mock.patch('crmsh.sbd.SBDManager._get_sbd_device_from_config')
     @mock.patch('crmsh.utils.has_resource_configured')
