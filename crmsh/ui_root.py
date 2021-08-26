@@ -17,6 +17,7 @@
 #   This is so that crmsh can be installed with minimal prereqs,
 #   and use cluster sublevel to install all requirements
 
+import sys
 from . import command
 from . import completers as compl
 from . import cmd_status
@@ -30,10 +31,10 @@ from . import ui_maintenance
 from . import ui_node
 from . import ui_options
 from . import ui_ra
-from . import ui_report
 from . import ui_resource
 from . import ui_script
 from . import ui_site
+from crmsh.hb_report import main
 
 
 class Root(command.UI):
@@ -137,8 +138,8 @@ configuration files, system information, etc) relevant to
 crmsh over the given period of time.
 ''')
     def do_report(self, context, *args):
-        rc = ui_report.create_report(context, args)
-        return rc == 0
+        sys.argv[1:] = args
+        return main.run(args)
 
     @command.level(ui_resource.RscMgmt)
     @command.help('''resources management
