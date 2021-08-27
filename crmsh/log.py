@@ -83,9 +83,11 @@ class DebugCustomFilter(logging.Filter):
     A custom filter for debug message
     """
     def filter(self, record):
+        from .config import core, report
         if record.levelname == "DEBUG":
-            from .config import core
-            return core.debug
+            return core.debug or int(report.verbosity) >= 1
+        if record.levelname == "DEBUG2":
+            return int(report.verbosity) > 1
         else:
             return True
 
@@ -160,6 +162,14 @@ class LoggerUtils(object):
         # used in regression test
         self.lineno = 0
         self.__save_lineno = 0
+
+    def set_debug2_level(self):
+        """
+        Create DEBUG2 level for verbosity
+        """
+        logging.DEBUG2 = logging.DEBUG + 5
+        logging.addLevelName(logging.DEBUG2, "DEBUG2")
+        self.logger.debug2 = lambda msg, *args: self.logger._log(logging.DEBUG2, msg, args)
 
     def get_handler(self, _type):
         """
