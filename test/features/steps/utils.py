@@ -5,6 +5,22 @@ import socket
 from crmsh import utils, bootstrap, parallax
 
 
+def get_file_content(archive_path, file_name):
+    archive_type = get_file_type(archive_path)
+    if archive_type == "bzip2":
+        content = ""
+        tar = tarfile.open(archive_path)
+        for member in tar.getmembers():
+            if re.search('/{}$'.format(file_name), member.name):
+                f=tar.extractfile(member)
+                content=f.read()
+                break
+        tar.close()
+        return utils.to_ascii(content)
+    if archive_type == "directory":
+        pass
+
+
 def get_file_type(file_path):
     rc, out, _ = utils.get_stdout_stderr("file {}".format(file_path))
     if re.search(r'{}: bzip2'.format(file_path), out):
@@ -89,3 +105,10 @@ def online(context, nodelist):
             rc = False
             context.logger.error("\nNode \"{}\" not online\n".format(node))
     return rc
+
+
+def append_to_remove_list(context, target):
+    if not hasattr(context, "remove_list"):
+        context.remove_list = []
+    if target not in context.remove_list:
+        context.remove_list.append(target)

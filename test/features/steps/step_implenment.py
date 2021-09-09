@@ -2,16 +2,25 @@ import re
 import time
 import os
 import datetime
+import shutil
 from behave import given, when, then
 from crmsh import corosync, parallax
+from crmsh.report import const as crmconst
 from utils import check_cluster_state, check_service_state, online, run_command, me, \
-                  run_command_local_or_remote, file_in_archive
+                  run_command_local_or_remote, file_in_archive, get_file_type, get_all_files, \
+                  append_to_remove_list, get_file_content
 import const
+
+@when('Get "{file_name}" content from "{archive_name}"')
+def step_impl(context, file_name, archive_name):
+    context.stdout = get_file_content(archive_name, file_name)
+    context.logger.info("\n{}".format(context.stdout))
 
 @when('Write multi lines to file "{f}"')
 def step_impl(context, f):
     with open(f, 'w') as fd:
         fd.write(context.text)
+    append_to_remove_list(context, f)
 
 @given('Cluster service is "{state}" on "{addr}"')
 def step_impl(context, state, addr):
@@ -268,25 +277,52 @@ def step_impl(context, votes):
     assert int(corosync.get_value("quorum.expected_votes")) == int(votes)
 
 
-@then('Default hb_report tar file created')
+@then('Default crm report tar file created')
 def step_impl(context):
-    default_file_name = 'hb_report-{}.tar.bz2'.format(datetime.datetime.now().strftime("%w-%d-%m-%Y"))
+    default_file_name = 'crm_report-{}.tar.bz2'.format(datetime.datetime.now().strftime(crmconst.TIME_FORMAT_FOR_TAR))
+    append_to_remove_list(context, default_file_name)
     assert os.path.exists(default_file_name) is True
 
-
-@when('Remove default hb_report tar file')
+@then('Default crm report directory created')
 def step_impl(context):
-    default_file_name = 'hb_report-{}.tar.bz2'.format(datetime.datetime.now().strftime("%w-%d-%m-%Y"))
-    os.remove(default_file_name)
+    default_file_name = 'crm_report-{}'.format(datetime.datetime.now().strftime(crmconst.TIME_FORMAT_FOR_TAR))
+    append_to_remove_list(context, default_file_name)
+    assert os.path.isdir(default_file_name) is True
+
+@then('"{file_name}" created')
+def step_impl(context, file_name):
+    append_to_remove_list(context, file_name)
+    file_type = get_file_type(file_name)
+    if file_type == "bzip2":
+        assert os.path.exists(file_name) is True
+    if file_type == "directory":
+        assert os.path.isdir(file_name) is True
+
+
+@when('Register "{f}" to remove')
+def step_impl(context, f):
+    append_to_remove_list(context, f)
 
 
 @then('File "{f}" in "{archive}"')
 def step_impl(context, f, archive):
+    append_to_remove_list(context, archive)
     assert file_in_archive(f, archive) is True
+
+
+@when('Remove previously created files')
+def step_impl(context):
+    for f in context.remove_list:
+        if os.path.isdir(f):
+            shutil.rmtree(f)
+        else:
+            os.remove(f)
+    context.remove_list = []
 
 
 @then('File "{f}" not in "{archive}"')
 def step_impl(context, f, archive):
+    append_to_remove_list(context, archive)
     assert file_in_archive(f, archive) is False
 
 
@@ -295,3 +331,22 @@ def step_impl(context, f):
     cmd = "crm cluster diff {}".format(f)
     rc, out = run_command(context, cmd)
     assert out == ""
+
+
+@then('"{archive_name}" include essential files for "{nodes}"')
+def step_impl(context, archive_name, nodes):
+    files = 'cib.txt cib.xml corosync.conf crm_mon.txt journal.log sysinfo.txt'
+    essential_files_list = []
+    base_archive_name = ""
+    archive_type = get_file_type(archive_name)
+
+    if archive_type == "bzip2":
+        base_archive_name = '.'.join(os.path.basename(archive_name).split('.')[:-2])
+    if archive_type == "directory":
+        base_archive_name = archive_name
+    for node in nodes.split():
+        essential_files_list += ["{}/{}/{}".format(base_archive_name, node, f) for f in files.split()]
+
+    all_files = get_all_files(archive_name)
+    for ef in essential_files_list:
+        assert ef in all_files
