@@ -2,7 +2,6 @@
 # Copyright (C) 2013 Kristoffer Gronlund <kgronlund@suse.com>
 # See COPYING for license information.
 
-import os
 import subprocess
 from signal import signal, SIGPIPE, SIG_DFL
 
@@ -12,8 +11,7 @@ from . import options
 
 
 def report_tool():
-    toolopts = [os.path.join(config.path.sharedir, 'hb_report', 'hb_report'),
-                'hb_report',
+    toolopts = ['hb_report',
                 'crm_report']
     for tool in toolopts:
         if utils.is_program(tool):
