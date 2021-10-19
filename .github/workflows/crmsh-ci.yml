@@ -37,15 +37,25 @@ jobs:
       run: |
         tox -v
 
-  functional_test_hb_report_bugs:
+  functional_test_crm_report_bugs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
     - uses: actions/checkout@v2
-    - name: functional test for hb_report
+    - name: functional test for crm_report
       run:  |
-        $DOCKER_SCRIPT hb_report before_install
-        $DOCKER_SCRIPT hb_report run bugs
+        $DOCKER_SCRIPT crm_report before_install
+        $DOCKER_SCRIPT crm_report run bugs
+
+  functional_test_crm_report_normal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v2
+    - name: functional test for crm_report
+      run:  |
+        $DOCKER_SCRIPT crm_report before_install
+        $DOCKER_SCRIPT crm_report run normal
 
   functional_test_bootstrap_bugs:
     runs-on: ubuntu-latest
@@ -169,7 +179,8 @@ jobs:
 
   delivery:
     needs: [unit_test,
-      functional_test_hb_report_bugs,
+      functional_test_crm_report_bugs,
+      functional_test_crm_report_normal,
       functional_test_bootstrap_bugs,
       functional_test_bootstrap_common,
       functional_test_bootstrap_options,
