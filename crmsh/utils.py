@@ -2973,4 +2973,43 @@ def is_quorate(peer=None):
         return res.group(1) == "Yes"
     else:
         raise ValueError("Failed to get quorate status from corosync-quorumtool")
+
+
+def is_2node_cluster_without_qdevice(removing=False):
+    """
+    Check if current cluster has two nodes without qdevice
+    """
+    current_num = len(list_cluster_nodes())
+    remove_num = 1 if removing else 0
+    qdevice_num = 1 if is_qdevice_configured() else 0
+    return (current_num - remove_num + qdevice_num) == 2
+
+
+def get_pcmk_delay_max(two_node_without_qdevice=False):
+    """
+    Get value of pcmk_delay_max
+    """
+    if service_is_active("pacemaker.service") and two_node_without_qdevice:
+        return constants.PCMK_DELAY_MAX
+    return 0
+
+
+def get_property(name):
+    """
+    Get cluster properties
+    """
+    cmd = "crm configure get_property " + name
+    rc, stdout, _ = get_stdout_stderr(cmd)
+    return stdout if rc == 0 else None
+
+
+def set_property(**kwargs):
+    """
+    Set cluster properties
+    """
+    set_str = ""
+    for key, value in kwargs.items():
+        set_str += "{}={} ".format(key, value)
+    cmd = "crm configure property " + set_str.strip().replace('_', '-')
+    get_stdout_or_raise_error(cmd)
 # vim:ts=4:sw=4:et:
