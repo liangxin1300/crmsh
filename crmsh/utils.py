@@ -2973,4 +2973,36 @@ def is_quorate(peer=None):
         return res.group(1) == "Yes"
     else:
         raise ValueError("Failed to get quorate status from corosync-quorumtool")
+
+
+def is_2node_cluster_without_qdevice(joining=False):
+    """
+    Check if current cluster has two nodes without qdevice
+    """
+    current_num = len(list_cluster_nodes())
+    join_num = 1 if joining else 0
+    qdevice_num = 1 if is_qdevice_configured() else 0
+    return (current_num + join_num + qdevice_num) == 2
+
+
+def get_corosync_value(key):
+    """
+    Get corosync configuration value from corosync-cmapctl or corosync.conf
+    """
+    try:
+        out = get_stdout_or_raise_error("corosync-cmapctl {}".format(key))
+        res = re.search(r'{}\s+.*=\s+(.*)'.format(key), out)
+        return res.group(1) if res else None
+    except ValueError:
+        out = corosync.get_value(key)
+        return out
+
+
+def get_property(name):
+    """
+    Get cluster properties
+    """
+    cmd = "crm configure get_property " + name
+    rc, stdout, _ = get_stdout_stderr(cmd)
+    return stdout if rc == 0 else None
 # vim:ts=4:sw=4:et:
