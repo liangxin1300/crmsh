@@ -1,0 +1,229 @@
+#!/bin/bash
+
+DOCKER_IMAGE="liangxin1300/hatbw"
+DOCKER_SERVICE="docker.service"
+COROSYNC_CONF="/etc/corosync/corosync.conf"
+COROSYNC_AUTH="/etc/corosync/authkey"
+HA_NETWORK="ha_network"
+read -r -d '' COROSYNC_CONF_TEMPLATE << EOM
+totem {
+        version: 2
+        cluster_name: hacluster
+        clear_node_high_bit: yes
+        interface {
+                ringnumber: 0
+                mcastport: 5405
+                ttl: 1
+        }
+
+        transport: udpu
+        crypto_hash: sha1
+        crypto_cipher: aes256
+        token: 5000
+        join: 60
+        max_messages: 20
+        token_retransmits_before_loss_const: 10
+}
+
+logging {
+        fileline: off
+        to_stderr: no
+        to_logfile: no
+        logfile: /var/log/cluster/corosync.log
+        to_syslog: yes
+        debug: off
+        timestamp: on
+        logger_subsys {
+                subsys: QUORUM
+                debug: off
+        }
+
+}
+
+nodelist {
+}
+
+quorum {
+
+        # Enable and configure quorum subsystem (default: off)
+        # see also corosync.conf.5 and votequorum.5
+        provider: corosync_votequorum
+}
+EOM
+
+
+fatal() {
+	error $*
+	exit 1
+}
+
+
+error() {
+	echo "ERROR: $*"
+}
+
+
+warning() {
+	echo "WARNING: $*"
+}
+
+
+info() {
+	echo "INFO: $*"
+}
+
+
+is_number() {
+	num=$1
+	test ! -z "$num" && test "$num" -eq "$num" 2> /dev/null
+}
+
+
+check_docker_env() {
+	info "Checking docker environment..."
+	# check if docker available
+	systemctl list-unit-files $DOCKER_SERVICE &> /dev/null
+	if [ "$?" -ne 0 ];then
+		fatal "$DOCKER_SERVICE is not available"
+	fi
+	# check if docker.service started
+	systemctl is-active $DOCKER_SERVICE &> /dev/null
+	if [ "$?" -ne 0 ];then
+		fatal "$DOCKER_SERVICE is not active"
+	fi
+	# check if docker cgroup driver is systemd
+	docker info 2> /dev/null|grep -q "Cgroup Driver: systemd"
+	if [ "$?" -ne 0 ];then
+		warning "docker cgroup driver suggest to be \"systemd\""
+	fi
+	echo
+}
+
+
+echo_test_cases() {
+	exclude_cases="sbd|ocfs2"
+	case_dir="$(dirname $0)/features/"
+	echo "Index|File Name|Description"
+	index=1
+	for f in `ls $case_dir|grep "\.feature"|grep -Ev "$exclude_cases"`;do
+		desc=`awk -F: '/Feature/{print $2}' $case_dir/$f`
+		printf "%3s    %-40s %-60s\n" $index $f "$desc"
+		index=$(($index+1))
+	done
+}
+
+
+usage_and_exit() {
+	prog=`basename $0`
+	cat <<END
+Usage: $prog [OPTIONS]|[TESTCASE INDEX]
+$prog is a tool for developers to setup the cluster in containers to run functional tests
+
+OPTIONS:
+  -h, --help	Show this help message and exit
+  -l            List existing functional test cases and exit
+  -n NUM        Only setup a cluster with NUM nodes(containers)
+  -d            Cleanup the cluster containers
+END
+	exit 1
+}
+
+
+deploy_ha_node() {
+	node_name=$1
+	info "Deploying $node_name..."
+
+	docker run -d --name=$node_name --hostname $node_name --privileged --shm-size="1g" $DOCKER_IMAGE &> /dev/null
+	docker network connect $HA_NETWORK $node_name
+        docker exec -t $node_name /bin/sh -c "rm -rf /run/nologin"
+	docker exec -t $node_name /bin/sh -c "echo 'StrictHostKeyChecking no' >> /etc/ssh/ssh_config"
+}
+
+
+setup_cluster() {
+	info "Loading docker image $DOCKER_IMAGE..."
+        docker pull $DOCKER_IMAGE &> /dev/null
+
+	info "Create ha specific docker network $HA_NETWORK..."
+	docker network create $HA_NETWORK &> /dev/null
+	info "Setup cluster..."
+
+	for i in $(seq 1 $1);do
+		deploy_ha_node hanode$i
+	done
+
+	insert_str=""
+	container_ip_array=(`docker network inspect $HA_NETWORK -f '{{range .Containers}}{{printf "%s " .IPv4Address}}{{end}}'`)
+	for i in $(seq $1 -1 1);do
+		ip=`echo ${container_ip_array[$((i-1))]}|awk -F/ '{print $1}'`
+		insert_str+="\\n\\tnode {\n\t\tring0_addr: $ip\n\t\tnodeid: $i\n\t}"
+	done
+	corosync_conf_str=$(sed "/nodelist/a \\${insert_str}" <(echo "$COROSYNC_CONF_TEMPLATE"))
+	if [ ${#container_ip_array[@]} -eq 2 ];then
+		corosync_conf_str=$(sed "/corosync_votequorum/a \\\\ttwo_node: 1" <(echo "$corosync_conf_str"))
+	fi
+
+	for i in $(seq 1 $1);do
+		docker exec -t hanode$i /bin/sh -c "echo \"$corosync_conf_str\" >> $COROSYNC_CONF"
+		if [ $i -eq 1 ];then
+			docker exec -t hanode1 /bin/sh -c "corosync-keygen -l -k $COROSYNC_AUTH &> /dev/null"
+		else
+		        docker exec -t hanode1 /bin/sh -c "scp -p $COROSYNC_AUTH hanode$i:/etc/corosync &> /dev/null"
+		fi
+		docker exec -t hanode$i /bin/sh -c "crm cluster start"
+	done
+}
+
+
+cleanup_cluster() {
+	container_array=(`docker network inspect $HA_NETWORK -f '{{range .Containers}}{{printf "%s " .Name}}{{end}}'`)
+	for node in ${container_array[@]};do
+		info "Cleanup container $node..."
+		docker container stop $node &> /dev/null
+		docker container rm $node &> /dev/null
+	done
+	info "Cleanup ha specific docker network $HA_NETWORK..."
+	docker network rm $HA_NETWORK &> /dev/null
+}
+
+
+options=$(getopt -l "help" -o "hldn:" -- "$@")
+eval set -- "$options"
+while true;do
+case $1 in
+-h|--help) usage_and_exit;;
+-l)
+	echo_test_cases
+	exit 0
+	;;
+-d)
+	cleanup_cluster
+	exit $?
+	;;
+-n)
+	shift
+	is_number $1 || fatal "-n option need a number"
+	setup_cluster $1
+	exit $?
+	;;
+--)
+	shift
+	break
+	;;
+esac
+done
+
+if [ -z "$1" ];then
+	usage_and_exit
+fi
+
+test_case_index=$1
+if [ -n "$test_case_index" ];then
+	echo_test_cases|grep -E "\s+$test_case_index\s" &> /dev/null
+	if [ "$?" -ne 0 ];then
+		error "\"$test_case_index\" is an invalid index"
+		echo_test_cases
+	fi
+fi
+
+check_docker_env
