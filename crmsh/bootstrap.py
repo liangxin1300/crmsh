@@ -862,7 +862,7 @@ host {};
 
     utils.start_service("csync2.socket", enable=True)
     with logger_utils.status_long("csync2 checking files"):
-        invoke("csync2", "-cr", "/")
+        invoke("csync2", "-cAr", "/")
 
 
 def csync2_update(path):
@@ -872,10 +872,10 @@ def csync2_update(path):
     If there was a conflict, use '-f' to force this side to win
     '''
     invoke("csync2 -rm {}".format(path))
-    if invokerc("csync2 -rxv {}".format(path)):
+    if invokerc("csync2 -rAxv {}".format(path)):
         return
     invoke("csync2 -rf {}".format(path))
-    if not invokerc("csync2 -rxv {}".format(path)):
+    if not invokerc("csync2 -rAxv {}".format(path)):
         logger.warning("{} was not synced".format(path))
 
 
@@ -904,7 +904,7 @@ def init_csync2_remote():
         if not re.search(r"^\s*host.*\s+%s\s*;" % (newhost), curr_cfg, flags=re.M):
             curr_cfg = re.sub(r"\bhost.*\s+\S+\s*;", r"\g<0>\n\thost %s;" % (utils.doublequote(newhost)), curr_cfg, count=1)
             utils.str2file(curr_cfg, CSYNC2_CFG)
-            csync2_update("/")
+            csync2_update(CSYNC2_CFG)
         else:
             logger_utils.log_only_to_file(": Not updating %s - remote host %s already exists" % (CSYNC2_CFG, newhost))
     finally:
@@ -1524,7 +1524,7 @@ def join_csync2(seed_host):
         # they haven't gone to all nodes in the cluster, which means a
         # subseqent join of another node can fail its sync of corosync.conf
         # when it updates expected_votes.  Grrr...
-        if not invokerc('ssh {} root@{} "csync2 -rm /; csync2 -rxv || csync2 -rf / && csync2 -rxv"'.format(SSH_OPTION, seed_host)):
+        if not invokerc('ssh {} root@{} "csync2 -rm /; csync2 -rAxv || csync2 -rf / && csync2 -rAxv"'.format(SSH_OPTION, seed_host)):
             print("")
             logger.warning("csync2 run failed - some files may not be sync'd")
 
