@@ -72,7 +72,7 @@ class QDevice(object):
         self.askpass = False
         self.cmds = cmds
         self.mode = mode
-        self.cluster_name = None
+        self.cluster_name = corosync.get_value('totem.cluster_name')
 
     @property
     def qnetd_cacert_on_qnetd(self):
@@ -300,7 +300,6 @@ class QDevice(object):
         (Cluster name must match cluster_name key in the corosync.conf)
         """
         logger_utils.log_only_to_file("Step 5: Generate certificate request {}".format(self.qdevice_crq_filename))
-        self.cluster_name = corosync.get_value('totem.cluster_name')
         if not self.cluster_name:
             raise ValueError("No cluster_name found in {}".format(corosync.conf()))
         cmd = "corosync-qdevice-net-certutil -r -n {}".format(self.cluster_name)
@@ -535,3 +534,12 @@ class QDevice(object):
         if self.askpass:
             print("Remove database on cluster nodes")
         parallax.parallax_call(node_list, cmd, self.askpass)
+
+    def remove_certification_files_on_qnetd(self):
+        """
+        Remove this cluster related .crq and .crt files on qnetd
+        """
+        cmd = "test -f {crt_file} && rm -f {crt_file}".format(crt_file=self.qnetd_cluster_crt_on_qnetd)
+        utils.get_stdout_or_raise_error(cmd, remote=self.qnetd_addr)
+        cmd = "test -f {crq_file} && rm -f {crq_file}".format(crq_file=self.qdevice_crq_on_qnetd)
+        utils.get_stdout_or_raise_error(cmd, remote=self.qnetd_addr)

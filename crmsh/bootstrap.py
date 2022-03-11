@@ -2163,6 +2163,7 @@ def remove_qdevice():
         qdevice_inst = qdevice.QDevice(qnetd_host)
         qdevice_inst.remove_qdevice_config()
         qdevice_inst.remove_qdevice_db()
+        qdevice_inst.remove_certification_files_on_qnetd()
         update_expected_votes()
     if _context.qdevice_reload_policy == QdevicePolicy.QDEVICE_RELOAD:
         invoke("crm cluster run 'crm corosync reload'")
