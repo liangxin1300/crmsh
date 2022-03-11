@@ -100,7 +100,7 @@ class QDevice(object):
         """
         Return path of qdevice-net-node.crq on qnetd node
         """
-        return "{}/nssdb/{}".format(self.qnetd_path, self.qdevice_crq_filename)
+        return "{}/nssdb/{}.{}".format(self.qnetd_path, self.qdevice_crq_filename, self.cluster_name)
     
     @property
     def qdevice_crq_on_local(self):
@@ -319,7 +319,7 @@ class QDevice(object):
         parallax.parallax_copy(
                 [self.qnetd_addr],
                 self.qdevice_crq_on_local,
-                os.path.dirname(self.qdevice_crq_on_qnetd),
+                self.qdevice_crq_on_qnetd,
                 self.askpass)
 
     def sign_crq_on_qnetd(self):
