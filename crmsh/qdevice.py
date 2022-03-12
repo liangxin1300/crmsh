@@ -13,7 +13,22 @@ logger = log.setup_logger(__name__)
 logger_utils = log.LoggerUtils(logger)
 
 
-def qnetd_lock(func):
+def qnetd_lock_for_same_cluster_name(cluster_name):
+    def inner_func(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            lock_dir = "/run/.crmsh_qdevice_lock_for_{}".format(cluster_name)
+            lock_inst = lock.RemoteLock(args[0].qnetd_addr, for_join=False, lock_dir=lock_dir, wait=False)
+            try:
+                with lock_inst.lock():
+                    func(*args, **kwargs)
+            except (lock.SSHError, lock.ClaimLockError) as err:
+                utils.fatal(err)
+        return wrapper
+    return inner_func
+
+
+def qnetd_lock_for_multi_cluster(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         lock_inst = lock.RemoteLock(args[0].qnetd_addr, for_join=False)
@@ -23,7 +38,6 @@ def qnetd_lock(func):
         except (lock.SSHError, lock.ClaimLockError) as err:
             utils.fatal(err)
     return wrapper
-
 
 
 class QDevice(object):
@@ -216,7 +230,7 @@ class QDevice(object):
     def stop_qnetd(self):
         utils.stop_service(self.qnetd_service, remote_addr=self.qnetd_addr)
 
-    @qnetd_lock
+    @qnetd_lock_for_multi_cluster
     def init_db_on_qnetd(self):
         """
         Certificate process for init
