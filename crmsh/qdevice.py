@@ -40,6 +40,24 @@ def qnetd_lock_for_multi_cluster(func):
     return wrapper
 
 
+def valid_qnetd(qnetd_addr, cluster_name):
+    """
+    Validate on qnetd node
+    """
+    exception_msg = ""
+    suggest = ""
+    if utils.service_is_active("pacemaker", qnetd_addr):
+        exception_msg = "host for qnetd must be a non-cluster node"
+        suggest = "change to another host or stop cluster service on {}".format(qnetd_addr)
+    elif not utils.package_is_installed("corosync-qnetd", qnetd_addr):
+        exception_msg = "Package \"corosync-qnetd\" not installed on {}".format(qnetd_addr)
+        suggest = "install \"corosync-qnetd\" on {}".format(qnetd_addr)
+
+    if exception_msg:
+        exception_msg += "\nCluster service already successfully started on this node except qdevice service\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init\" with \"qdevice\" stage, like:\n  crm cluster init qdevice qdevice_related_options\nThat command will setup qdevice separately".format(suggest)
+        raise ValueError(exception_msg)
+
+
 class QDevice(object):
     """
     Class to manage qdevice configuration and services
@@ -204,19 +222,6 @@ class QDevice(object):
         """
         if utils.check_ssh_passwd_need(self.qnetd_addr):
             self.askpass = True
-
-        exception_msg = ""
-        suggest = ""
-        if utils.service_is_active("pacemaker", self.qnetd_addr):
-            exception_msg = "host for qnetd must be a non-cluster node"
-            suggest = "change to another host or stop cluster service on {}".format(self.qnetd_addr)
-        elif not utils.package_is_installed("corosync-qnetd", self.qnetd_addr):
-            exception_msg = "Package \"corosync-qnetd\" not installed on {}".format(self.qnetd_addr)
-            suggest = "install \"corosync-qnetd\" on {}".format(self.qnetd_addr)
-
-        if exception_msg:
-            exception_msg += "\nCluster service already successfully started on this node except qdevice service\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init\" with \"qdevice\" stage, like:\n  crm cluster init qdevice qdevice_related_options\nThat command will setup qdevice separately".format(suggest)
-            raise ValueError(exception_msg)
 
     def enable_qnetd(self):
         utils.enable_service(self.qnetd_service, remote_addr=self.qnetd_addr)
