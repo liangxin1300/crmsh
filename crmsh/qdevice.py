@@ -40,6 +40,13 @@ def qnetd_lock_for_multi_cluster(func):
     return wrapper
 
 
+def check_the_same_cluster(cluster_name):
+    """
+    Check if the cluster_name already exists on qnetd
+    """
+    cmd = ""
+
+
 def valid_qnetd(qnetd_addr, cluster_name):
     """
     Validate on qnetd node
