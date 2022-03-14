@@ -13,12 +13,12 @@ logger = log.setup_logger(__name__)
 logger_utils = log.LoggerUtils(logger)
 
 
-def qnetd_lock_for_same_cluster_name(cluster_name):
+def qnetd_lock_for_same_cluster_name(qnetd_addr, cluster_name):
     def inner_func(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             lock_dir = "/run/.crmsh_qdevice_lock_for_{}".format(cluster_name)
-            lock_inst = lock.RemoteLock(args[0].qnetd_addr, for_join=False, lock_dir=lock_dir, wait=False)
+            lock_inst = lock.RemoteLock(qnetd_addr, for_join=False, lock_dir=lock_dir, wait=False)
             try:
                 with lock_inst.lock():
                     func(*args, **kwargs)
@@ -38,33 +38,6 @@ def qnetd_lock_for_multi_cluster(func):
         except (lock.SSHError, lock.ClaimLockError) as err:
             utils.fatal(err)
     return wrapper
-
-
-def is_the_same_cluster(qnetd_addr, cluster_name):
-    """
-    Check if the cluster_name already exists on qnetd
-    """
-    cmd = "corosync-qnetd-tool -l -c {}".format(cluster_name)
-    return utils.get_stdout_or_raise_error(cmd, remote=qnetd_addr)
-
-
-def valid_qnetd(qnetd_addr, cluster_name):
-    """
-    Validate on qnetd node
-    """
-    exception_msg = ""
-    suggest = ""
-    if utils.service_is_active("pacemaker", qnetd_addr):
-        exception_msg = "host for qnetd must be a non-cluster node"
-        suggest = "change to another host or stop cluster service on {}".format(qnetd_addr)
-    elif not utils.package_is_installed("corosync-qnetd", qnetd_addr):
-        exception_msg = "Package \"corosync-qnetd\" not installed on {}".format(qnetd_addr)
-        suggest = "install \"corosync-qnetd\" on {}".format(qnetd_addr)
-    if exception_msg:
-        exception_msg += "\nCluster service already successfully started on this node except qdevice service\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init\" with \"qdevice\" stage, like:\n  crm cluster init qdevice qdevice_related_options\nThat command will setup qdevice separately".format(suggest)
-        raise ValueError(exception_msg)
-    if is_the_same_cluster(qnetd_addr, cluster_name):
-        raise ValueError("This cluster's name \"{}\" already exists on qnetd server! Please consider to use the different cluster-name property".format(cluster_name))
 
 
 class QDevice(object):
@@ -223,6 +196,25 @@ class QDevice(object):
                     raise ValueError("commands for heuristics should be absolute path")
                 if not os.path.exists(cmd.split()[0]):
                     raise ValueError("command {} not exist".format(cmd.split()[0]))
+
+    def valid_qnetd(self):
+        """
+        Validate on qnetd node
+        """
+        exception_msg = ""
+        suggest = ""
+        if utils.service_is_active("pacemaker", self.qnetd_addr):
+            exception_msg = "host for qnetd must be a non-cluster node"
+            suggest = "change to another host or stop cluster service on {}".format(self.qnetd_addr)
+        elif not utils.package_is_installed("corosync-qnetd", self.qnetd_addr):
+            exception_msg = "package \"corosync-qnetd\" not installed on {}".format(self.qnetd_addr)
+            suggest = "install \"corosync-qnetd\" on {}".format(self.qnetd_addr)
+        if exception_msg:
+            exception_msg += "\ncluster service already successfully started on this node except qdevice service\nif you still want to use qdevice, {}\nthen run command \"crm cluster init\" with \"qdevice\" stage, like:\n  crm cluster init qdevice qdevice_related_options\nthat command will setup qdevice separately".format(suggest)
+            raise valueerror(exception_msg)
+        cmd = "corosync-qnetd-tool -l -c {}".format(self.cluster_name)
+        if utils.get_stdout_or_raise_error(cmd, remote=self.qnetd_addr):
+            raise ValueError("This cluster's name \"{}\" already exists on qnetd server! Please consider to use the different cluster-name property".format(self.cluster_name))
 
     def enable_qnetd(self):
         utils.enable_service(self.qnetd_service, remote_addr=self.qnetd_addr)

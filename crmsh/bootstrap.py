@@ -1326,7 +1326,7 @@ def adjust_sbd_watchdog_timeout_with_qdevice():
                 utils.set_property(stonith_timeout=SBDTimeout.get_stonith_timeout())
 
 
-@qdevice.qnetd_lock_for_same_cluster_name(corosync.get_value('totem.cluster_name'))
+@qdevice.qnetd_lock_for_same_cluster_name(_context.qdevice_inst.qnetd_addr, corosync.get_value('totem.cluster_name'))
 def configure_and_start_qdevice():
     """
     """
@@ -1363,7 +1363,7 @@ def init_qdevice():
         if not rc:
             utils.fatal("Failed to copy ssh key: {}".format(err))
     # Validate qnetd node
-    qdevice.valid_qnetd(qnetd_addr, corosync.get_value('totem.cluster_name'))
+    qdevice_inst.valid_qnetd()
 
     adjust_sbd_watchdog_timeout_with_qdevice()
 
