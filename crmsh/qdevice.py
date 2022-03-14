@@ -45,8 +45,7 @@ def is_the_same_cluster(qnetd_addr, cluster_name):
     Check if the cluster_name already exists on qnetd
     """
     cmd = "corosync-qnetd-tool -l -c {}".format(cluster_name)
-    out = utils.get_stdout_or_raise_error(cmd, remote=qnetd_addr)
-    return out is not None
+    return utils.get_stdout_or_raise_error(cmd, remote=qnetd_addr)
 
 
 def valid_qnetd(qnetd_addr, cluster_name):
