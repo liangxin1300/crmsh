@@ -1308,16 +1308,10 @@ def configure_qdevice_interactive():
     _context.qdevice_inst.valid_qdevice_options()
 
 
-def init_qdevice():
+def adjust_sbd_watchdog_timeout_with_qdevice():
     """
-    Setup qdevice and qnetd service
+    Adjust SBD_WATCHDOG_TIMEOUT when configuring qdevice and diskless SBD
     """
-    if not _context.qdevice_inst:
-        configure_qdevice_interactive()
-    # If don't want to config qdevice, return
-    if not _context.qdevice_inst:
-        utils.disable_service("corosync-qdevice.service")
-        return
     if _context.stage == "qdevice":
         from .sbd import SBDManager, SBDTimeout
         utils.check_all_nodes_reachable()
@@ -1331,6 +1325,34 @@ def init_qdevice():
                 SBDManager.update_configuration({"SBD_WATCHDOG_TIMEOUT": str(sbd_watchdog_timeout_qdevice)})
                 utils.set_property(stonith_timeout=SBDTimeout.get_stonith_timeout())
 
+
+@qdevice.qnetd_lock_for_same_cluster_name(corosync.get_value('totem.cluster_name'))
+def configure_and_start_qdevice():
+    """
+    """
+    qdevice_inst = _context.qdevice_inst
+
+    # Config qdevice
+    config_qdevice()
+    # Execute certificate process when tls flag is on
+    if utils.is_qdevice_tls_on():
+        with logger_utils.status_long("Qdevice certification process"):
+            qdevice_inst.certificate_process_on_init()
+
+    start_qdevice_service()
+
+
+def init_qdevice():
+    """
+    Setup qdevice and qnetd service
+    """
+    if not _context.qdevice_inst:
+        configure_qdevice_interactive()
+    # If don't want to config qdevice, return
+    if not _context.qdevice_inst:
+        utils.disable_service("corosync-qdevice.service")
+        return
+
     logger.info("""Configure Qdevice/Qnetd:""")
     qdevice_inst = _context.qdevice_inst
     qnetd_addr = qdevice_inst.qnetd_addr
@@ -1340,21 +1362,17 @@ def init_qdevice():
         rc, _, err = invoke("ssh-copy-id -i /root/.ssh/id_rsa.pub root@{}".format(qnetd_addr))
         if not rc:
             utils.fatal("Failed to copy ssh key: {}".format(err))
+    # Validate qnetd node
+    qdevice.valid_qnetd(qnetd_addr, corosync.get_value('totem.cluster_name'))
+
+    adjust_sbd_watchdog_timeout_with_qdevice()
+
     # Start qdevice service if qdevice already configured
     if utils.is_qdevice_configured() and not confirm("Qdevice is already configured - overwrite?"):
         start_qdevice_service()
         return
 
-    # Validate qnetd node
-    qdevice_inst.valid_qnetd()
-    # Config qdevice
-    config_qdevice()
-    # Execute certificate process when tls flag is on
-    if utils.is_qdevice_tls_on():
-        with logger_utils.status_long("Qdevice certification process"):
-            qdevice_inst.certificate_process_on_init()
-
-    start_qdevice_service()
+    configure_and_start_qdevice()
 
 
 def start_qdevice_service():

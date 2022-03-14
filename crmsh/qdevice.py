@@ -40,11 +40,13 @@ def qnetd_lock_for_multi_cluster(func):
     return wrapper
 
 
-def check_the_same_cluster(cluster_name):
+def is_the_same_cluster(qnetd_addr, cluster_name):
     """
     Check if the cluster_name already exists on qnetd
     """
-    cmd = ""
+    cmd = "corosync-qnetd-tool -l -c {}".format(cluster_name)
+    out = utils.get_stdout_or_raise_error(cmd, remote=qnetd_addr)
+    return out is not None
 
 
 def valid_qnetd(qnetd_addr, cluster_name):
@@ -59,10 +61,11 @@ def valid_qnetd(qnetd_addr, cluster_name):
     elif not utils.package_is_installed("corosync-qnetd", qnetd_addr):
         exception_msg = "Package \"corosync-qnetd\" not installed on {}".format(qnetd_addr)
         suggest = "install \"corosync-qnetd\" on {}".format(qnetd_addr)
-
     if exception_msg:
         exception_msg += "\nCluster service already successfully started on this node except qdevice service\nIf you still want to use qdevice, {}\nThen run command \"crm cluster init\" with \"qdevice\" stage, like:\n  crm cluster init qdevice qdevice_related_options\nThat command will setup qdevice separately".format(suggest)
         raise ValueError(exception_msg)
+    if is_the_same_cluster(qnetd_addr, cluster_name):
+        raise ValueError("This cluster's name \"{}\" already exists on qnetd server! Please consider to use the different cluster-name property".format(cluster_name))
 
 
 class QDevice(object):
