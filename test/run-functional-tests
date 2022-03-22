@@ -282,16 +282,16 @@ cleanup_cluster() {
 
 adjust_test_case() {
 	node_name=$1
-	replace_arry=(`docker_exec $node_name "grep -o -E @hanode[0-9]+\.ip\.[0-9] $1"|sort -u|dos2unix`)
+	replace_arry=(`docker_exec $node_name "grep -o -E @hanode[0-9]+\.ip\.[0-9] $2"|sort -u|dos2unix`)
 	for item in ${replace_arry[@]};do
 		item_str=${item##@}
 		node=`echo $item_str|awk -F. '{print $1}'`
 		index=`echo $item_str|awk -F. '{print $3}'`
 		ip=`docker container inspect $node -f "{{.NetworkSettings.Networks.${HA_NETWORK_ARRAY[$index]}.IPAddress}}"`
-		docker_exec $node_name "sed -i s/$item/$ip/g $1"
+		docker_exec $node_name "sed -i s/$item/$ip/g $2"
 	done
 	default_ip=`docker container inspect $node_name -f '{{range .NetworkSettings.Networks}}{{printf "%s " .IPAddress}}{{end}}'|awk '{print $1}'`
-	docker_exec @node_name "sed -i -E s/@hanode[0-9]+.ip.default/$default_ip/g $1"
+	docker_exec @node_name "sed -i -E s/@hanode[0-9]+.ip.default/$default_ip/g $2"
 }
 
 
