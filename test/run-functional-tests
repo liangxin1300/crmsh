@@ -281,16 +281,17 @@ cleanup_cluster() {
 
 
 adjust_test_case() {
-	replace_arry=(`docker_exec hanode1 "grep -o -E @hanode[0-9]+\.ip\.[0-9] $1"|sort -u|dos2unix`)
+	node_name=$1
+	replace_arry=(`docker_exec $node_name "grep -o -E @hanode[0-9]+\.ip\.[0-9] $1"|sort -u|dos2unix`)
 	for item in ${replace_arry[@]};do
 		item_str=${item##@}
 		node=`echo $item_str|awk -F. '{print $1}'`
 		index=`echo $item_str|awk -F. '{print $3}'`
 		ip=`docker container inspect $node -f "{{.NetworkSettings.Networks.${HA_NETWORK_ARRAY[$index]}.IPAddress}}"`
-		docker_exec hanode1 "sed -i s/$item/$ip/g $1"
+		docker_exec $node_name "sed -i s/$item/$ip/g $1"
 	done
-	default_ip=`docker container inspect hanode1 -f '{{range .NetworkSettings.Networks}}{{printf "%s " .IPAddress}}{{end}}'|awk '{print $1}'`
-	docker_exec hanode1 "sed -i -E s/@hanode[0-9]+.ip.default/$default_ip/g $1"
+	default_ip=`docker container inspect $node_name -f '{{range .NetworkSettings.Networks}}{{printf "%s " .IPAddress}}{{end}}'|awk '{print $1}'`
+	docker_exec @node_name "sed -i -E s/@hanode[0-9]+.ip.default/$default_ip/g $1"
 }
 
 
@@ -353,7 +354,7 @@ for case_num in $*;do
 	node_arry=(`awk -F: '/Need nodes/{print $2}' $case_file`)
 	CONFIG_COROSYNC_FLAG=0
 	setup_cluster ${node_arry[@]}
-	adjust_test_case $case_file_in_container
-	docker_exec hanode1 "behave $case_file_in_container || exit 1" || exit 1
+	adjust_test_case ${node_arry[0]} $case_file_in_container
+	docker_exec ${node_arry[0]} "behave $case_file_in_container || exit 1" || exit 1
 	echo
 done
