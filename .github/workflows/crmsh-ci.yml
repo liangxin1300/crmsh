@@ -138,7 +138,7 @@ jobs:
       run:  |
         echo '{ "exec-opts": ["native.cgroupdriver=systemd"] }' | sudo tee /etc/docker/daemon.json
         sudo systemctl restart docker.service
-        $DOCKER_SCRIPT 12,13
+        $DOCKER_SCRIPT 12 13
 
   functional_test_configure_sublevel:
     runs-on: ubuntu-latest
