@@ -2,6 +2,7 @@
 Feature: Use "crm configure set" to update attributes and operations
 
   Tag @clean means need to stop cluster service if the service is available
+  Need nodes: hanode1 hanode2
 
   Background: Setup cluster and configure some resources
     Given     Cluster service is "stopped" on "hanode1"

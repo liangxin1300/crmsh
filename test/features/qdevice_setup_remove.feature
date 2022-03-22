@@ -3,6 +3,7 @@ Feature: corosync qdevice/qnetd setup/remove process
 
   Test corosync qdevice/qnetd setup/remove process
   Tag @clean means need to stop cluster service if the service is available
+  Need nodes: hanode1 hanode2 hanode3 hanode4 qnetd-node
 
   Background: Cluster and qdevice service are stopped
     Given   Cluster service is "stopped" on "hanode1"
