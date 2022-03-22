@@ -170,6 +170,9 @@ deploy_ha_node() {
 		docker network connect $network $node_name
 	done
 
+	if [ "$node_name" == "node-without-ssh" ];then
+		docker_exec $node_name "systemctl stop sshd.service"
+	fi
 	docker_exec $node_name "rm -rf /run/nologin"
 	docker_exec $node_name "echo 'StrictHostKeyChecking no' >> /etc/ssh/ssh_config"
 	info "Building crmsh codes on \"$node_name\"..."
