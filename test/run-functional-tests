@@ -354,6 +354,6 @@ for case_num in $*;do
 	CONFIG_COROSYNC_FLAG=0
 	setup_cluster ${node_arry[@]}
 	adjust_test_case $case_file_in_container
-	docker_exec hanode1 "behave $case_file_in_container"
+	docker_exec hanode1 "behave $case_file_in_container || exit 1" || exit 1
 	echo
 done
