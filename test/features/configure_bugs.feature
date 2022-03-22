@@ -2,6 +2,7 @@
 Feature: Functional test for configure sub level
 
   Tag @clean means need to stop cluster service if the service is available
+  Need nodes: hanode1 hanode2
 
   @clean
   Scenario: Replace sensitive data by default(bsc#1163581)

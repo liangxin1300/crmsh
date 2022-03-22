@@ -3,6 +3,7 @@ Feature: geo cluster
 
   Test geo cluster setup using bootstrap
   Tag @clean means need to stop cluster service if the service is available
+  Need nodes: hanode1 hanode2 hanode3
 
   @clean
   Scenario: GEO cluster setup
