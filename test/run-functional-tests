@@ -6,8 +6,8 @@ COROSYNC_CONF="/etc/corosync/corosync.conf"
 COROSYNC_AUTH="/etc/corosync/authkey"
 HA_NETWORK_FIRST="ha_network_first"
 HA_NETWORK_SECOND="ha_network_second"
-declare -a HA_NETWORK_ARRAY
-declare -a HA_NETWORK_V6_ARRAY
+declare -A HA_NETWORK_ARRAY
+declare -A HA_NETWORK_V6_ARRAY
 HA_NETWORK_ARRAY[0]=$HA_NETWORK_FIRST
 HA_NETWORK_ARRAY[1]=$HA_NETWORK_SECOND
 HA_NETWORK_V6_ARRAY[0]="2001:db8:10::/64"
@@ -282,16 +282,16 @@ cleanup_cluster() {
 
 adjust_test_case() {
 	node_name=$1
-	replace_arry=(`docker_exec $node_name "grep -o -E @hanode[0-9]+\.ip\.[0-9] $2"|sort -u|dos2unix`)
+	replace_arry=(`docker_exec $node_name "grep -o -E @hanode[0-9]+\.ip\.[0-9] $2|sort -u|dos2unix"`)
 	for item in ${replace_arry[@]};do
 		item_str=${item##@}
-		node=`echo $item_str|awk -F. '{print $1}'`
-		index=`echo $item_str|awk -F. '{print $3}'`
+		node=`echo $item_str|cut -d "." -f 1`
+		index=`echo $item_str|cut -d "." -f 3`
 		ip=`docker container inspect $node -f "{{.NetworkSettings.Networks.${HA_NETWORK_ARRAY[$index]}.IPAddress}}"`
 		docker_exec $node_name "sed -i s/$item/$ip/g $2"
 	done
 	default_ip=`docker container inspect $node_name -f '{{range .NetworkSettings.Networks}}{{printf "%s " .IPAddress}}{{end}}'|awk '{print $1}'`
-	docker_exec @node_name "sed -i -E s/@hanode[0-9]+.ip.default/$default_ip/g $2"
+	docker_exec $node_name "sed -i -E s/@hanode[0-9]+.ip.default/$default_ip/g $2"
 }
 
 
