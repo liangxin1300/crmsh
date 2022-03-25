@@ -286,7 +286,7 @@ adjust_test_case() {
 	for item in ${replace_arry[@]};do
 		item_str=${item##@}
 		node=`echo $item_str|cut -d "." -f 1`
-		index=`echo $item_str|cut -d "." -f 3`
+		index=`echo $item_str|cut -d "." -f 3|dos2unix`
 		ip=`docker container inspect $node -f "{{.NetworkSettings.Networks.${HA_NETWORK_ARRAY[$index]}.IPAddress}}"`
 		docker_exec $node_name "sed -i s/$item/$ip/g $2"
 	done
