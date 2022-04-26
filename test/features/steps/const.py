@@ -75,9 +75,6 @@ optional arguments:
                         (diskless mode)
   -w WATCHDOG, --watchdog WATCHDOG
                         Use the given watchdog device or driver name
-  --no-overwrite-sshkey
-                        Avoid "/root/.ssh/id_rsa" overwrite if "-y" option is
-                        used (False by default; Deprecated)
 
 Network configuration:
   Options for configuring the network and messaging layer.

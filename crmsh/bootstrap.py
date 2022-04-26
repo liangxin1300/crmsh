@@ -85,7 +85,6 @@ class Context(object):
         self.yes_to_all = None
         self.cluster_name = None
         self.watchdog = None
-        self.no_overwrite_sshkey = None
         self.nic_list = None
         self.unicast = None
         self.multicast = None
@@ -180,8 +179,6 @@ class Context(object):
                 utils.fatal("Maximum number of interface is 2")
             if len(self.nic_list) != len(set(self.nic_list)):
                 utils.fatal("Duplicated input")
-        if self.no_overwrite_sshkey:
-            logger.warning("--no-overwrite-sshkey option is deprecated since crmsh does not overwrite ssh keys by default anymore and will be removed in future versions")
         if self.type == "join" and self.watchdog:
             logger.warning("-w option is deprecated and will be removed in future versions")
         if self.ocfs2_devices or self.stage == "ocfs2":
