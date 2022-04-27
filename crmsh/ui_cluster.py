@@ -303,7 +303,6 @@ Note:
                             help='Set the name of the configured cluster.')
         parser.add_argument("-N", "--nodes", metavar="NODES", dest="nodes",
                             help='Additional nodes to add to the created cluster. May include the current node, which will always be the initial cluster node.')
-        # parser.add_argument("--quick-start", dest="quickstart", action="store_true", help="Perform basic system configuration (NTP, watchdog, /etc/hosts)")
         parser.add_argument("-S", "--enable-sbd", dest="diskless_sbd", action="store_true",
                             help="Enable SBD even if no SBD device is configured (diskless mode)")
         parser.add_argument("-w", "--watchdog", dest="watchdog", metavar="WATCHDOG",
@@ -374,7 +373,6 @@ Note:
         boot_context.stage = stage
         boot_context.args = args
         boot_context.cluster_is_running = utils.service_is_active("pacemaker.service")
-        boot_context.type = "init"
 
         bootstrap.bootstrap_init(boot_context)
 
@@ -415,7 +413,6 @@ If stage is not specified, each stage will be invoked in sequence.
         parser.add_argument("-h", "--help", action="store_true", dest="help", help="Show this help message")
         parser.add_argument("-q", "--quiet", help="Be quiet (don't describe what's happening, just do it)", action="store_true", dest="quiet")
         parser.add_argument("-y", "--yes", help='Answer "yes" to all prompts (use with caution)', action="store_true", dest="yes_to_all")
-        parser.add_argument("-w", "--watchdog", dest="watchdog", metavar="WATCHDOG", help="Use the given watchdog device")
 
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_argument("-c", "--cluster-node", dest="cluster_node", help="IP address or hostname of existing cluster node", metavar="HOST")
@@ -434,7 +431,6 @@ If stage is not specified, each stage will be invoked in sequence.
         join_context = bootstrap.Context.set_context(options)
         join_context.ui_context = context
         join_context.stage = stage
-        join_context.type = "join"
 
         bootstrap.bootstrap_join(join_context)
 

@@ -80,7 +80,6 @@ class Context(object):
         '''
         Initialize attributes
         '''
-        self.type = None # init or join
         self.quiet = None
         self.yes_to_all = None
         self.cluster_name = None
@@ -179,8 +178,6 @@ class Context(object):
                 utils.fatal("Maximum number of interface is 2")
             if len(self.nic_list) != len(set(self.nic_list)):
                 utils.fatal("Duplicated input")
-        if self.type == "join" and self.watchdog:
-            logger.warning("-w option is deprecated and will be removed in future versions")
         if self.ocfs2_devices or self.stage == "ocfs2":
             ocfs2.OCFS2Manager.verify_ocfs2(self)
         self._validate_sbd_option()

@@ -165,8 +165,6 @@ optional arguments:
   -h, --help            Show this help message
   -q, --quiet           Be quiet (don't describe what's happening, just do it)
   -y, --yes             Answer "yes" to all prompts (use with caution)
-  -w WATCHDOG, --watchdog WATCHDOG
-                        Use the given watchdog device
 
 Network configuration:
   Options for configuring the network and messaging layer.
