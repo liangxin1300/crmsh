@@ -4,7 +4,6 @@ Feature: crmsh bootstrap process - options
   Test crmsh bootstrap options:
       "--nodes": Additional nodes to add to the created cluster
       "-i":      Bind to IP address on interface IF
-      "-M":      Configure corosync with second heartbeat line
       "-n":      Set the name of the configured cluster
       "-A":      Configure IP address as an administration virtual IP
       "-u":      Configure corosync to communicate over unicast
@@ -49,18 +48,6 @@ Feature: crmsh bootstrap process - options
     Then    Cluster service is "started" on "hanode1"
     And     IP "@hanode1.ip.0" is used by corosync on "hanode1"
     And     Show corosync ring status
-
-  @clean
-  Scenario: Using multiple network interface using "-M" option
-    Given   Cluster service is "stopped" on "hanode1"
-    And     IP "@hanode1.ip.default" is belong to "eth0"
-    And     IP "@hanode1.ip.0" is belong to "eth1"
-    When    Run "crm cluster init -M -y" on "hanode1"
-    Then    Cluster service is "started" on "hanode1"
-    And     IP "@hanode1.ip.default" is used by corosync on "hanode1"
-    And     IP "@hanode1.ip.0" is used by corosync on "hanode1"
-    And     Show corosync ring status
-    And     Corosync working on "unicast" mode
 
   @clean
   Scenario: Using multiple network interface using "-i" option

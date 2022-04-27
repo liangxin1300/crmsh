@@ -318,8 +318,6 @@ Note:
                                    help="Configure corosync to communicate over multicast. Default is unicast")
         network_group.add_argument("-A", "--admin-ip", dest="admin_ip", metavar="IP",
                                    help="Configure IP address as an administration virtual IP")
-        network_group.add_argument("-M", "--multi-heartbeats", action="store_true", dest="second_heartbeat",
-                                   help="Configure corosync with second heartbeat line")
         network_group.add_argument("-I", "--ipv6", action="store_true", dest="ipv6",
                                    help="Configure corosync use IPv6")
 
