@@ -90,8 +90,6 @@ Network configuration:
   -U, --multicast       Configure corosync to communicate over multicast.
                         Default is unicast
   -A IP, --admin-ip IP  Configure IP address as an administration virtual IP
-  -M, --multi-heartbeats
-                        Configure corosync with second heartbeat line
   -I, --ipv6            Configure corosync use IPv6
 
 QDevice configuration:
