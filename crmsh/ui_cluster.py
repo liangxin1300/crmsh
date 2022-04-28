@@ -311,10 +311,8 @@ Note:
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_argument("-i", "--interface", dest="nic_list", metavar="IF", action="append", choices=utils.interface_choice(),
                                    help="Bind to IP address on interface IF. Use -i second time for second interface")
-        network_group.add_argument("-u", "--unicast", action="store_true", dest="unicast",
-                                   help="Configure corosync to communicate over unicast(udpu). This is the default transport type")
-        network_group.add_argument("-U", "--multicast", action="store_true", dest="multicast",
-                                   help="Configure corosync to communicate over multicast. Default is unicast")
+        network_group.add_argument("-t", "--tansport", dest="transport", metavar="TRANSPORT", default="knet", choices=['knet', 'udpu', 'udp'],
+                                   help="The transport mechanism. Allowed value is knet(kronosnet)/udpu(unicast)/udp(multicast). Default is knet")
         network_group.add_argument("-A", "--admin-ip", dest="admin_ip", metavar="IP",
                                    help="Configure IP address as an administration virtual IP")
         network_group.add_argument("-I", "--ipv6", action="store_true", dest="ipv6",
