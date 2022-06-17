@@ -343,8 +343,6 @@ Examples:
                             help="Enable SBD even if no SBD device is configured (diskless mode)")
         parser.add_argument("-w", "--watchdog", dest="watchdog", metavar="WATCHDOG",
                             help="Use the given watchdog device or driver name")
-        parser.add_argument("--no-overwrite-sshkey", action="store_true", dest="no_overwrite_sshkey",
-                            help='Avoid "/root/.ssh/id_rsa" overwrite if "-y" option is used (False by default; Deprecated)')
 
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_argument("-i", "--interface", dest="nic_list", metavar="IF", action="append", choices=utils.interface_choice(),
