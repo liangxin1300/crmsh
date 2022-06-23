@@ -1196,7 +1196,6 @@ def _extract_localnode(hosts):
     return local_node, hosts2
 
 
-# TODO: remove common params?
 # Pass them in a separate list of options?
 # Right now these names are basically reserved..
 def common_params():
