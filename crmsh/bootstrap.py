@@ -32,7 +32,8 @@ from . import corosync
 from . import tmpfiles
 from . import lock
 from . import userdir
-from .constants import SSH_OPTION, QDEVICE_HELP_INFO, STONITH_TIMEOUT_DEFAULT, REJOIN_COUNT, REJOIN_INTERVAL
+from .constants import (SSH_OPTION, QDEVICE_HELP_INFO, STONITH_TIMEOUT_DEFAULT, REJOIN_COUNT, REJOIN_INTERVAL, 
+    MAX_LINK_NUM, MAX_LINK_NUM_NON_KNET)
 from . import ocfs2
 from . import qdevice
 from . import log
@@ -85,9 +86,9 @@ class Context(object):
         self.yes_to_all = None
         self.cluster_name = None
         self.watchdog = None
-        self.nic_list = None
-        self.unicast = None
-        self.multicast = None
+        self.nic_addr_list = None
+        self.nic_addr_type = None
+        self.transport = None
         self.admin_ip = None
         self.second_heartbeat = None
         self.ipv6 = None
@@ -166,6 +167,26 @@ class Context(object):
             if self.cluster_is_running:
                 utils.check_all_nodes_reachable()
 
+    def _validate_nic_addr_option(self):
+        """
+        Validate -i/--interface option
+        """
+        if self.transport and self.transport != "knet" and len(slef.nic_addr_list) > MAX_LINK_NUM_NON_KNET:
+            utils.fatal("Only one link is allowed for \"{}\" transport type".format(self.transport))
+        if len(self.nic_addr_list) > MAX_LINK_NUM:
+            utils.fatal("Maximum number of interface is {}".format(MAX_LINK_NUM))
+        if utils.has_dup_value(self.nic_addr_list):
+            utils.fatal("Duplicated value for -i option")
+        if utils.IP.is_valid_ip(self.nic_addr_list[0]):
+            self.nic_addr_type = "IP"
+            choice_list = utils.InterfacesInfo.get_local_ip_list(_context.ipv6)
+        else:
+            self.nic_addr_type = "NIC"
+            choice_list = utils.interface_choice()
+        for item in self.nic_addr_list:
+            if item not in choice_list:
+                utils.fatal("{} not in local {} list {}".format(item, self.nic_addr_type, choice_list))
+
     def validate_option(self):
         """
         Validate options
@@ -174,11 +195,8 @@ class Context(object):
             Validation.valid_admin_ip(self.admin_ip)
         if self.qdevice_inst:
             self.qdevice_inst.valid_qdevice_options()
-        if self.nic_list:
-            if len(self.nic_list) > 2:
-                utils.fatal("Maximum number of interface is 2")
-            if len(self.nic_list) != len(set(self.nic_list)):
-                utils.fatal("Duplicated input")
+        if self.nic_addr_list:
+            self._validate_nic_addr_option()
         if self.ocfs2_devices or self.stage == "ocfs2":
             ocfs2.OCFS2Manager.verify_ocfs2(self)
         self._validate_sbd_option()
@@ -1917,8 +1935,6 @@ def bootstrap_init(context):
         if corosync_active:
             utils.fatal("Cluster is currently active - can't run %s stage" % (stage))
 
-    _context.initialize_qdevice()
-    _context.validate_option()
     _context.load_profiles()
     _context.init_sbd_manager()
 
@@ -1965,7 +1981,6 @@ def bootstrap_join(context):
 
     init()
     _context.init_sbd_manager()
-    _context.validate_option()
 
     check_tty()
 
