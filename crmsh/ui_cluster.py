@@ -338,19 +338,15 @@ Examples:
                             help='Set the name of the configured cluster.')
         parser.add_argument("-N", "--nodes", metavar="NODES", dest="nodes",
                             help='Additional nodes to add to the created cluster. May include the current node, which will always be the initial cluster node.')
-        # parser.add_argument("--quick-start", dest="quickstart", action="store_true", help="Perform basic system configuration (NTP, watchdog, /etc/hosts)")
         parser.add_argument("-S", "--enable-sbd", dest="diskless_sbd", action="store_true",
                             help="Enable SBD even if no SBD device is configured (diskless mode)")
         parser.add_argument("-w", "--watchdog", dest="watchdog", metavar="WATCHDOG",
                             help="Use the given watchdog device or driver name")
 
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
-        network_group.add_argument("-i", "--interface", dest="nic_list", metavar="IF", action="append", choices=utils.interface_choice(),
-                                   help="Bind to IP address on interface IF. Use -i second time for second interface")
-        network_group.add_argument("-u", "--unicast", action="store_true", dest="unicast",
-                                   help="Configure corosync to communicate over unicast(udpu). This is the default transport type")
-        network_group.add_argument("-U", "--multicast", action="store_true", dest="multicast",
-                                   help="Configure corosync to communicate over multicast. Default is unicast")
+        network_group.add_argument("-t", "--transport", dest="transport", metavar="TRANSPORT", default="knet", choices=['knet', 'udpu', 'udp'],
+                                   help="The transport mechanism. Allowed value is knet(kronosnet)/udpu(unicast)/udp(multicast). Default is knet")
+        network_group.add_argument("-i", "--interface", dest="nic_addr_list", metavar="IF", action="append", help=constants.HELP_I_OPTION)
         network_group.add_argument("-A", "--admin-ip", dest="admin_ip", metavar="IP",
                                    help="Configure IP address as an administration virtual IP")
         network_group.add_argument("-I", "--ipv6", action="store_true", dest="ipv6",
@@ -402,19 +398,17 @@ Examples:
         elif re.search("--qdevice-.*", ' '.join(sys.argv)) or (stage == "qdevice" and options.yes_to_all):
             parser.error("Option --qnetd-hostname is required if want to configure qdevice")
 
-        # if options.geo and options.name == "hacluster":
-        #    parser.error("For a geo cluster, each cluster must have a unique name (use --name to set)")
         boot_context = bootstrap.Context.set_context(options)
         boot_context.ui_context = context
         boot_context.stage = stage
         boot_context.args = args
         boot_context.cluster_is_running = utils.service_is_active("pacemaker.service")
         boot_context.type = "init"
+        boot_context.initialize_qdevice()
+        boot_context.validate_option()
 
         bootstrap.bootstrap_init(boot_context)
 
-        # if options.geo:
-        #    bootstrap.bootstrap_init_geo()
 
         if options.nodes is not None:
             nodelist = [n for n in re.split('[ ,;]+', options.nodes)]
@@ -460,8 +454,7 @@ Examples:
 
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_argument("-c", "--cluster-node", dest="cluster_node", help="IP address or hostname of existing cluster node", metavar="HOST")
-        network_group.add_argument("-i", "--interface", dest="nic_list", metavar="IF", action="append", choices=utils.interface_choice(),
-                help="Bind to IP address on interface IF. Use -i second time for second interface")
+        network_group.add_argument("-i", "--interface", dest="nic_addr_list", metavar="IF", action="append", help=constants.HELP_I_OPTION)
         options, args = parse_options(parser, args)
         if options is None or args is None:
             return
@@ -476,6 +469,7 @@ Examples:
         join_context.ui_context = context
         join_context.stage = stage
         join_context.type = "join"
+        join_context.validate_option()
 
         bootstrap.bootstrap_join(join_context)
 
