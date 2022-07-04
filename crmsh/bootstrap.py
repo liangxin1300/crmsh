@@ -32,7 +32,8 @@ from . import corosync
 from . import tmpfiles
 from . import lock
 from . import userdir
-from .constants import SSH_OPTION, QDEVICE_HELP_INFO, STONITH_TIMEOUT_DEFAULT, REJOIN_COUNT, REJOIN_INTERVAL, MAX_LINK_NUM
+from .constants import (SSH_OPTION, QDEVICE_HELP_INFO, STONITH_TIMEOUT_DEFAULT, REJOIN_COUNT, REJOIN_INTERVAL, 
+    MAX_LINK_NUM, MAX_LINK_NUM_NON_KNET)
 from . import ocfs2
 from . import qdevice
 from . import log
@@ -170,6 +171,21 @@ class Context(object):
         """
         Validate -i/--interface option
         """
+        if self.transport and self.transport != "knet" and len(slef.nic_addr_list) > MAX_LINK_NUM_NON_KNET:
+            utils.fatal("Only one link is allowed for \"{}\" transport type".format(self.transport))
+        if len(self.nic_addr_list) > MAX_LINK_NUM:
+            utils.fatal("Maximum number of interface is {}".format(MAX_LINK_NUM))
+        if utils.has_dup_value(self.nic_addr_list):
+            utils.fatal("Duplicated value for -i option")
+        if utils.IP.is_valid_ip(self.nic_addr_list[0]):
+            self.nic_addr_type = "IP"
+            choice_list = utils.InterfacesInfo.get_local_ip_list(_context.ipv6)
+        else:
+            self.nic_addr_type = "NIC"
+            choice_list = utils.interface_choice()
+        for item in self.nic_addr_list:
+            if item not in choice_list:
+                utils.fatal("{} not in local {} list {}".format(item, self.nic_addr_type, choice_list))
 
     def validate_option(self):
         """
@@ -179,11 +195,8 @@ class Context(object):
             Validation.valid_admin_ip(self.admin_ip)
         if self.qdevice_inst:
             self.qdevice_inst.valid_qdevice_options()
-        if self.nic_list:
-            if len(self.nic_list) > 2:
-                utils.fatal("Maximum number of interface is 2")
-            if len(self.nic_list) != len(set(self.nic_list)):
-                utils.fatal("Duplicated input")
+        if self.nic_addr_list:
+            self._validate_nic_addr_option()
         if self.ocfs2_devices or self.stage == "ocfs2":
             ocfs2.OCFS2Manager.verify_ocfs2(self)
         self._validate_sbd_option()
