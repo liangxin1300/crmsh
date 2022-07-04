@@ -32,7 +32,7 @@ from . import corosync
 from . import tmpfiles
 from . import lock
 from . import userdir
-from .constants import SSH_OPTION, QDEVICE_HELP_INFO, STONITH_TIMEOUT_DEFAULT, REJOIN_COUNT, REJOIN_INTERVAL
+from .constants import SSH_OPTION, QDEVICE_HELP_INFO, STONITH_TIMEOUT_DEFAULT, REJOIN_COUNT, REJOIN_INTERVAL, MAX_LINK_NUM
 from . import ocfs2
 from . import qdevice
 from . import log
@@ -85,9 +85,9 @@ class Context(object):
         self.yes_to_all = None
         self.cluster_name = None
         self.watchdog = None
-        self.nic_list = None
-        self.unicast = None
-        self.multicast = None
+        self.nic_addr_list = None
+        self.nic_addr_type = None
+        self.transport = None
         self.admin_ip = None
         self.second_heartbeat = None
         self.ipv6 = None
@@ -165,6 +165,11 @@ class Context(object):
                 utils.fatal("Cannot configure stage sbd: sbd.service already running!")
             if self.cluster_is_running:
                 utils.check_all_nodes_reachable()
+
+    def _validate_nic_addr_option(self):
+        """
+        Validate -i/--interface option
+        """
 
     def validate_option(self):
         """
@@ -1917,8 +1922,6 @@ def bootstrap_init(context):
         if corosync_active:
             utils.fatal("Cluster is currently active - can't run %s stage" % (stage))
 
-    _context.initialize_qdevice()
-    _context.validate_option()
     _context.load_profiles()
     _context.init_sbd_manager()
 
@@ -1965,7 +1968,6 @@ def bootstrap_join(context):
 
     init()
     _context.init_sbd_manager()
-    _context.validate_option()
 
     check_tty()
 

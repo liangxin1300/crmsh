@@ -522,4 +522,7 @@ HA_GROUP = "haclient"
 SCHEMA_MIN_VER_SUPPORT_OCF_1_1 = "pacemaker-3.7"
 REJOIN_COUNT = 60
 REJOIN_INTERVAL = 10
+MAX_LINK_NUM = 8
+
+HELP_I_OPTION = """Bind to IP address on interface IF. Allowed value is NIC name or IP address. If provide NIC name, the first IP of that NIC will be used. Use multiple -i for more links. Note: only one link is allowed for the non-knet transport type."""
 # vim:ts=4:sw=4:et:
