@@ -75,9 +75,6 @@ optional arguments:
                         (diskless mode)
   -w WATCHDOG, --watchdog WATCHDOG
                         Use the given watchdog device or driver name
-  --no-overwrite-sshkey
-                        Avoid "/root/.ssh/id_rsa" overwrite if "-y" option is
-                        used (False by default; Deprecated)
 
 Network configuration:
   Options for configuring the network and messaging layer.
@@ -90,8 +87,6 @@ Network configuration:
   -U, --multicast       Configure corosync to communicate over multicast.
                         Default is unicast
   -A IP, --admin-ip IP  Configure IP address as an administration virtual IP
-  -M, --multi-heartbeats
-                        Configure corosync with second heartbeat line
   -I, --ipv6            Configure corosync use IPv6
 
 QDevice configuration:
@@ -205,8 +200,6 @@ optional arguments:
   -h, --help            Show this help message
   -q, --quiet           Be quiet (don't describe what's happening, just do it)
   -y, --yes             Answer "yes" to all prompts (use with caution)
-  -w WATCHDOG, --watchdog WATCHDOG
-                        Use the given watchdog device
 
 Network configuration:
   Options for configuring the network and messaging layer.
