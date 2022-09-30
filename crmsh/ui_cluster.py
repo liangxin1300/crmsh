@@ -347,8 +347,6 @@ Examples:
                             help="Enable SBD even if no SBD device is configured (diskless mode)")
         parser.add_argument("-w", "--watchdog", dest="watchdog", metavar="WATCHDOG",
                             help="Use the given watchdog device or driver name")
-        parser.add_argument("--no-overwrite-sshkey", action="store_true", dest="no_overwrite_sshkey",
-                            help='Avoid "/root/.ssh/id_rsa" overwrite if "-y" option is used (False by default; Deprecated)')
 
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_argument("-i", "--interface", dest="nic_list", metavar="IF", action="append", choices=utils.interface_choice(), default=[],
@@ -359,8 +357,6 @@ Examples:
                                    help="Configure corosync to communicate over multicast. Default is unicast")
         network_group.add_argument("-A", "--admin-ip", dest="admin_ip", metavar="IP",
                                    help="Configure IP address as an administration virtual IP")
-        network_group.add_argument("-M", "--multi-heartbeats", action="store_true", dest="second_heartbeat",
-                                   help="Configure corosync with second heartbeat line")
         network_group.add_argument("-I", "--ipv6", action="store_true", dest="ipv6",
                                    help="Configure corosync use IPv6")
 
@@ -458,7 +454,6 @@ Examples:
         parser.add_argument("-h", "--help", action="store_true", dest="help", help="Show this help message")
         parser.add_argument("-q", "--quiet", help="Be quiet (don't describe what's happening, just do it)", action="store_true", dest="quiet")
         parser.add_argument("-y", "--yes", help='Answer "yes" to all prompts (use with caution)', action="store_true", dest="yes_to_all")
-        parser.add_argument("-w", "--watchdog", dest="watchdog", metavar="WATCHDOG", help="Use the given watchdog device")
 
         network_group = parser.add_argument_group("Network configuration", "Options for configuring the network and messaging layer.")
         network_group.add_argument("-c", "--cluster-node", dest="cluster_node", help="IP address or hostname of existing cluster node", metavar="HOST")
