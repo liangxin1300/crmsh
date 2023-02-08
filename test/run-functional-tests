@@ -16,6 +16,20 @@ HA_NETWORK_V6_ARRAY[1]="2001:db8:20::/64"
 BEHAVE_CASE_DIR="$(dirname $0)/features/"
 BEHAVE_CASE_EXCLUDE="sbd|ocfs2"
 
+read -r -d '' SSHD_CONFIG_AZURE << EOM
+PermitRootLogin no
+AuthorizedKeysFile .ssh/authorized_keys
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding yes
+ClientAliveInterval 180
+Subsystem sftp	/usr/lib/ssh/sftp-server
+AcceptEnv LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
+AcceptEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
+AcceptEnv LC_IDENTIFICATION LC_ALL
+PasswordAuthentication no
+EOM
+
 read -r -d '' COROSYNC_CONF_TEMPLATE << EOM
 totem {
         version: 2
@@ -179,6 +193,12 @@ docker_exec() {
 	docker exec -t $name /bin/sh -c "$cmd"
 }
 
+set_sshd_config_like_in_azure() {
+	node_name=$1
+	docker_exec $node_name "echo \"$SSHD_CONFIG_AZURE\" > /etc/ssh/sshd_config"
+	docker_exec $node_name "systemctl restart sshd.service"
+}
+
 create_custom_user() {
 	user_name=$1
 	user_id=$2
@@ -227,7 +247,10 @@ deploy_ha_node() {
 	docker_exec $node_name "$make_cmd" 1> /dev/null || \
 		fatal "Building failed on $node_name!"
 
-	create_alice_bob_carol
+	if [ "$NORMAL_USER_FLAG" -eq 1 ];then
+		create_alice_bob_carol
+		set_sshd_config_like_in_azure $node_name
+	fi
 }
 
 
@@ -482,7 +505,7 @@ for case_num in $*;do
 		docker_exec ${node_arry[0]} "behave --no-logcapture $case_file_in_container || exit 1" || exit 1
 	else
 		info "Running \"$case_file_in_container\" under normal user 'alice'..."
-		docker_exec ${node_arry[0]} "su alice -c 'behave --no-logcapture $case_file_in_container || exit 1'" || exit 1
+		docker_exec ${node_arry[0]} "su - alice -c 'behave --no-logcapture $case_file_in_container || exit 1'" || exit 1
 	fi
 	echo
 done
