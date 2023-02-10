@@ -173,7 +173,7 @@ Feature: crmsh bootstrap sbd management
     Then    Cluster service is "started" on "hanode2"
     And     Service "sbd" is "started" on "hanode2"
     When    Run "stonith_admin -H hanode2 -c" on "hanode1"
-    When    Run "su hacluster -c 'crm -F node fence hanode2'" on "hanode1"
+    When    Run "su - hacluster -c 'crm -F node fence hanode2'" on "hanode1"
     Then    Expected return code is "0"
     Then    Node "hanode2" is UNCLEAN
     Then    Wait "60" seconds for "hanode2" successfully fenced
