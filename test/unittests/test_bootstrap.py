@@ -367,9 +367,9 @@ class TestBootstrap(unittest.TestCase):
         mock_invoke.assert_called_once_with("usermod -s /bin/bash hacluster")
 
     @mock.patch('subprocess.run')
-    def test_configure_ssh_key_on_remote(self, mock_run: mock.MagicMock):
+    def test_generate_ssh_key_pair_on_remote(self, mock_run: mock.MagicMock):
         mock_run.return_value = mock.Mock(returncode=0, stdout=b'')
-        bootstrap.configure_ssh_key_on_remote("node1", "alice", "hacluster")
+        bootstrap.generate_ssh_key_pair_on_remote("node1", "alice", "hacluster")
         mock_run.assert_called_once_with(
             ['ssh', '-o', 'StrictHostKeyChecking=no', 'alice@node1', 'sudo', '-H', '-u', 'hacluster', '/bin/sh'],
             input='''
