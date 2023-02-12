@@ -5,6 +5,8 @@
 import sys
 import re
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+
+import crmsh.parallax
 from . import command
 from . import utils
 from . import scripts
@@ -364,6 +366,7 @@ Examples:
         boot_context.args = args
         boot_context.cluster_is_running = utils.service_is_active("pacemaker.service")
         boot_context.type = "init"
+        boot_context.initialize_user()
         boot_context.initialize_qdevice()
         boot_context.validate_option()
 
@@ -422,6 +425,7 @@ Examples:
         join_context.ui_context = context
         join_context.stage = stage
         join_context.type = "join"
+        join_context.initialize_user()
         join_context.validate_option()
 
         bootstrap.bootstrap_join(join_context)
@@ -709,36 +713,18 @@ to get the geo cluster configuration.""",
         if not _has_parallax:
             context.fatal_error("python package parallax is needed for this command")
 
-        if nodes:
-            hosts = list(nodes)
-        else:
-            hosts = utils.list_cluster_nodes()
-            if hosts is None:
-                context.fatal_error("failed to get node list from cluster")
-
-        opts = parallax.Options()
-        opts.ssh_options = ['StrictHostKeyChecking=no']
-        for host in hosts:
-            res = utils.check_ssh_passwd_need(utils.getuser(), utils.user_of(host), host)
-            if res:
-                opts.askpass = True
-                break
-
-        host_port_user = []
-        for host in hosts:
-            host_port_user.append([host, None, utils.user_of(host)])
-
-        for host, result in parallax.call(host_port_user, cmd, opts).items():
+        for host, result in crmsh.parallax.parallax_run(host, cmd, opts).items():
             if isinstance(result, parallax.Error):
-                logger.error("[%s]: %s" % (host, result))
+                logger.error("[%s]: %s", host, result)
             else:
-                if result[0] != 0:
-                    logger.error("[%s]: rc=%s\n%s\n%s" % (host, result[0], utils.to_ascii(result[1]), utils.to_ascii(result[2])))
+                rc, stdout, stderr = result
+                if rc != 0:
+                    logger.error("[%s]: rc=%s\n%s\n%s", host, rc, utils.to_ascii(stdout), utils.to_ascii(stderr))
                 else:
-                    if not result[1]:
+                    if not stdout:
                         logger.info("[%s]" % host)
                     else:
-                        logger.info("[%s]\n%s" % (host, utils.to_ascii(result[1])))
+                        logger.info("[%s]\n%s" % (host, utils.to_ascii(stdout)))
 
     def do_copy(self, context, local_file, *nodes):
         '''
