@@ -27,6 +27,8 @@ import socket
 from tempfile import mktemp
 from string import Template
 from lxml import etree
+
+import crmsh.parallax
 from . import config, constants
 from . import upgradeutil
 from . import utils
@@ -833,7 +835,7 @@ def init_ssh():
 
     # If not use -N/--nodes option
     if not _context.node_list:
-        _save_core_hosts([_context.current_user], [utils.this_node()])
+        _save_core_hosts([_context.current_user], [utils.this_node()], sync_to_remote=False)
         return
 
     print()
@@ -862,14 +864,12 @@ def init_ssh():
             )
             if result.returncode != 0:
                 utils.fatal('Failed to add public keys to {}@{}: {}'.format(remote_user, node, result.stdout))
-    if utils.this_node() in _context.node_list:
-        _save_core_hosts(_context.user_list, _context.node_list)
-    else:
+    if utils.this_node() not in _context.node_list:
         user_list = [_context.current_user]
         user_list.extend(_context.user_list)
         node_list = [utils.this_node()]
         node_list.extend(_context.node_list)
-        _save_core_hosts(user_list, node_list)
+    _save_core_hosts(_context.user_list, _context.node_list, sync_to_remote=True)
     print()
 
 
@@ -885,10 +885,14 @@ def _merge_authorized_keys(keys: typing.List[str]) -> bytes:
     return buf
 
 
-def _save_core_hosts(user_list: typing.List[str], host_list: typing.List[str]):
-    config.set_option('core', 'hosts', [f'{user}@{host}' for user, host in zip(user_list, host_list)])
+def _save_core_hosts(user_list: typing.List[str], host_list: typing.List[str], sync_to_remote: bool):
+    value = [f'{user}@{host}' for user, host in zip(user_list, host_list)]
+    config.set_option('core', 'hosts', value)
     # TODO: it is saved in ~root/.config/crm/crm.conf, is it as suitable path?
     config.save()
+    if sync_to_remote:
+        assert "'" not in value
+        crmsh.parallax.parallax_call(host_list, "crm options set core.hosts '{}'".format(', '.join(value)))
 
 
 def _load_core_hosts() -> typing.Optional[typing.Tuple[typing.List[str], typing.List[str]]]:
@@ -905,6 +909,32 @@ def _load_core_hosts() -> typing.Optional[typing.Tuple[typing.List[str], typing.
         users.append(s[0])
         users.append(s[1])
     return users, hosts
+
+
+def _fetch_core_host(local_user, remote_user, remote_host) -> typing.Tuple[typing.List[str], typing.List[str]]:
+    cmd = 'crm options show core.hosts'
+    result = utils.su_subprocess_run(
+        local_user,
+        f'ssh {SSH_OPTION} {remote_user}@{remote_host} sudo /bin/sh',
+        input=cmd.encode('utf-8'),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        utils.fatal('Failed to run command "{}" on host {}: {}'.format(cmd, remote_host, result.stderr.decode('utf-8')))
+    text = result.stdout.decode('utf-8')
+    match = re.match('core\\.hosts\\s*=\\s*(.*)\\s*', text)
+    if match is None:
+        utils.fatal('Malformed core.hosts from host {}: {}'.format(remote_host, text))
+    user_list = list()
+    host_list = list()
+    for item in re.split(',\\s*', match.group(1)):
+        part = item.split('@', 2)
+        if len(part) != 2:
+            utils.fatal('Malformed core.hosts from host {}: {}'.format(remote_host, text))
+        user_list.append(part[0])
+        host_list.append(part[1])
+    return user_list, host_list
 
 
 def key_files(user):
@@ -1026,6 +1056,7 @@ def init_ssh_remote():
 
 
 def ssh_copy_id(local_user, remote_user, remote_node):
+    # TODO: refactor: move the prompt into this function
     cmd = "ssh-copy-id -i ~/.ssh/id_rsa.pub '{}@{}'".format(remote_user, remote_node)
     result = utils.su_subprocess_run(local_user, cmd, tty=True)
     if result.returncode != 0:
@@ -1628,12 +1659,11 @@ def join_ssh(seed_host, seed_user):
         ),
         local_user,
     )
-    # FIXME: fetch from remote, merge them, and sync to all nodes
     user_list = [_context.current_user]
     user_list.extend(_context.user_list)
     node_list = [utils.this_node()]
     node_list.extend(_context.node_list)
-    _save_core_hosts(user_list, node_list)
+    _save_core_hosts(user_list, node_list, sync_to_remote=False)
 
 
 def swap_public_ssh_key(
@@ -1893,6 +1923,10 @@ def setup_passwordless_with_other_nodes(init_node):
                      tokens[1], tokens[2]))
         else:
             cluster_nodes_list.append(tokens[1])
+    user_list, host_list = _fetch_core_host(local_user, remote_user, init_node)
+    user_list.append(local_user)
+    host_list.append(utils.this_node())
+    _save_core_hosts(user_list, host_list, sync_to_remote=False)
 
     # Filter out init node from cluster_nodes_list
     cmd = "ssh {} {}@{} hostname".format(SSH_OPTION, remote_user , init_node)
@@ -1904,10 +1938,12 @@ def setup_passwordless_with_other_nodes(init_node):
 
     # Swap ssh public key between join node and other cluster nodes
     for node in cluster_nodes_list:
-        # FIXME: we need to fetch core.hosts config from init_node first before using `user_of`
         remote_user_to_swap = utils.user_of(node)
         remote_privileged_user = remote_user_to_swap
-        swap_public_ssh_key(local_user, remote_privileged_user, remote_user_to_swap, node)
+        logger.info("Configuring SSH passwordless with {}@{}".format(remote_privileged_user, node))
+        ssh_copy_id(local_user, remote_privileged_user, node)
+        swap_public_ssh_key(node, local_user, remote_user_to_swap, local_user, remote_privileged_user)
+    _save_core_hosts(user_list, host_list, sync_to_remote=True)
 
 
 def sync_files_to_disk():
