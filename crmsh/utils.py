@@ -104,6 +104,8 @@ gethomedir = userdir.gethomedir
 
 def user_of(host):
     hosts = config.get_option('core', 'hosts')
+    if hosts == ['']:
+        return userdir.getuser()
     for item in hosts:
         if item.find('@') != -1:
             user, node = item.split('@')
@@ -112,16 +114,7 @@ def user_of(host):
             node = item
         if host == node:
             return user
-    raise ValueError('Failed to get user of host {}'.format(host))
-    # FIXME: using getuser() will not work
-    if host == 'localhost' or host == this_node() or host is None:
-        return userdir.getuser()
-    # FIXME! If we didn't find the user neither in ~/.config/crm/crm.conf nor in /etc/crm/crm.conf its' fatal
-    # However, writing those users per hand is cumbersome and synchronizing an N-case is worth a separate PR (TODO!)
-    # Besides, maybe we would want to store the users not in the crm.conf, but somewhere else.
-    # logger.info("The user of {} is unknown (see crm.conf->[core]->hosts). Current user '{}' is used instead."
-    #    .format(host, userdir.getuser()))
-    return userdir.getuser()
+    raise ValueError('Failed to get user of host {}: {}'.format(host, hosts))
 
 
 @memoize
