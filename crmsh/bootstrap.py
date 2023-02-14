@@ -844,13 +844,10 @@ def init_ssh():
     public_key_list = list()
     for i, node in enumerate(node_list):
         remote_user = _context.user_list[i]
-        logger.info("Configuring SSH passwordless with {}@{}".format(remote_user, node))
         ssh_copy_id(local_user, remote_user, node)
         # After this, login to remote_node is passwordless
-        public_key = swap_public_ssh_key(local_user, remote_user, remote_user, node, add=True)
+        public_key = swap_public_ssh_key(node, local_user, remote_user, local_user, remote_user, add=True)
         public_key_list.append(public_key)
-        if utils.service_is_active("pacemaker.service", remote_addr=node):
-            utils.fatal("Cluster is currently active on {} - can't run".format(node))
     if len(node_list) > 1:
         shell_script = _merge_authorized_keys(public_key_list)
         for i, node in enumerate(node_list):
@@ -869,7 +866,11 @@ def init_ssh():
         user_list.extend(_context.user_list)
         node_list = [utils.this_node()]
         node_list.extend(_context.node_list)
-    _save_core_hosts(_context.user_list, _context.node_list, sync_to_remote=True)
+        _save_core_hosts(user_list, node_list, sync_to_remote=True)
+    else:
+        _save_core_hosts(_context.user_list, _context.node_list, sync_to_remote=True)
+    if utils.service_is_active("pacemaker.service", remote_addr=node):
+        utils.fatal("Cluster is currently active on {} - can't run".format(node))
     print()
 
 
@@ -912,6 +913,7 @@ def _load_core_hosts() -> typing.Optional[typing.Tuple[typing.List[str], typing.
 
 
 def _fetch_core_host(local_user, remote_user, remote_host) -> typing.Tuple[typing.List[str], typing.List[str]]:
+    # FIXME: when the remote_host is initialized with -d, this cmd will print extra debug log to stdout
     cmd = 'crm options show core.hosts'
     result = utils.su_subprocess_run(
         local_user,
@@ -1030,7 +1032,7 @@ def generate_ssh_key_pair_on_remote(
     )
     if result.returncode != 0:
         raise ValueError(codecs.decode(result.stderr, 'utf-8', 'replace'))
-    return result.stdout.decode('utf-8')
+    return result.stdout.decode('utf-8').strip()
 
 
 def init_ssh_remote():
@@ -1056,11 +1058,12 @@ def init_ssh_remote():
 
 
 def ssh_copy_id(local_user, remote_user, remote_node):
-    # TODO: refactor: move the prompt into this function
-    cmd = "ssh-copy-id -i ~/.ssh/id_rsa.pub '{}@{}'".format(remote_user, remote_node)
-    result = utils.su_subprocess_run(local_user, cmd, tty=True)
-    if result.returncode != 0:
-        utils.fatal("Failed to login to remote host {}@{}".format(remote_user, remote_node))
+    if utils.check_ssh_passwd_need(local_user, remote_user, remote_node):
+        logger.info("Configuring SSH passwordless with {}@{}".format(remote_user, remote_node))
+        cmd = "ssh-copy-id -i ~/.ssh/id_rsa.pub '{}@{}'".format(remote_user, remote_node)
+        result = utils.su_subprocess_run(local_user, cmd, tty=True)
+        if result.returncode != 0:
+            utils.fatal("Failed to login to remote host {}@{}".format(remote_user, remote_node))
 
 
 def export_ssh_key_non_interactive(local_user_to_export, remote_user_to_swap, remote_node, local_sudoer, remote_sudoer):
@@ -1642,7 +1645,6 @@ def join_ssh(seed_host, seed_user):
     local_user = _context.current_user
     utils.start_service("sshd.service", enable=True)
     configure_ssh_key(local_user)
-    logger.info("Configuring SSH passwordless with {}@{}".format(seed_user, seed_host))
     ssh_copy_id(local_user, seed_user, seed_host)
     # After this, login to remote_node is passwordless
     swap_public_ssh_key(seed_host, local_user, seed_user, local_user, seed_user, add=True)
@@ -1940,7 +1942,6 @@ def setup_passwordless_with_other_nodes(init_node):
     for node in cluster_nodes_list:
         remote_user_to_swap = utils.user_of(node)
         remote_privileged_user = remote_user_to_swap
-        logger.info("Configuring SSH passwordless with {}@{}".format(remote_privileged_user, node))
         ssh_copy_id(local_user, remote_privileged_user, node)
         swap_public_ssh_key(node, local_user, remote_user_to_swap, local_user, remote_privileged_user)
     _save_core_hosts(user_list, host_list, sync_to_remote=True)
@@ -2375,7 +2376,7 @@ def bootstrap_add(context):
         cmd = "crm cluster join{} -c {}@{}{}".format(
             " -y" if _context.yes_to_all else "", _context.current_user, utils.this_node(), options)
         logger.info("Running command on {}: {}".format(node, cmd))
-        utils.get_stdout_or_raise_error(node, cmd)
+        utils.get_stdout_or_raise_error(cmd, node)
 
 
 def bootstrap_join(context):
