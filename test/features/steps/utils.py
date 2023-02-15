@@ -58,7 +58,6 @@ def run_command(context, cmd, err_record=False):
 
 
 def run_command_local_or_remote(context, cmd, addr, err_record=False):
-    cmd = add_sudo(cmd)
     if addr == me():
         rc, out = run_command(context, cmd, err_record)
         context.return_code = rc
