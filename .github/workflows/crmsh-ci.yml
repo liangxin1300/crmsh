@@ -55,8 +55,7 @@ jobs:
         tox -v -e${{ matrix.python-version }}
 
   delivery:
-    needs: [general_check,
-      unit_test]
+    needs: [general_check]
     runs-on: ubuntu-20.04
     timeout-minutes: 10
     steps:
