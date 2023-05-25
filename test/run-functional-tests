@@ -230,7 +230,7 @@ deploy_ha_node() {
 	node_name=$1
 	docker_options="-d --name $node_name -h $node_name --privileged --shm-size 1g"
 	make_cmd="cd $PROJECT_INSIDE;./autogen.sh && ./configure --prefix /usr && make install && make install-crmconfDATA prefix= && cp /usr/bin/crm /usr/sbin"
-        cmd1="zypper ar -f -G https://download.opensuse.org/repositories/home:/XinLiang:/branches:/home:/mcepl:/branches:/network:/ha-clustering:/Factory/SLE_15_SP4/ repo_test_crmsh"
+        cmd1="zypper ar -f -G https://download.opensuse.org/repositories/network:/ha-clustering:/Factory/SLE_15_SP4/ repo_test_crmsh"
 	cmd2="zypper --non-interactive refresh"
 	cmd3="zypper --non-interactive in crmsh"
 
