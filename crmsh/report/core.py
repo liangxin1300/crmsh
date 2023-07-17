@@ -33,6 +33,10 @@ class Context:
         self.sensitive_regex_list: List[str] = ["passw.*"]
         self.regex_list: List[str] = "CRIT: ERROR: error: warning: crit:".split()
         self.ssh_askpw_node_list: List[str] = []
+        self.pe_dir: str
+        self.cib_dir: str
+        self.pcmk_lib_dir: str
+        self.cores_dir_list: List[str]
 
     def __str__(self) ->str:
         return json.dumps(self.__dict__)
@@ -137,10 +141,9 @@ def get_log():
             logger.warning("could not figure out the log format of %s", constants.HA_LOG)
 
 
-def is_collector():
+def is_collector() -> bool:
     """
-    the instance where user runs crm report is the master
-    the others are slaves
+    collector is for collecting logs and data
     """
     if len(sys.argv) > 1 and sys.argv[1] == "__slave":
         return True
@@ -263,7 +266,60 @@ def parse_argument(argv):
             utils.log_fatal("Wrong format for from_time in /etc/crm/crm.conf; (-[1-9][0-9]*[YmdHM])")
 
 
-def run():
+def get_pe_dir(context: Context) -> None:
+    context.pe_dir = getattr(config.path, 'pe_state_dir', None)
+    if not context.pe_dir or not os.path.isdir(context.pe_dir):
+        raise utils.ReportGenericError("Cannot find PE files directory")
+
+
+def get_cib_dir(context: Context) -> None:
+    context.cib_dir = getattr(config.path, 'crm_config', None)
+    if not context.cib_dir or not os.path.isdir(context.cib_dir):
+        raise utils.ReportGenericError("Cannot find CIB files directory")
+    context.pcmk_lib_dir = os.path.dirname(context.cib_dir)
+
+
+def get_cores_dir(context: Context) -> None:
+    context.cores_dir_list = [os.path.join(context.pcmk_lib_dir, "cores")]
+    if os.path.isdir(constants.COROSYNC_LIB):
+        context.cores_dir_list.append(constants.COROSYNC_LIB)
+
+
+def load_from_config(context: Context) -> None:
+    """
+    load context attributes from crmsh.config and corosync.conf
+    """
+    get_pe_dir(context)
+    get_cib_dir(context)
+    get_cores_dir(context)
+
+
+def run_impl() -> None:
+    """
+    Major work flow
+    """
+    if is_collector():
+        pass
+    else:
+        ctx = Context()
+        parse_arguments(ctx)
+        load_from_config(ctx)
+
+
+def run() -> None:
+    try:
+        run_impl()
+    except UnicodeDecodeError:
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.exit(1)
+    except utils.ReportGenericError as err:
+        logger.error(str(err))
+        sys.exit(1)
+
+
+def run2():
 
     utils.check_env()
     tmpdir = utils.make_temp_dir()
@@ -452,14 +508,5 @@ usage: report -f {time} [-t time]
 def version():
     print(utils.crmsh_info().strip('\n'))
     sys.exit(0)
-
-
-if __name__ == "__main__":
-    try:
-        run()
-    except UnicodeDecodeError:
-        import traceback
-        traceback.print_exc()
-        sys.stdout.flush()
 
 # vim:ts=4:sw=4:et:

@@ -31,6 +31,10 @@ from crmsh.report import constants, collect
 logger = log.setup_report_logger(__name__)
 
 
+class ReportGenericError(Exception):
+    pass
+
+
 class Tempfile(object):
 
     def __init__(self):

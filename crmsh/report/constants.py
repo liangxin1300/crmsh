@@ -146,4 +146,52 @@ OCFS2_F = "ocfs2.txt"
 SBD_F = "sbd.txt"
 OSRELEASE = "/etc/os-release"
 TIME_FORMAT = "%Y-%m-%d %H:%M"
+RESULT_TIME_SUFFIX = "%a-%d-%b-%Y"
+NAME = "crm report"
+COROSYNC_LIB = "/var/lib/corosync"
+
+EXTRA_HELP = '''
+Examples
+  # collect from 2pm, today
+  hb_report -f 2pm report_1
+
+  # collect from "2007/9/5 12:30" to "2007/9/5 14:00"
+  hb_report -f "2007/9/5 12:30" -t "2007/9/5 14:00" report_2
+
+  # collect from 1:00 to 3:00, today; include /var/log/cluster/ha-debug as extra log
+  hb_report -f 1:00 -t 3:00 -E /var/log/cluster/ha-debug report_3
+
+  # collect from "09sep07 2:00" and use 'hacluster' as ssh user
+  hb_report -f "09sep07 2:00" -u hacluster report_4
+
+  # collect from 18:00, today; replace sensitive message like "usern.*" or "admin.*"
+  hb_report -f 18:00 -s -p "usern.*" -p "admin.*" report_5
+
+  # collect from 1 mounth ago
+  hb_report -b 1m
+
+  # collect from 12 days ago
+  hb_report -b 12d
+
+  # collect from 75 hours ago
+  hb_report -b 75H
+
+  # collect from 10 minutes ago
+  hb_report -b 10M
+
+. WARNING . WARNING . WARNING . WARNING . WARNING . WARNING .
+
+We won't sanitize the CIB and the peinputs files, because that
+would make them useless when trying to reproduce the PE behaviour.
+You may still choose to obliterate sensitive information if you
+use the -s and -p options, but in that case the support may be
+lacking as well.
+
+Additional system logs are collected in order to have a more
+complete report. If you don't want that specify -M.
+
+IT IS YOUR RESPONSIBILITY TO PROTECT THE DATA FROM EXPOSURE!
+
+SEE ALSO
+  crmsh_hb_report(8)'''
 # vim:ts=4:sw=4:et:
