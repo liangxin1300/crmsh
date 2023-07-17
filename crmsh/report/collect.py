@@ -12,7 +12,7 @@ import datetime
 
 from crmsh import log
 from crmsh import utils as crmutils
-from crmsh.report import constants, utillib
+from crmsh.report import constants, utils
 
 
 logger = log.setup_report_logger(__name__)
@@ -30,8 +30,8 @@ def collect_ocfs2_info():
             f.write("No ocfs2 partitions found")
             return
 
-        f.write(utillib.dump_D_process())
-        f.write(utillib.lsof_ocfs2_device())
+        f.write(utils.dump_D_process())
+        f.write(utils.lsof_ocfs2_device())
 
         cmds = [ "dmesg",  "ps -efL",
                 "lsblk -o 'NAME,KNAME,MAJ:MIN,FSTYPE,LABEL,RO,RM,MODEL,SIZE,OWNER,GROUP,MODE,ALIGNMENT,MIN-IO,OPT-IO,PHY-SEC,LOG-SEC,ROTA,SCHED,MOUNTPOINT'",
@@ -40,7 +40,7 @@ def collect_ocfs2_info():
                 ]
         for cmd in cmds:
             cmd_name = cmd.split()[0]
-            if not utillib.which(cmd_name) or \
+            if not utils.which(cmd_name) or \
                cmd_name == "cat" and not os.path.exists(cmd.split()[1]):
                 continue
             _, out = crmutils.get_stdout(cmd)
@@ -64,7 +64,7 @@ def collect_ratraces():
         return
 
     logger.debug("Looking for RA trace files in \"%s\"", trace_dir_str)
-    for f in utillib.find_files(trace_dir_str, constants.FROM_TIME, constants.TO_TIME):
+    for f in utils.find_files(trace_dir_str, constants.FROM_TIME, constants.TO_TIME):
         dest_dir = os.path.join(constants.WORKDIR, '/'.join(f.split('/')[-3:-1]))
         crmutils.mkdirp(dest_dir)
         shutil.copy2(f, dest_dir)
@@ -72,19 +72,19 @@ def collect_ratraces():
 
 def collect_corosync_blackbox():
     fdata_list = []
-    for f in utillib.find_files("/var/lib/corosync", constants.FROM_TIME, constants.TO_TIME):
+    for f in utils.find_files("/var/lib/corosync", constants.FROM_TIME, constants.TO_TIME):
         if re.search("fdata", f):
             fdata_list.append(f)
     if fdata_list:
         blackbox_f = os.path.join(constants.WORKDIR, constants.COROSYNC_RECORDER_F)
-        crmutils.str2file(utillib.get_command_info("corosync-blackbox")[1], blackbox_f)
+        crmutils.str2file(utils.get_command_info("corosync-blackbox")[1], blackbox_f)
 
 
 def collect_time_status():
     out_string = "Time: "
     out_string += datetime.datetime.now().strftime('%c') + '\n'
     out_string += "ntpdc: "
-    out_string += utillib.get_command_info("ntpdc -pn")[1] + '\n'
+    out_string += utils.get_command_info("ntpdc -pn")[1] + '\n'
 
     time_f = os.path.join(constants.WORKDIR, constants.TIME_F)
     crmutils.str2file(out_string, time_f)
@@ -94,15 +94,15 @@ def collect_dlm_info():
     """
     get dlm info
     """
-    if utillib.which("dlm_tool"):
+    if utils.which("dlm_tool"):
         out_string = "##### NOTICE - Lockspace overview:\n"
-        out_string += utillib.get_command_info("dlm_tool ls")[1] + '\n'
-        for item in utillib.grep("^name", incmd="dlm_tool ls"):
+        out_string += utils.get_command_info("dlm_tool ls")[1] + '\n'
+        for item in utils.grep("^name", incmd="dlm_tool ls"):
             lock_name = item.split()[1]
             out_string += "## NOTICE - Lockspace {}\n".format(lock_name)
-            out_string += utillib.get_command_info("dlm_tool lockdebug {}".format(lock_name))[1] + '\n'
+            out_string += utils.get_command_info("dlm_tool lockdebug {}".format(lock_name))[1] + '\n'
         out_string += "##### NOTICE - Lockspace history:\n"
-        out_string += utillib.get_command_info("dlm_tool dump")[1] + '\n'
+        out_string += utils.get_command_info("dlm_tool dump")[1] + '\n'
 
         dlm_f = os.path.join(constants.WORKDIR, constants.DLM_DUMP_F)
         crmutils.str2file(out_string, dlm_f)
@@ -124,7 +124,7 @@ def collect_perms_state():
            "%04o" % (stat_info.st_mode & 0o7777) != "0750":
             flag = 1
             out_string += "\nwrong permissions or ownership for %s: " % check_dir
-            out_string += utillib.get_command_info("ls -ld %s" % check_dir)[1] + '\n'
+            out_string += utils.get_command_info("ls -ld %s" % check_dir)[1] + '\n'
         if flag == 0:
             out_string += "OK\n"
 
@@ -146,10 +146,10 @@ def collect_backtraces():
     Check CORES_DIRS for core dumps within the report timeframe and
     use gdb to get the backtraces
     """
-    cores = utillib.find_files(constants.CORES_DIRS, constants.FROM_TIME, constants.TO_TIME)
+    cores = utils.find_files(constants.CORES_DIRS, constants.FROM_TIME, constants.TO_TIME)
     flist = [f for f in cores if "core" in os.path.basename(f)]
     if flist:
-        utillib.print_core_backtraces(flist)
+        utils.print_core_backtraces(flist)
         logger.debug("found backtraces: %s", ' '.join(flist))
 
 
@@ -158,14 +158,14 @@ def collect_config():
     if os.path.isfile(constants.CONF):
         shutil.copy2(constants.CONF, workdir)
     if crmutils.is_process("pacemaker-controld") or crmutils.is_process("crmd"):
-        utillib.dump_state(workdir)
+        utils.dump_state(workdir)
         open(os.path.join(workdir, "RUNNING"), 'w')
     else:
         shutil.copy2(os.path.join(constants.CIB_DIR, constants.CIB_F), workdir)
         open(os.path.join(workdir, "STOPPED"), 'w')
     if os.path.isfile(os.path.join(workdir, constants.CIB_F)):
         cmd = "crm_verify -V -x %s" % os.path.join(workdir, constants.CIB_F)
-        crmutils.str2file(utillib.get_command_info(cmd)[1], os.path.join(workdir, constants.CRM_VERIFY_F))
+        crmutils.str2file(utils.get_command_info(cmd)[1], os.path.join(workdir, constants.CRM_VERIFY_F))
 
 
 def collect_dc_file():
@@ -180,7 +180,7 @@ def collect_crm_config():
     workdir = constants.WORKDIR
     if os.path.isfile(os.path.join(workdir, constants.CIB_F)):
         cmd = r"CIB_file=%s/%s crm configure show" % (workdir, constants.CIB_F)
-        crmutils.str2file(utillib.get_command_info(cmd)[1], os.path.join(workdir, constants.CIB_TXT_F))
+        crmutils.str2file(utils.get_command_info(cmd)[1], os.path.join(workdir, constants.CIB_TXT_F))
 
 
 def collect_pe_inputs():
@@ -191,14 +191,14 @@ def collect_pe_inputs():
     logger.debug("looking for PE files in %s in %s", pe_dir, constants.WE)
 
     flist = []
-    for f in utillib.find_files(pe_dir, from_time, to_time):
+    for f in utils.find_files(pe_dir, from_time, to_time):
         if re.search("[.]last$", f):
             continue
         flist.append(f)
 
     if flist:
         flist_dir = os.path.join(work_dir, os.path.basename(pe_dir))
-        utillib._mkdir(flist_dir)
+        utils._mkdir(flist_dir)
         for f in flist:
             os.symlink(f, os.path.join(flist_dir, os.path.basename(f)))
         logger.debug("found %d pengine input files in %s", len(flist), pe_dir)
@@ -206,7 +206,7 @@ def collect_pe_inputs():
         if len(flist) <= 20:
             if not constants.SKIP_LVL:
                 for f in flist:
-                    utillib.pe_to_dot(os.path.join(flist_dir, os.path.basename(f)))
+                    utils.pe_to_dot(os.path.join(flist_dir, os.path.basename(f)))
         else:
             logger.debug("too many PE inputs to create dot files")
     else:
@@ -220,7 +220,7 @@ def collect_sbd_info():
     if os.path.exists(constants.SBDCONF):
         shutil.copy2(constants.SBDCONF, constants.WORKDIR)
 
-    if not utillib.which("sbd"):
+    if not utils.which("sbd"):
         return
     sbd_f = os.path.join(constants.WORKDIR, constants.SBD_F)
     cmd = ". {};export SBD_DEVICE;{};{}".format(constants.SBDCONF, "sbd dump", "sbd list")
@@ -239,9 +239,9 @@ def collect_sys_stats():
     for cmd in cmd_list:
         out_string += "##### run \"%s\" on %s\n" % (cmd, constants.WE)
         if cmd != "df":
-            out_string += utillib.get_command_info(cmd)[1] + '\n'
+            out_string += utils.get_command_info(cmd)[1] + '\n'
         else:
-            out_string += utillib.get_command_info_timeout(cmd) + '\n'
+            out_string += utils.get_command_info_timeout(cmd) + '\n'
 
     sys_stats_f = os.path.join(constants.WORKDIR, constants.SYSSTATS_F)
     crmutils.str2file(out_string, sys_stats_f)
@@ -252,21 +252,21 @@ def collect_sys_info():
     some basic system info and stats
     """
     out_string = "#####Cluster info:\n"
-    out_string += utillib.cluster_info()
-    out_string += utillib.ra_build_info()
-    out_string += utillib.booth_info()
+    out_string += utils.cluster_info()
+    out_string += utils.ra_build_info()
+    out_string += utils.booth_info()
     out_string += "\n"
     out_string += "#####Cluster related packages:\n"
-    out_string += utillib.pkg_versions(constants.PACKAGES)
+    out_string += utils.pkg_versions(constants.PACKAGES)
     if not constants.SKIP_LVL:
-        out_string += utillib.verify_packages(constants.PACKAGES)
+        out_string += utils.verify_packages(constants.PACKAGES)
     out_string += "\n"
     out_string += "#####System info:\n"
     out_string += "Platform: %s\n" % os.uname()[0]
     out_string += "Kernel release: %s\n" % os.uname()[2]
     out_string += "Architecture: %s\n" % os.uname()[-1]
     if os.uname()[0] == "Linux":
-        out_string += "Distribution: %s\n" % utillib.get_distro_info()
+        out_string += "Distribution: %s\n" % utils.get_distro_info()
 
     sys_info_f = os.path.join(constants.WORKDIR, constants.SYSINFO_F)
     crmutils.str2file(out_string, sys_info_f)

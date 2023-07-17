@@ -12,7 +12,7 @@ import shutil
 
 from crmsh import utils as crmutils
 from crmsh import config, log, userdir
-from crmsh.report import constants, utillib
+from crmsh.report import constants, utils
 
 
 logger = log.setup_report_logger(__name__)
@@ -25,11 +25,11 @@ def collect_for_nodes(nodes, arg_str):
     process_list = []
     for node in nodes.split():
         if node in constants.SSH_PASSWORD_NODES:
-            logger.info("Please provide password for %s at %s", utillib.say_ssh_user(), node)
+            logger.info("Please provide password for %s at %s", utils.say_ssh_user(), node)
             logger.info("Note that collecting data will take a while.")
-            utillib.start_slave_collector(node, arg_str)
+            utils.start_slave_collector(node, arg_str)
         else:
-            p = multiprocessing.Process(target=utillib.start_slave_collector, args=(node, arg_str))
+            p = multiprocessing.Process(target=utils.start_slave_collector, args=(node, arg_str))
             p.start()
             process_list.append(p)
     for p in process_list:
@@ -67,7 +67,7 @@ def get_log():
 
     # collect journal from systemd unless -M was passed
     if constants.EXTRA_LOGS:
-        utillib.collect_journal(constants.FROM_TIME,
+        utils.collect_journal(constants.FROM_TIME,
                                 constants.TO_TIME,
                                 os.path.join(constants.WORKDIR, constants.JOURNAL_F))
 
@@ -76,7 +76,7 @@ def get_log():
             logger.warning("%s not found; we will try to find log ourselves", constants.HA_LOG)
             constants.HA_LOG = ""
     if not constants.HA_LOG:
-        constants.HA_LOG = utillib.find_log()
+        constants.HA_LOG = utils.find_log()
     if (not constants.HA_LOG) or (not os.path.isfile(constants.HA_LOG)):
         if constants.CTS:
             pass  # TODO
@@ -88,13 +88,13 @@ def get_log():
         pass  # TODO
     else:
         try:
-            getstampproc = utillib.find_getstampproc(constants.HA_LOG)
+            getstampproc = utils.find_getstampproc(constants.HA_LOG)
         except PermissionError:
             return
         if getstampproc:
             constants.GET_STAMP_FUNC = getstampproc
-            if utillib.dump_logset(constants.HA_LOG, constants.FROM_TIME, constants.TO_TIME, outf):
-                utillib.log_size(constants.HA_LOG, outf+'.info')
+            if utils.dump_logset(constants.HA_LOG, constants.FROM_TIME, constants.TO_TIME, outf):
+                utils.log_size(constants.HA_LOG, outf+'.info')
         else:
             logger.warning("could not figure out the log format of %s", constants.HA_LOG)
 
@@ -130,7 +130,7 @@ def load_env(env_str):
     # constants.UNIQUE_MSG = env_dict["UNIQUE_MSG"]
     constants.SANITIZE_RULE_DICT = env_dict["SANITIZE_RULE_DICT"]
     constants.DO_SANITIZE = env_dict["DO_SANITIZE"]
-    constants.SKIP_LVL = utillib.str_to_bool(env_dict["SKIP_LVL"])
+    constants.SKIP_LVL = utils.str_to_bool(env_dict["SKIP_LVL"])
     constants.EXTRA_LOGS = env_dict["EXTRA_LOGS"]
     constants.PCMK_LOG = env_dict["PCMK_LOG"]
     config.report.verbosity = env_dict["VERBOSITY"]
@@ -158,10 +158,10 @@ def parse_argument(argv):
             version()
         if args == '-f':
             constants.FROM_TIME = crmutils.parse_to_timestamp(option)
-            utillib.check_time(constants.FROM_TIME, option)
+            utils.check_time(constants.FROM_TIME, option)
         if args == '-t':
             constants.TO_TIME = crmutils.parse_to_timestamp(option)
-            utillib.check_time(constants.TO_TIME, option)
+            utils.check_time(constants.TO_TIME, option)
         if args == "-n":
             constants.USER_NODES += " %s" % option
         if args == "-u":
@@ -202,7 +202,7 @@ def parse_argument(argv):
         temp_pattern_set = set()
         temp_pattern_set |= set(re.split('\s*\|\s*|\s+', config.report.sanitize_rule.strip('|')))
         constants.SANITIZE_RULE += " {}".format(' '.join(temp_pattern_set))
-    utillib.parse_sanitize_rule(constants.SANITIZE_RULE)
+    utils.parse_sanitize_rule(constants.SANITIZE_RULE)
 
     if not constants.FROM_TIME:
         from_time = config.report.from_time
@@ -220,16 +220,16 @@ def parse_argument(argv):
                 timedelta = datetime.timedelta(minutes = number)
             from_time = (datetime.datetime.now() - timedelta).strftime("%Y-%m-%d %H:%M")
             constants.FROM_TIME = crmutils.parse_to_timestamp(from_time)
-            utillib.check_time(constants.FROM_TIME, from_time)
+            utils.check_time(constants.FROM_TIME, from_time)
         else:
-            utillib.log_fatal("Wrong format for from_time in /etc/crm/crm.conf; (-[1-9][0-9]*[YmdHM])")
+            utils.log_fatal("Wrong format for from_time in /etc/crm/crm.conf; (-[1-9][0-9]*[YmdHM])")
 
 
 def run():
 
-    utillib.check_env()
-    tmpdir = utillib.make_temp_dir()
-    utillib.add_tempfiles(tmpdir)
+    utils.check_env()
+    tmpdir = utils.make_temp_dir()
+    utils.add_tempfiles(tmpdir)
 
     #
     # get and check options; and the destination
@@ -240,20 +240,20 @@ def run():
         constants.WORKDIR = os.path.join(tmpdir, constants.DEST)
     else:
         constants.WORKDIR = os.path.join(tmpdir, constants.DEST, constants.WE)
-    utillib._mkdir(constants.WORKDIR)
+    utils._mkdir(constants.WORKDIR)
 
     if is_collector():
         load_env(' '.join(sys.argv[2:]))
 
-    utillib.compatibility_pcmk()
+    utils.compatibility_pcmk()
     if constants.CTS == "" or is_collector():
-        utillib.get_log_vars()
+        utils.get_log_vars()
 
     if not is_collector():
-        constants.NODES = ' '.join(utillib.get_nodes())
+        constants.NODES = ' '.join(utils.get_nodes())
         logger.debug("nodes: %s", constants.NODES)
     if constants.NODES == "":
-        utillib.log_fatal("could not figure out a list of nodes; is this a cluster node?")
+        utils.log_fatal("could not figure out a list of nodes; is this a cluster node?")
     if constants.WE in constants.NODES.split():
         constants.THIS_IS_NODE = 1
 
@@ -266,7 +266,7 @@ def run():
         if not constants.NO_SSH:
             # if the ssh user was supplied, consider that it
             # works; helps reduce the number of ssh invocations
-            utillib.find_ssh_user()
+            utils.find_ssh_user()
 
     #
     # find the logs and cut out the segment for the period
@@ -288,35 +288,35 @@ def run():
     #     problem description template, and prints final notes
     #
     if is_collector():
-        utillib.collect_info()
+        utils.collect_info()
         cmd = r"cd %s/.. && tar -h -cf - %s" % (constants.WORKDIR, constants.WE)
         code, out, err = crmutils.get_stdout_stderr(cmd, raw=True)
         print("{}{}".format(constants.COMPRESS_DATA_FLAG, out))
     else:
         p_list = []
-        p_list.append(multiprocessing.Process(target=utillib.analyze))
-        p_list.append(multiprocessing.Process(target=utillib.events, args=(constants.WORKDIR,)))
+        p_list.append(multiprocessing.Process(target=utils.analyze))
+        p_list.append(multiprocessing.Process(target=utils.events, args=(constants.WORKDIR,)))
         for p in p_list:
             p.start()
 
-        utillib.check_if_log_is_empty()
-        utillib.mktemplate(sys.argv)
+        utils.check_if_log_is_empty()
+        utils.mktemplate(sys.argv)
 
         for p in p_list:
             p.join()
 
         if not constants.SKIP_LVL:
-            utillib.sanitize()
+            utils.sanitize()
 
         if constants.COMPRESS:
-            utillib.pick_compress()
+            utils.pick_compress()
             cmd = r"(cd %s/.. && tar cf - %s)|%s > %s/%s.tar%s" % (
                 constants.WORKDIR, constants.DEST, constants.COMPRESS_PROG,
                 constants.DESTDIR, constants.DEST, constants.COMPRESS_EXT)
             crmutils.ext_cmd(cmd)
         else:
             shutil.move(constants.WORKDIR, constants.DESTDIR)
-        utillib.finalword()
+        utils.finalword()
 
 
 def set_dest(dest):
@@ -325,17 +325,17 @@ def set_dest(dest):
     argument is missing)
     """
     if dest:
-        constants.DESTDIR = utillib.get_dirname(dest)
+        constants.DESTDIR = utils.get_dirname(dest)
         constants.DEST = os.path.basename(dest)
     if not os.path.isdir(constants.DESTDIR):
-        utillib.log_fatal("%s is illegal directory name" % constants.DESTDIR)
+        utils.log_fatal("%s is illegal directory name" % constants.DESTDIR)
     if not crmutils.is_filename_sane(constants.DEST):
-        utillib.log_fatal("%s contains illegal characters" % constants.DEST)
+        utils.log_fatal("%s contains illegal characters" % constants.DEST)
     if not constants.COMPRESS and os.path.isdir(os.path.join(constants.DESTDIR, constants.DEST)):
         if constants.FORCE_REMOVE_DEST:
             shutil.rmtree(os.path.join(constants.DESTDIR, constants.DEST))
         else:
-            utillib.log_fatal("destination directory DESTDIR/DEST exists, please cleanup or use -Z")
+            utils.log_fatal("destination directory DESTDIR/DEST exists, please cleanup or use -Z")
 
 
 def usage(short_msg=''):
@@ -412,7 +412,7 @@ usage: report -f {time} [-t time]
 
 
 def version():
-    print(utillib.crmsh_info().strip('\n'))
+    print(utils.crmsh_info().strip('\n'))
     sys.exit(0)
 
 
