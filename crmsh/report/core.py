@@ -3,6 +3,7 @@
 # See COPYING for license information.
 
 import getopt
+import argparse
 import multiprocessing
 import os
 import re
@@ -23,6 +24,7 @@ logger = log.setup_report_logger(__name__)
 class Context:
 
     def __init__(self) -> None:
+        self.name = "crm_report"
         self.from_time: float = config.report.from_time
         self.to_time: float = utils.now()
         self.no_compress: bool = not config.report.compress
@@ -177,7 +179,95 @@ def load_env(env_str):
     config.report.verbosity = env_dict["VERBOSITY"]
 
 
-def parse_argument(argv):
+def parse_arguments(context: Context) -> None:
+    """
+    Parse and process arguments
+    """
+    args = add_arguments()
+    check_exclusive_options(args)
+    crmutils.check_space_option_value(args)
+    for arg in vars(args):
+        value = getattr(args, arg)
+        if value or not hasattr(context, arg):
+            setattr(context, arg, value)
+    process_arguments(context)
+
+
+def add_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+            usage=f"{constants.NAME} [options] [dest]",
+            add_help=False,
+            formatter_class=lambda prog: argparse.HelpFormatter(prog, width=80)
+            )
+    parser.add_argument("-h", "--help", action="store_true", dest="help",
+                        help="Show this help message and exit")
+    parser.add_argument('-f', dest='from_time', metavar='FROM_TIME',
+                        help='Time to start from (default: 12 hours before)')
+    parser.add_argument('-t', dest='to_time', metavar='TO_TIME',
+                        help='Time to finish at (default: now)')
+    parser.add_argument('-b', dest='before_time', metavar='BEFORE_TIME',
+                        help='How long time in the past, before now ([1-9][0-9]*[YmdHM])')
+    parser.add_argument('-d', dest='no_compress', action='store_true',
+                        help="Don't compress, but leave result in a directory")
+    parser.add_argument('-n', dest='node_list', metavar='NODE', action="append", default=[],
+                        help='Node names for this cluster; this option is additive (use -n a -n b or -n "a b")')
+    parser.add_argument('-u', dest='ssh_user', metavar='SSH_USER',
+                        help='SSH user to access other nodes')
+    parser.add_argument('-X', dest='ssh_option_list', metavar='SSH_OPTION', action='append', default=[],
+                        help='Extra ssh(1) options; this option is additive')
+    parser.add_argument('-e', dest='extra_log_list', metavar='FILE', action='append', default=[],
+                        help='Extra logs to collect; this option is additive')
+    parser.add_argument('-E', dest='no_log_list', metavar='FILE', action='append', default=[],
+                        help='Don\'t collect these files; this option is additive')
+    parser.add_argument('-s', dest='sanitize', action='store_true',
+                        help='Replace sensitive info in PE or CIB or pacemaker log files')
+    parser.add_argument('-p', dest='sensitive_regex_list', metavar='PATT', action='append', default=[],
+                        help='Regular expression to match variables containing sensitive data (default: passw.*); this option is additive')
+    parser.add_argument('-Z', dest='rm_exist_dest', action='store_true',
+                        help='If destination directories exist, remove them instead of exiting')
+    parser.add_argument('-S', dest='single', action='store_true',
+                        help="Single node operation; don't try to start report collectors on other nodes")
+    parser.add_argument('-v', dest='debug', action='count', default=0,
+                        help='Increase verbosity')
+    parser.add_argument('dest', nargs='?',
+                        help='Report name (may include path where to store the report)')
+
+    args = parser.parse_args()
+    if args.help:
+        parser.print_help()
+        print(constants.EXTRA_HELP)
+        sys.exit(0)
+
+    return args
+
+
+def process_arguments(context: Context) -> None:
+    if context.before_time:
+        context.from_time = context.before_time
+    if context.to_time <= context.from_time:
+        raise ValueError("The start time must be before the finish time")
+    if not context.dest:
+        suffix = utils.now(constants.RESULT_TIME_SUFFIX)
+        context.dest = f"{context.name}-{suffix}"
+
+
+
+def check_exclusive_options(args: argparse.Namespace) -> None:
+    """
+    Some options are exclusive, check and raise error
+    """
+    except_msg = ""
+    if args.from_time and args.before_time:
+        except_msg = "-f and -b options are exclusive"
+    elif args.to_time and args.before_time:
+        except_msg = "-t and -b options are exclusive"
+    elif args.node_list and args.single:
+        except_msg = "-n and -S options are exclusive"
+    if except_msg:
+        raise ValueError(except_msg)
+
+
+def parse_argument2(argv):
     try:
         opt, arg = getopt.getopt(argv[1:], constants.ARGOPTS_VALUE)
     except getopt.GetoptError:
