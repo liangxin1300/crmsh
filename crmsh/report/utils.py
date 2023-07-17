@@ -20,6 +20,7 @@ import contextlib
 from dateutil import tz
 from threading import Timer
 from inspect import getmembers, isfunction
+from typing import Optional
 
 import crmsh.config
 from crmsh import utils as crmutils
@@ -1598,4 +1599,47 @@ def sub_sensitive_string(data):
     if constants.SANITIZE_VALUE_CIB:
         result = re.sub('({})({})'.format('|'.join(constants.SANITIZE_KEY_CIB), '|'.join(constants.SANITIZE_VALUE_CIB)), '\\1******', result)
     return result
+
+
+def parse_to_timestamp(time: str) -> Optional[float]:
+    """
+    Parses the input time string and converts it to a timestamp.
+
+    Args:
+        time (str): The input time string to parse.
+    Returns:
+        Optional[float]: The parsed timestamp as a float if successful, or None if parsing fails.
+    """
+    res = re.match("^-?([1-9][0-9]*)([YmdHM])$", time)
+    if res:
+        number_str, flag = res.groups()
+        number = int(number_str)
+        if flag == 'Y':
+            timedelta = datetime.timedelta(days=number * 365)
+        if flag == 'm':
+            timedelta = datetime.timedelta(days=number * 30)
+        if flag == 'd':
+            timedelta = datetime.timedelta(days=number)
+        if flag == 'H':
+            timedelta = datetime.timedelta(hours=number)
+        if flag == 'M':
+            timedelta = datetime.timedelta(minutes=number)
+        # Both '-12H' and '12h' mean 12 hours before
+        time = (datetime.datetime.now() - timedelta).strftime(constants.TIME_FORMAT)
+        # TODO add a debug log here
+    res = crmutils.parse_to_timestamp(time, quiet=True)
+    if res:
+        return res
+    else:
+        logger.error(f"Invalid time string '{time}'")
+        logger.error('Try these format like: 2pm; 1:00; "2019/9/5 12:30"; "09-Sep-07 2:00"')
+        return None
+
+
+def dt_to_str(dt: datetime.datetime, form: str = constants.TIME_FORMAT) -> str:
+    return dt.strftime(form)
+
+
+def now(form: str = constants.TIME_FORMAT) -> str:
+    return dt_to_str(datetime.datetime.now(), form=form)
 # vim:ts=4:sw=4:et:

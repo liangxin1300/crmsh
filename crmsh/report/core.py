@@ -9,6 +9,8 @@ import re
 import sys
 import datetime
 import shutil
+import json
+from typing import List
 
 from crmsh import utils as crmutils
 from crmsh import config, log, userdir
@@ -16,6 +18,42 @@ from crmsh.report import constants, utils
 
 
 logger = log.setup_report_logger(__name__)
+
+
+class Context:
+
+    def __init__(self) -> None:
+        self.from_time: float = config.report.from_time
+        self.to_time: float = utils.now()
+        self.no_compress: bool = not config.report.compress
+        self.speed_up: bool = config.report.speed_up
+        self.extra_log_list: List[str] = config.report.collect_extra_logs.split()
+        self.rm_exist_dest: bool = config.report.remove_exist_dest
+        self.single: bool= config.report.single_node
+        self.sensitive_regex_list: List[str] = ["passw.*"]
+        self.regex_list: List[str] = "CRIT: ERROR: error: warning: crit:".split()
+        self.ssh_askpw_node_list: List[str] = []
+
+    def __str__(self) ->str:
+        return json.dumps(self.__dict__)
+
+    def __setattr__(self, name: str, value) -> None:
+        """
+        Set the attribute value and perform validations
+        """
+        if name == "before_time" and value:
+            before_time_reg = "^[1-9][0-9]*[YmdHM]$"
+            if not re.match(before_time_reg, value):
+                raise ValueError(f"Wrong format of -b option ({before_time_reg})")
+        if name in ["from_time", "to_time"] and value:
+            value = utils.parse_to_timestamp(value)
+        super().__setattr__(name, value)
+
+    def __setitem__(self, key: str, value) -> None:
+        self.__dict__[key] = value
+
+    def dumps(self) ->str:
+        return json.dumps(self.__dict__, indent=2)
 
 
 def collect_for_nodes(nodes, arg_str):

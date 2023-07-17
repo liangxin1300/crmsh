@@ -145,4 +145,5 @@ TIME_F = "time.txt"
 OCFS2_F = "ocfs2.txt"
 SBD_F = "sbd.txt"
 OSRELEASE = "/etc/os-release"
+TIME_FORMAT = "%Y-%m-%d %H:%M"
 # vim:ts=4:sw=4:et:
