@@ -64,6 +64,9 @@ class ConsoleCustomFormatter(logging.Formatter):
             msg = record.msg
             record.msg = "{}: {}".format(self.lineno, msg)
             record.levelname = levelname
+        if record.levelname == "DEBUG2":
+            msg = record.msg
+            record.msg = f"{record.funcName}: {msg}"
         return super().format(record)
 
 
