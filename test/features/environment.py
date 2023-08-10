@@ -40,6 +40,7 @@ def before_tag(context, tag):
             context.scenario.skip()
 
 
+
 def should_skip_background(context, scenario):
     return "skip_background" in scenario.effective_tags
 
