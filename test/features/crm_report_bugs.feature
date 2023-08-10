@@ -15,6 +15,7 @@ Feature: crm report functional test for verifying bugs
     And     Online nodes are "hanode1 hanode2"
     And     Show cluster status on "hanode1"
 
+  @skip_background
   @clean
   Scenario: Include archived logs(bsc#1148873)
     When    Write multi lines to file "/var/log/log1" on "hanode1"

@@ -2,6 +2,7 @@ import logging
 import re
 from crmsh import utils , userdir
 import time
+from behave import scenario
 
 
 def get_online_nodes():
@@ -37,3 +38,12 @@ def before_tag(context, tag):
         sudoer = userdir.get_sudoer()
         if sudoer or userdir.getuser() != 'root':
             context.scenario.skip()
+
+
+def should_skip_background(context, scenario):
+    return "skip_background" in scenario.effective_tags
+
+
+def before_scenario(context, scenario):
+    if should_skip_background(context, scenario):
+        context.execute_steps("")
