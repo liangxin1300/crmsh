@@ -14,32 +14,33 @@ Feature: crm report functional test for verifying bugs
     Then    Cluster service is "started" on "hanode2"
     And     Online nodes are "hanode1 hanode2"
     And     Show cluster status on "hanode1"
+    When    Wait "60" seconds
 
   @clean
   Scenario: Include archived logs(bsc#1148873)
     When    Write multi lines to file "/var/log/log1" on "hanode1"
       """
-      Sep 08 08:36:34 node1 log message line1
-      Sep 08 08:37:01 node1 log message line2
-      Sep 08 08:37:02 node1 log message line3
+      2023-7-11T22:14:15.003Z node1 log message line1
+      2023-7-11T22:15:11.003Z node1 log message line2
+      2023-7-11T22:15:15.003Z node1 log message line3
       """
     And     Run "xz /var/log/log1" on "hanode1"
     When    Write multi lines to file "/var/log/log1" on "hanode1"
       """
-      Sep 08 09:37:02 node1 log message line4
-      Sep 08 09:37:12 node1 log message line5
+      2023-7-11T22:17:15.003Z node1 log message line4
+      2023-7-11T22:17:16.003Z node1 log message line5
       """
-    And     Run "crm report -f 20200901 -E /var/log/log1 report1" on "hanode1"
+    And     Run "crm report -f 20230710 -E /var/log/log1 report1" on "hanode1"
     Then    File "log1" in "report1.tar.bz2"
     When    Run "tar jxf report1.tar.bz2" on "hanode1"
     And     Run "cat report1/hanode1/log1" on "hanode1"
     Then    Expected multiple lines in output
       """
-      Sep 08 08:36:34 node1 log message line1
-      Sep 08 08:37:01 node1 log message line2
-      Sep 08 08:37:02 node1 log message line3
-      Sep 08 09:37:02 node1 log message line4
-      Sep 08 09:37:12 node1 log message line5
+      2023-7-11T22:14:15.003Z node1 log message line1
+      2023-7-11T22:15:11.003Z node1 log message line2
+      2023-7-11T22:15:15.003Z node1 log message line3
+      2023-7-11T22:17:15.003Z node1 log message line4
+      2023-7-11T22:17:16.003Z node1 log message line5
       """
     When    Run "rm -rf report1.tar.gz report1" on "hanode1"
 
@@ -129,6 +130,7 @@ Feature: crm report functional test for verifying bugs
     Then    Expected "Trace for d2:monitor is written to /trace_d/Dummy" in stdout
     When    Wait "10" seconds
     And     Run "crm resource untrace d2" on "hanode1"
+    When    Wait "60" seconds
     And     Run "crm report report" on "hanode1"
     Then    Directory "trace_ra" in "report.tar.bz2"
     And     Directory "trace_d" in "report.tar.bz2"

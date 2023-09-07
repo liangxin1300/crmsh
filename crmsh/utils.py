@@ -1063,7 +1063,7 @@ def get_stdout(cmd, input_s=None, stderr_on=True, shell=True, raw=False):
     return proc.returncode, to_ascii(stdout_data).strip()
 
 
-def get_stdout_stderr(cmd, input_s=None, shell=True, raw=False, no_reg=False):
+def get_stdout_stderr(cmd, input_s=None, shell=True, raw=False, no_reg=False, timeout=None):
     '''
     Run a cmd, return (rc, stdout, stderr)
     '''
@@ -1074,7 +1074,8 @@ def get_stdout_stderr(cmd, input_s=None, shell=True, raw=False, no_reg=False):
                             stdin=input_s and subprocess.PIPE or None,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
-    stdout_data, stderr_data = proc.communicate(input_s)
+    # will raise subprocess.TimeoutExpired if set timeout
+    stdout_data, stderr_data = proc.communicate(input_s, timeout=timeout)
     if raw:
         return proc.returncode, stdout_data, stderr_data
     return proc.returncode, to_ascii(stdout_data).strip(), to_ascii(stderr_data).strip()
@@ -2917,7 +2918,7 @@ def get_stdout_or_raise_error(cmd, remote=None, success_val_list=[0], no_raise=F
             stderr=subprocess.DEVNULL if no_raise else subprocess.PIPE,
         )
     if no_raise or result.returncode in success_val_list:
-        return result.stdout.decode('utf-8')
+        return result.stdout.decode('utf-8').strip('\n')
     else:
         if remote is None:
             raise ValueError("Failed to run '{}': {}".format(cmd, result.stderr.decode('utf-8')))
@@ -3557,4 +3558,7 @@ def parse_user_at_host(s: str):
     else:
         return s[:i], s[i+1:]
 
+
+def file_is_empty(file: str) -> bool:
+    return os.stat(file).st_size == 0
 # vim:ts=4:sw=4:et:
