@@ -638,3 +638,9 @@ def step_impl(context):
     rc, schema, _ = ShellUtils().get_stdout_stderr("crm configure schema")
     assert rc == 0
     assert schema == context.schema_latest
+
+@then('Show ip addr on "{addr}"')
+def step_impl(context, addr):
+    _, out, _ = run_command_local_or_remote(context, 'ip addr', addr)
+    if out:
+        context.logger.info("\n{}".format(out))
