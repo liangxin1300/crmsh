@@ -93,6 +93,7 @@ jobs:
       run:  |
         index=`$GET_INDEX_OF bootstrap_bugs`
         $CONTAINER_SCRIPT $index
+        sudo nft list ruleset
     - uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
