@@ -28,6 +28,7 @@ from . import ui_template
 from . import ui_history
 from . import ui_utils
 from . import ui_assist
+from . import sbd
 from .crm_gv import gv_types
 from .ui_node import get_resources_on_nodes, remove_redundant_attrs
 
@@ -1168,6 +1169,11 @@ class CibConfig(command.UI):
         if not args:
             utils.multicolumn(ra.get_properties_list())
             return
+        for arg in args:
+            if '=' in arg:
+                name, value = arg.split('=', 1)
+                if name == "stonith-watchdog-timeout" and not sbd.SBDTimeout.able_to_set_stonith_watchdog_timeout(int(value)):
+                    return False
         return self.__conf_object(context.get_command_name(), *args)
 
     @command.skill_level('administrator')
