@@ -26,18 +26,21 @@ class SBDUtils:
         Extract metadata from sbd device header
         '''
         sbd_info = {}
-        try:
-            out = sh.cluster_shell().get_stdout_or_raise_error(f"sbd -d {dev} dump", remote)
-        except Exception:
-            return sbd_info
-
         pattern = r"UUID\s+:\s+(\S+)|Timeout\s+\((\w+)\)\s+:\s+(\d+)"
+
+        out = sh.cluster_shell().get_stdout_or_raise_error(f"sbd -d {dev} dump", remote)
         matches = re.findall(pattern, out)
         for uuid, timeout_type, timeout_value in matches:
             if uuid and not timeout_only:
                 sbd_info["uuid"] = uuid
             elif timeout_type and timeout_value:
                 sbd_info[timeout_type] = int(timeout_value)
+
+        if "msgwait" not in sbd_info:
+            raise ValueError(f"Cannot find msgwait timeout in sbd device {dev}")
+        if "watchdog" not in sbd_info:
+            raise ValueError(f"Cannot find watchdog timeout in sbd device {dev}")
+
         return sbd_info
 
     @staticmethod
@@ -141,14 +144,8 @@ class SBDUtils:
         if len(dev_list) < 2:
             return consistent
         first_dev_metadata = SBDUtils.get_sbd_device_metadata(dev_list[0], timeout_only=True)
-        if not first_dev_metadata:
-            logger.warning(f"Cannot get metadata for {dev_list[0]}")
-            return False
         for dev in dev_list[1:]:
             this_dev_metadata = SBDUtils.get_sbd_device_metadata(dev, timeout_only=True)
-            if not this_dev_metadata:
-                logger.warning(f"Cannot get metadata for {dev}")
-                return False
             if this_dev_metadata != first_dev_metadata:
                 logger.warning(f"Device {dev} doesn't have the same metadata as {dev_list[0]}")
                 consistent = False
@@ -193,13 +190,16 @@ class SBDTimeout(object):
         Init function
         '''
         self.context = context
+        self.disk_based = None
         self.sbd_msgwait = None
         self.stonith_timeout = None
         self.sbd_watchdog_timeout = self.SBD_WATCHDOG_TIMEOUT_DEFAULT
         self.stonith_watchdog_timeout = None
         self.two_node_without_qdevice = False
+        if self.context:
+            self._initialize_timeout_in_bootstrap()
 
-    def initialize_timeout(self):
+    def _initialize_timeout_in_bootstrap(self):
         self._set_sbd_watchdog_timeout()
         if self.context.diskless_sbd:
             self._adjust_sbd_watchdog_timeout_with_diskless_and_qdevice()
@@ -249,16 +249,6 @@ class SBDTimeout(object):
                 self.sbd_watchdog_timeout = self.SBD_WATCHDOG_TIMEOUT_DEFAULT_WITH_QDEVICE
 
     @staticmethod
-    def get_sbd_msgwait(dev):
-        '''
-        Get msgwait for sbd device
-        '''
-        res = SBDUtils.get_sbd_device_metadata(dev).get("msgwait")
-        if not res:
-            raise ValueError(f"Cannot get sbd msgwait for {dev}")
-        return res
-
-    @staticmethod
     def get_sbd_watchdog_timeout():
         '''
         Get SBD_WATCHDOG_TIMEOUT from /etc/sysconfig/sbd
@@ -293,7 +283,10 @@ class SBDTimeout(object):
         dev_list = SBDUtils.get_sbd_device_from_config()
         if dev_list:  # disk-based
             self.disk_based = True
-            self.msgwait = SBDTimeout.get_sbd_msgwait(dev_list[0])
+            first_dev = dev_list[0]
+            device_metadata = SBDUtils.get_sbd_device_metadata(first_dev)
+            self.sbd_msgwait = device_metadata.get("msgwait")
+            self.sbd_watchdog_timeout = device_metadata.get("watchdog")
             self.pcmk_delay_max = utils.get_pcmk_delay_max(self.two_node_without_qdevice)
         else:  # disk-less
             self.disk_based = False
@@ -314,7 +307,7 @@ class SBDTimeout(object):
         stonith_timeout = max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + token + consensus
         '''
         if self.disk_based:
-            value_from_sbd = int(1.2*self.msgwait)
+            value_from_sbd = int(1.2*self.sbd_msgwait)
         else:
             value_from_sbd = int(1.2*max(self.stonith_watchdog_timeout, 2*self.sbd_watchdog_timeout))
 
@@ -337,7 +330,7 @@ class SBDTimeout(object):
         '''
         token_and_consensus_timeout = corosync.token_and_consensus_timeout()
         if self.disk_based:
-            value = token_and_consensus_timeout + self.pcmk_delay_max + self.msgwait
+            value = token_and_consensus_timeout + self.pcmk_delay_max + self.sbd_msgwait
         else:
             value = token_and_consensus_timeout + 2*self.sbd_watchdog_timeout
         return value
@@ -472,7 +465,6 @@ class SBDManager:
             return
         if not self.timeout_dict:
             timeout_inst = SBDTimeout(self.bootstrap_context)
-            timeout_inst.initialize_timeout()
             self.timeout_dict["watchdog"] = timeout_inst.sbd_watchdog_timeout
             if self.diskless_sbd:
                 self.update_dict["SBD_WATCHDOG_TIMEOUT"] = str(timeout_inst.sbd_watchdog_timeout)
