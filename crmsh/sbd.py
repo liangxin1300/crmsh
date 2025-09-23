@@ -231,21 +231,6 @@ class SBDTimeout(object):
                 sbd_msgwait = sbd_msgwait_default
         self.sbd_msgwait = sbd_msgwait
 
-    @classmethod
-    def get_advised_sbd_timeout(cls, diskless=False) -> typing.Tuple[int, int]:
-        '''
-        Get suitable sbd_watchdog_timeout and sbd_msgwait
-        '''
-        ctx = bootstrap.Context()
-        ctx.diskless_sbd = diskless
-        ctx.load_profiles()
-        time_inst = cls(ctx)
-        time_inst.initialize_timeout()
-
-        sbd_watchdog_timeout = time_inst.sbd_watchdog_timeout
-        sbd_msgwait = None if diskless else time_inst.sbd_msgwait
-        return sbd_watchdog_timeout, sbd_msgwait
-
     def _adjust_sbd_watchdog_timeout_with_diskless_and_qdevice(self):
         '''
         When using diskless SBD with Qdevice, adjust value of sbd_watchdog_timeout
