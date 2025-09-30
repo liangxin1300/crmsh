@@ -187,6 +187,7 @@ class SBDTimeout(object):
     SBD_WATCHDOG_TIMEOUT_DEFAULT_WITH_QDEVICE = 35
     QDEVICE_SYNC_TIMEOUT_MARGIN = 5
     SHOW_SBD_START_TIMEOUT_CMD = "systemctl show -p TimeoutStartUSec sbd.service --value"
+    SBD_START_TIMEOUT_DEFAULT = 90
 
     def __init__(self, context=None):
         '''
@@ -387,23 +388,42 @@ class SBDTimeout(object):
         '''
         sbd_delay_start_value = SBDUtils.get_sbd_value_from_config("SBD_DELAY_START")
         if sbd_delay_start_value == "no":
+            SBDTimeout.restore_systemd_start_timeout()
             return
-
-        start_timeout = SBDTimeout.get_sbd_systemd_start_timeout()
-        if start_timeout > int(sbd_delay_start_value):
+        expected_start_timeout = int(1.2*int(sbd_delay_start_value))
+        actual_start_timeout = SBDTimeout.get_sbd_systemd_start_timeout()
+        if expected_start_timeout == actual_start_timeout:
             return
+        elif expected_start_timeout > self.SBD_START_TIMEOUT_DEFAULT:
+            logger.info("Adjust systemd start timeout for sbd.service to %ds, it was %ds",
+                        expected_start_timeout, actual_start_timeout)
+            SBDTimeout.set_systemd_start_timeout(expected_start_timeout)
+        else:
+            if os.path.isdir(SBDManager.SBD_SYSTEMD_DELAY_START_DIR):
+                logger.info("Restore systemd start timeout for sbd.service to default %ds, it was %ds",
+                            self.SBD_START_TIMEOUT_DEFAULT, actual_start_timeout)
+            SBDTimeout.restore_systemd_start_timeout()
 
+    @staticmethod
+    def set_systemd_start_timeout(value):
         utils.mkdirp(SBDManager.SBD_SYSTEMD_DELAY_START_DIR)
-        sbd_delay_start_file = "{}/sbd_delay_start.conf".format(SBDManager.SBD_SYSTEMD_DELAY_START_DIR)
-        utils.str2file("[Service]\nTimeoutSec={}".format(int(1.2*int(sbd_delay_start_value))), sbd_delay_start_file)
+        sbd_delay_start_file = os.path.join(SBDManager.SBD_SYSTEMD_DELAY_START_DIR, "sbd_delay_start.conf")
+        utils.str2file(f"[Service]\nTimeoutStartSec={value}", sbd_delay_start_file)
         bootstrap.sync_path(SBDManager.SBD_SYSTEMD_DELAY_START_DIR)
         utils.cluster_run_cmd("systemctl daemon-reload")
+
+    @staticmethod
+    def restore_systemd_start_timeout():
+        test_dir_cmd = f"test -d {SBDManager.SBD_SYSTEMD_DELAY_START_DIR}"
+        rm_dir_cmd = f"rm -rf {SBDManager.SBD_SYSTEMD_DELAY_START_DIR}"
+        reload_cmd = "systemctl daemon-reload"
+        utils.cluster_run_cmd(f"{test_dir_cmd} && {rm_dir_cmd} && {reload_cmd} || exit 0")
 
     def adjust_stonith_timeout(self):
         '''
         Adjust stonith-timeout property
         '''
-        utils.set_property("stonith-timeout", self.get_stonith_timeout_expected(), conditional=True)
+        utils.set_property("stonith-timeout", self.get_stonith_timeout_expected())
 
     def adjust_sbd_delay_start(self):
         '''
@@ -415,7 +435,7 @@ class SBDTimeout(object):
             return
         if expected_value == "no" \
                 or (not re.search(r'\d+', config_value)) \
-                or (int(expected_value) > int(config_value)):
+                or (int(expected_value) != int(config_value)):
             SBDManager.update_sbd_configuration({"SBD_DELAY_START": expected_value})
 
     @classmethod
