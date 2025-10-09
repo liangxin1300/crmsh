@@ -197,7 +197,6 @@ class SBDTimeout(object):
         self.sbd_msgwait = None
         self.stonith_timeout = None
         self.sbd_watchdog_timeout = self.SBD_WATCHDOG_TIMEOUT_DEFAULT
-        self.stonith_watchdog_timeout = None
         self.two_node_without_qdevice = False
 
     def initialize_timeout(self):
@@ -284,22 +283,6 @@ class SBDTimeout(object):
             raise ValueError("Cannot get the value of SBD_WATCHDOG_TIMEOUT")
         return int(res)
 
-    @staticmethod
-    def get_stonith_watchdog_timeout_expected():
-        '''
-        Returns the value of the stonith-watchdog-timeout cluster property.
-
-        If the Pacemaker service is inactive, returns the default value (2 * SBD_WATCHDOG_TIMEOUT).
-        If the property is set and its value is equal to or greater than the default, returns the property value.
-        Otherwise, returns the default value.
-        '''
-        default = 2 * SBDTimeout.get_sbd_watchdog_timeout()
-        if not ServiceManager().service_is_active(constants.PCMK_SERVICE):
-            return default
-        value = utils.get_property("stonith-watchdog-timeout", get_default=False)
-        return_value = value if utils.crm_msec(value) >= utils.crm_msec(default) else default
-        return int(utils.crm_msec(return_value)/1000)  # convert msec to sec
-
     def _load_configurations(self):
         '''
         Load necessary configurations for both disk-based/disk-less sbd
@@ -314,7 +297,6 @@ class SBDTimeout(object):
         else:  # disk-less
             self.disk_based = False
             self.sbd_watchdog_timeout = SBDTimeout.get_sbd_watchdog_timeout()
-            self.stonith_watchdog_timeout = SBDTimeout.get_stonith_watchdog_timeout_expected()
         self.sbd_delay_start_value_expected = self.get_sbd_delay_start_expected() if utils.detect_virt() else "no"
         self.sbd_delay_start_value_from_config = SBDUtils.get_sbd_value_from_config("SBD_DELAY_START")
 
@@ -332,7 +314,8 @@ class SBDTimeout(object):
         if self.disk_based:
             value_from_sbd = int(1.2*self.msgwait)
         else:
-            value_from_sbd = int(1.2*max(self.stonith_watchdog_timeout, 2*self.sbd_watchdog_timeout))
+            stonith_watchdog_timeout = int(utils.get_property("stonith-watchdog-timeout") or 2*self.sbd_watchdog_timeout)
+            value_from_sbd = int(1.2*max(stonith_watchdog_timeout, 2*self.sbd_watchdog_timeout))
 
         value = max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + corosync.token_and_consensus_timeout()
         logger.debug("Result of SBDTimeout.get_stonith_timeout_expected %d", value)
@@ -604,7 +587,7 @@ class SBDManager:
                 cmd = f"crm configure primitive {self.SBD_RA_ID} {self.SBD_RA}"
                 sh.cluster_shell().get_stdout_or_raise_error(cmd)
         else:
-            swt_value = self.timeout_dict.get("stonith-watchdog", SBDTimeout.get_stonith_watchdog_timeout_expected())
+            swt_value = self.timeout_dict.get("stonith-watchdog", 2*SBDTimeout.get_sbd_watchdog_timeout())
             utils.set_property("stonith-watchdog-timeout", swt_value)
         utils.set_property("stonith-enabled", "true")
 
