@@ -45,7 +45,7 @@ Feature: configure sbd delay start correctly
     And     Service "sbd" is "started" on "hanode3"
     # SBD_DELAY_START >= (token + consensus + pcmk_delay_max + msgwait)  # for disk-based sbd
     # runtime value is "41", we keep the larger one here
-    And     SBD option "SBD_DELAY_START" value is "71"
+    And     SBD option "SBD_DELAY_START" value is "41"
     And     SBD option "SBD_WATCHDOG_TIMEOUT" value is "5"
     And     SBD option "msgwait" value for "/dev/sda1" is "30"
     # value_from_sbd >= 1.2 * msgwait  # for disk-based sbd
@@ -53,6 +53,20 @@ Feature: configure sbd delay start correctly
     # runtime value is "71", we keep ther larger one here
     And     Cluster property "stonith-timeout" is "71"
     And     Parameter "pcmk_delay_max" not configured in "stonith-sbd"
+
+    # Increase expected value
+    When    Run "crm sbd configure watchdog-timeout=45" on "hanode1"
+    Then    SBD option "SBD_DELAY_START" value is "101"
+    And     SBD option "msgwait" value for "/dev/sda1" is "90"
+    And     Cluster property "stonith-timeout" is "119"
+    And     Start timeout for sbd.service is "121" seconds
+
+    # Decrease expected value
+    When    Run "crm sbd configure watchdog-timeout=15" on "hanode1"
+    Then    SBD option "SBD_DELAY_START" value is "41"
+    And     SBD option "msgwait" value for "/dev/sda1" is "30"
+    And     Cluster property "stonith-timeout" is "71"
+    And     Start timeout for sbd.service is "90" seconds
 
     When    Run "crm cluster remove hanode3 -y" on "hanode1"
     Then    Cluster service is "stopped" on "hanode3"
