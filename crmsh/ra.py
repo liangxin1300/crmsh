@@ -13,6 +13,7 @@ from . import config
 from . import options
 from . import userdir
 from . import utils
+from . import pyshim
 from .sh import ShellUtils
 from .utils import stdout2list, is_program, to_ascii
 from .utils import crm_msec, crm_time_cmp, VerifyResult
@@ -102,7 +103,7 @@ def ra_types(ra_class="ocf", ra_provider=""):
     return cache.store(ident, sorted(list(set(ra for ra in find_types() if include(ra)))))
 
 
-@utils.memoize
+@pyshim.cache
 def ra_meta(ra_class, ra_type, ra_provider):
     """
     Return metadata for the given class/type/provider
@@ -112,12 +113,12 @@ def ra_meta(ra_class, ra_type, ra_provider):
     return crm_resource("--show-metadata %s:%s" % (ra_class, ra_type))
 
 
-@utils.memoize
+@pyshim.cache
 def get_stonithd_meta():
     return RAInfo(utils.pacemaker_fenced(), "metadata")
 
 
-@utils.memoize
+@pyshim.cache
 def get_properties_meta():
     cluster_option_meta = utils.get_cluster_option_metadata()
     if cluster_option_meta:
@@ -128,12 +129,12 @@ def get_properties_meta():
         raise ValueError("No cluster option metadata found")
 
 
-@utils.memoize
+@pyshim.cache
 def get_property_options(property_name):
     return get_properties_meta().param_options(property_name)
 
 
-@utils.memoize
+@pyshim.cache
 def get_properties_list():
     try:
         return list(get_properties_meta().params().keys())
@@ -141,7 +142,7 @@ def get_properties_list():
         return []
 
 
-@utils.memoize
+@pyshim.cache
 def get_resource_meta():
     resource_meta = utils.get_resource_metadata()
     if resource_meta:
@@ -149,7 +150,7 @@ def get_resource_meta():
     return None
 
 
-@utils.memoize
+@pyshim.cache
 def get_resource_meta_list():
     try:
         return list(get_resource_meta().params().keys())

@@ -18,6 +18,7 @@ from .cibconfig import mkset_obj, cib_factory
 from .sh import ShellUtils
 from . import history
 from . import cmd_status
+from .pyshim import cache
 from . import log
 
 
@@ -28,7 +29,7 @@ logger_utils = log.LoggerUtils(logger)
 ptest_options = ["@v+", "nograph", "scores", "actions", "utilization"]
 
 
-@utils.memoize
+@cache
 def crm_report():
     return history.Report()
 
