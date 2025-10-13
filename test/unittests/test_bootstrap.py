@@ -1072,10 +1072,10 @@ done
     def test_is_online_peer_offline(self, mock_parser, mock_get_hostname, mock_this_node,
             mock_copy, mock_corosync_conf, mock_sync, mock_stop_service, mock_error, mock_cluster_shell):
         bootstrap._context = mock.Mock(cluster_node='node1')
+        bootstrap._context.get_corosync_conf_orig.return_value = "/tmp/crmsh_tempfile"
         mock_parser_inst = mock.Mock()
         mock_parser.return_value = mock_parser_inst
         mock_parser_inst.is_node_online.side_effect = [True, False]
-        bootstrap.COROSYNC_CONF_ORIG = "/tmp/crmsh_tmpfile"
         mock_this_node.return_value = "node2"
         mock_get_hostname.return_value = "node1"
         mock_corosync_conf.side_effect = [ "/etc/corosync/corosync.conf",
@@ -1089,7 +1089,7 @@ done
             mock.call(),
             mock.call()
             ])
-        mock_copy.assert_called_once_with(bootstrap.COROSYNC_CONF_ORIG, "/etc/corosync/corosync.conf")
+        mock_copy.assert_called_once_with(bootstrap._context.get_corosync_conf_orig.return_value, "/etc/corosync/corosync.conf")
         mock_sync.assert_called_once_with("/etc/corosync/corosync.conf", "node1")
         mock_stop_service.assert_called_once_with("corosync")
         mock_error.assert_called_once_with("Cannot see peer node \"node1\", please check the communication IP")
@@ -1484,7 +1484,7 @@ done
     @mock.patch('crmsh.utils.cluster_run_cmd')
     @mock.patch('os.path.isfile')
     def test_sync_files_to_disk(self, mock_isfile, mock_cluster_cmd):
-        bootstrap.FILES_TO_SYNC = ("file1", "file2")
+        bootstrap._context = mock.Mock(files_to_sync=["file1", "file2"])
         mock_isfile.side_effect = [True, True]
         bootstrap.sync_files_to_disk()
         mock_isfile.assert_has_calls([mock.call("file1"), mock.call("file2")])
