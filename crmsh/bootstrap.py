@@ -68,10 +68,6 @@ SERVICES_STOP_LIST = ["corosync-qdevice.service", "corosync.service", "hawk.serv
 BOOTH_DIR = "/etc/booth"
 BOOTH_CFG = "/etc/booth/booth.conf"
 BOOTH_AUTH = "/etc/booth/authkey"
-FILES_TO_SYNC = (BOOTH_DIR, corosync.conf(), COROSYNC_AUTH, CSYNC2_CFG, CSYNC2_KEY, "/etc/ctdb/nodes",
-        "/etc/drbd.conf", "/etc/drbd.d", "/etc/ha.d/ldirectord.cf", "/etc/lvm/lvm.conf", "/etc/multipath.conf",
-        "/etc/samba/smb.conf", SYSCONFIG_NFS, SYSCONFIG_PCMK, sbd.SBDManager.SYSCONFIG_SBD, PCMK_REMOTE_AUTH, watchdog.Watchdog.WATCHDOG_CFG,
-        PROFILES_FILE, CRM_CFG, sbd.SBDManager.SBD_SYSTEMD_DELAY_START_DIR)
 
 INIT_STAGES_EXTERNAL = ("ssh", "firewalld", "csync2", "corosync", "sbd", "cluster", "ocfs2", "gfs2", "admin", "qdevice")
 INIT_STAGES_INTERNAL = ("qnetd_remote", )
@@ -137,6 +133,10 @@ class Context(object):
         self.profiles_dict = {}
         self.default_nic = None
         self.default_ip_list = []
+        self.files_to_sync = (BOOTH_DIR, corosync.conf(), COROSYNC_AUTH, CSYNC2_CFG, CSYNC2_KEY,
+            "/etc/ctdb/nodes", "/etc/drbd.conf", "/etc/drbd.d", "/etc/ha.d/ldirectord.cf", "/etc/lvm/lvm.conf",
+            "/etc/multipath.conf", "/etc/samba/smb.conf", SYSCONFIG_NFS, SYSCONFIG_PCMK, sbd.SBDManager.SYSCONFIG_SBD,
+            PCMK_REMOTE_AUTH, watchdog.Watchdog.WATCHDOG_CFG, PROFILES_FILE, CRM_CFG, sbd.SBDManager.SBD_SYSTEMD_DELAY_START_DIR)
         self.rm_list = [sbd.SBDManager.SYSCONFIG_SBD, corosync.conf(), COROSYNC_AUTH, "/var/lib/pacemaker/cib/*",
                 "/var/lib/corosync/*", "/var/lib/pacemaker/pengine/*", PCMK_REMOTE_AUTH, "~/.config/crm/*"]
         self.use_ssh_agent = None
@@ -1089,7 +1089,7 @@ def init_csync2():
         utils.fatal("Can't create csync2 key {}".format(CSYNC2_KEY))
 
     csync2_file_list = ""
-    for f in FILES_TO_SYNC:
+    for f in _context.files_to_sync:
         csync2_file_list += "include {};\n".format(f)
 
     host_str = ""
@@ -1901,7 +1901,7 @@ def sync_files_to_disk():
     """
     target_files_str = ""
 
-    for f in FILES_TO_SYNC:
+    for f in _context.files_to_sync:
         # check if the file exists on the local node
         if not os.path.isfile(f):
             continue
@@ -2779,7 +2779,7 @@ def retrieve_all_config_files(cluster_node):
     """
     with logger_utils.status_long("Retrieve all config files"):
         cmd = 'cpio -o << EOF\n{}\nEOF\n'.format(
-            '\n'.join((f for f in FILES_TO_SYNC if f != CSYNC2_KEY and f != CSYNC2_CFG))
+            '\n'.join((f for f in _context.files_to_sync if f != CSYNC2_KEY and f != CSYNC2_CFG))
         )
         pipe_outlet, pipe_inlet = os.pipe()
         try:
@@ -2794,7 +2794,7 @@ def retrieve_all_config_files(cluster_node):
         finally:
             os.close(pipe_inlet)
         rc = child.wait()
-        # Some errors may happen here, since all files in FILES_TO_SYNC may not exist.
+        # Some errors may happen here, since all files in _context.files_to_sync may not exist.
         if result is None or result.returncode == 255:
             utils.fatal("Failed to create ssh connect to {}".format(cluster_node))
         if rc != 0:
