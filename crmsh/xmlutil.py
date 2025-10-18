@@ -1,7 +1,7 @@
 # Copyright (C) 2008-2011 Dejan Muhamedagic <dmuhamedagic@suse.de>
 # Copyright (C) 2016 Kristoffer Gronlund <kgronlund@suse.com>
 # See COPYING for license information.
-
+from __future__ import annotations
 import os
 import subprocess
 import typing
@@ -155,7 +155,7 @@ def read_cib(fun, params=None):
     return cib_elem
 
 
-def sanity_check_nvpairs(ident, node, attr_list):
+def sanity_check_nvpairs(ident, node, attr_list) -> utils.VerifyResult:
     rc = utils.VerifyResult.SUCCESS
     for nvpair in node.iterchildren("nvpair"):
         rc |= check_stonith_watchdog_timeout(nvpair)
@@ -166,7 +166,7 @@ def sanity_check_nvpairs(ident, node, attr_list):
     return rc
 
 
-def check_stonith_watchdog_timeout(nvpair):
+def check_stonith_watchdog_timeout(nvpair) -> utils.VerifyResult:
     rc = utils.VerifyResult.SUCCESS
     name, value = nvpair.get("name"), nvpair.get("value")
     if name and name == "stonith-watchdog-timeout" and value:
