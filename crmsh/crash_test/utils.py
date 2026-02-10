@@ -115,7 +115,7 @@ class FenceInfo(object):
 
     @property
     def fence_configured(self):
-        return crmshutils.has_stonith_running()
+        return crmshutils.has_fence_device_registered()
 
     @property
     def fence_action(self):
