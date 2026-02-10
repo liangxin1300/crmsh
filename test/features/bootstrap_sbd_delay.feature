@@ -34,7 +34,7 @@ Feature: configure sbd delay start correctly
     And     SBD option "SBD_WATCHDOG_TIMEOUT" value is "5"
     And     SBD option "msgwait" value for "/dev/sda1" is "30"
     # value_from_sbd >= 1.2 * msgwait  # for disk-based sbd
-    # stonith_timeout >= max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + token + consensus
+    # stonith_timeout >= max(value_from_sbd, constants.FENCING_TIMEOUT_DEFAULT) + token + consensus
     And     Cluster property "stonith-timeout" is "71"
     And     Parameter "pcmk_delay_max" configured in "stonith-sbd"
 
@@ -49,7 +49,7 @@ Feature: configure sbd delay start correctly
     And     SBD option "SBD_WATCHDOG_TIMEOUT" value is "5"
     And     SBD option "msgwait" value for "/dev/sda1" is "30"
     # value_from_sbd >= 1.2 * msgwait  # for disk-based sbd
-    # stonith_timeout >= max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + token + consensus
+    # stonith_timeout >= max(value_from_sbd, constants.FENCING_TIMEOUT_DEFAULT) + token + consensus
     # runtime value is "71", we keep ther larger one here
     And     Cluster property "stonith-timeout" is "71"
     And     Parameter "pcmk_delay_max" not configured in "stonith-sbd"
@@ -97,7 +97,7 @@ Feature: configure sbd delay start correctly
     And     SBD option "SBD_DELAY_START" value is "41"
     And     SBD option "SBD_WATCHDOG_TIMEOUT" value is "15"
     # stonith-timeout >= 1.2 * max(stonith_watchdog_timeout, 2*SBD_WATCHDOG_TIMEOUT)  # for disk-less sbd
-    # stonith_timeout >= max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + token + consensus
+    # stonith_timeout >= max(value_from_sbd, constants.FENCING_TIMEOUT_DEFAULT) + token + consensus
     And     Cluster property "stonith-timeout" is "71"
 
     Given   Cluster service is "stopped" on "hanode3"
@@ -147,7 +147,7 @@ Feature: configure sbd delay start correctly
     And     SBD option "SBD_WATCHDOG_TIMEOUT" value is "5"
     And     SBD option "msgwait" value for "/dev/sda1" is "120"
     # stonith-timeout >= 1.2 * msgwait  # for disk-based sbd
-    # stonith_timeout >= max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + token + consensus
+    # stonith_timeout >= max(value_from_sbd, constants.FENCING_TIMEOUT_DEFAULT) + token + consensus
     And     Cluster property "stonith-timeout" is "155"
     And     Parameter "pcmk_delay_max" configured in "stonith-sbd"
     # since SBD_DELAY_START value(161s) > default systemd startup value(1min 30s)
