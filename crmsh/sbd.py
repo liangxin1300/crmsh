@@ -352,14 +352,14 @@ class SBDTimeout(object):
         value_from_sbd = 1.2 * msgwait # for disk-based sbd
         value_from_sbd = 1.2 * max (stonith_watchdog_timeout, 2*SBD_WATCHDOG_TIMEOUT) # for disk-less sbd
 
-        stonith_timeout = max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + token + consensus
+        stonith_timeout = max(value_from_sbd, constants.FENCING_TIMEOUT_DEFAULT) + token + consensus
         '''
         if self.disk_based:
             value_from_sbd = int(1.2*self.sbd_msgwait)
         else:
             value_from_sbd = int(1.2*max(self.stonith_watchdog_timeout, 2*self.sbd_watchdog_timeout))
 
-        value = max(value_from_sbd, constants.STONITH_TIMEOUT_DEFAULT) + corosync.token_and_consensus_timeout()
+        value = max(value_from_sbd, constants.FENCING_TIMEOUT_DEFAULT) + corosync.token_and_consensus_timeout()
         logger.debug("Result of SBDTimeout.get_stonith_timeout_expected %d", value)
         return value
 

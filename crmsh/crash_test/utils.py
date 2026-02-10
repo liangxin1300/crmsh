@@ -108,7 +108,7 @@ class FenceInfo(object):
     """
     @property
     def fence_enabled(self):
-        enable_result = crmshutils.get_property("stonith-enabled")
+        enable_result = crmshutils.get_property("fencing-enabled")
         if not enable_result or enable_result.lower() != "true":
             return False
         return True
@@ -119,16 +119,16 @@ class FenceInfo(object):
 
     @property
     def fence_action(self):
-        action_result = crmshutils.get_property("stonith-action")
-        supported_actions = ra.get_property_options("stonith-action")
+        action_result = crmshutils.get_property("fencing-action")
+        supported_actions = ra.get_property_options("fencing-action")
         if action_result is None or action_result not in supported_actions:
-            msg_error(f"Cluster property \"stonith-action\" should be {'|'.join(supported_actions)}")
+            msg_error(f"Cluster property \"fencing-action\" should be {'|'.join(supported_actions)}")
             return None
         return action_result
 
     @property
     def fence_timeout(self):
-        timeout_result = crmshutils.get_property("stonith-timeout")
+        timeout_result = crmshutils.get_property("fencing-timeout")
         if timeout_result and re.match(r'[1-9][0-9]*(s|)$', timeout_result):
             return timeout_result.strip("s")
         return config.FENCE_TIMEOUT
