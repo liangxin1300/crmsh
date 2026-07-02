@@ -2018,9 +2018,9 @@ class TestValidation(unittest.TestCase):
             ])
         mock_rm_sbd.assert_called_once_with(None)
 
-    @mock.patch('crmsh.sh.cluster_shell')
     @mock.patch('crmsh.utils.get_iplist_from_name')
-    def test_get_cluster_node_ips_fallback(self, mock_get_iplist, mock_cluster_shell):
+    @mock.patch('crmsh.network_utils.sh.cluster_shell')
+    def test_get_cluster_node_ips_fallback(self, mock_cluster_shell, mock_get_iplist):
         mock_shell_inst = mock.Mock()
         mock_cluster_shell.return_value = mock_shell_inst
         mock_shell_inst.get_rc_stdout_stderr_without_input.return_value = (1, "", "")
@@ -2029,7 +2029,7 @@ class TestValidation(unittest.TestCase):
         mock_shell_inst.get_rc_stdout_stderr_without_input.assert_called_once_with('node1', 'ip -j addr show')
         mock_get_iplist.assert_called_once_with('node1')
 
-    @mock.patch('crmsh.sh.cluster_shell')
+    @mock.patch('crmsh.network_utils.sh.cluster_shell')
     @mock.patch('crmsh.utils.get_iplist_from_name')
     def test_get_cluster_node_ips_success(self, mock_get_iplist, mock_cluster_shell):
         mock_shell_inst = mock.Mock()
